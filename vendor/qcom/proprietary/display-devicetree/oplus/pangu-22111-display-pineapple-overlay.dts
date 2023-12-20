@@ -1,0 +1,12 @@
+/dts-v1/;
+/plugin/;
+#include <dt-bindings/oplus/hw-id.h>
+#include "../display/pineapple-sde-display-mtp-overlay.dts"
+#include "pineapple-display-overlay-common.dtsi"
+#include "pangu-22111-display-pineapple-overlay.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Pineapple MTP,pangu";
+
+	oplus,project-id = <22111>;
+};

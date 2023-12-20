@@ -1,0 +1,18 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/qcom,gcc-pineapple.h>
+#include <dt-bindings/clock/qcom,camcc-pineapple.h>
+#include <dt-bindings/interconnect/qcom,pineapple.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
+
+#include <dt-bindings/oplus/hw-id.h>
+#include "../pineapple-camera-v2.dtsi"
+#include "pangu_camera_overlay_common_evb.dtsi"
+/ {
+	model = "Qualcomm Technologies, Inc. Pineapple Pangu MTP-evb";
+	compatible = "qcom,pineapple-mtp", "qcom,pineapple", "qcom,mtp";
+	oplus,project-id = <22111>;
+	oplus,hw-id = <OPLUS_EVB1 OPLUS_EVB3>;
+};

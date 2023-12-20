@@ -1,0 +1,2 @@
+#include "cliffs7-audio-cdp.dtsi"
+#include "cliffs-adsp_loader.dtsi"

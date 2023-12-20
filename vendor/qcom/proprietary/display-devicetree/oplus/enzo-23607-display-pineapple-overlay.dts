@@ -1,0 +1,25 @@
+/dts-v1/;
+/plugin/;
+#include <dt-bindings/oplus/hw-id.h>
+#include "../display/pineapple-sde-display-mtp-overlay.dts"
+#include "pineapple-display-overlay-common.dtsi"
+#include "enzo-23607-display-pineapple-overlay.dtsi"
+/* #if defined(CONFIG_PXLW_IRIS) */
+/* #endif */
+/* #endif */
+
+/ {
+	model = "Qualcomm Technologies, Inc. Kalama MTP,enzo";
+
+	oplus,project-id = <23607>;
+};
+
+/* #ifdef OPLUS_FEATURE_DISPLAY */
+&mdss_dsi_phy0 {
+	oplus,dsi-pll-ssc-disalbed;
+};
+
+&mdss_dsi_phy1 {
+	oplus,dsi-pll-ssc-disalbed;
+};
+/* OPLUS_FEATURE_DISPLAY */

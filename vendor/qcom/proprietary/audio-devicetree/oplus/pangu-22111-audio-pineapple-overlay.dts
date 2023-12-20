@@ -1,0 +1,12 @@
+/dts-v1/;
+/plugin/;
+#include <dt-bindings/oplus/hw-id.h>
+#include "../pineapple-audio-mtp.dts"
+#include "pineapple-audio-overlay-common.dtsi"
+#include "pangu-22111-audio-pineapple-overlay.dtsi"
+
+/ {
+    model = "Qualcomm Technologies, Inc. Pineapple MTP,pangu";
+
+    oplus,project-id = <22111>;
+};

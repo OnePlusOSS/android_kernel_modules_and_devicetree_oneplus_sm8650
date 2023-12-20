@@ -1,0 +1,91 @@
+&soc {
+    bootloader_log {
+        compatible = "bootloader_log";
+        linux,contiguous-region = <&bootloader_log_mem>;
+    };
+
+   oplus-pmic-monitor-log {
+        compatible = "oplus,pmic-monitor-log";
+        nvmem = <&pmk8550_sdam_5>, <&pmk8550_sdam_6>;
+        nvmem-names = "pon_log0", "pon_log1";
+    };
+
+    //#ifdef CONFIG_OPLUS_OMRG
+    oplus-omrg {
+        compatible = "oplus,oplus-omrg";
+        oplus-omrg0 {
+                oplus,divider-cells = <2>;
+                oplus,omrg-master = <&CPU5 1497600 1920000>, <&CPU2 1497600 1920000>;
+                oplus,omrg-slave = <&CPU0 1459200 1804800>;
+                master_vote_max;
+                up_limit_enable;
+                /* down_limit_enable; */
+                /* thermal_enable; */
+        };
+    };
+    //#endif
+
+   dump_device_info {
+	compatible = "dump_device_info";
+	linux,contiguous-region = <&dump_device_info_mem>;
+   };
+
+    //#ifdef OPLUS_FEATURE_SECURITY_COMMON
+    /* 2022/08/29 add for oplus secure */
+    oplus_secure_common {
+        compatible = "oplus,secure_common";
+        oplus,sec_reg_num = <0x221C8C70>;
+        oplus,sec_en_anti_reg = <0x221C8314>;
+        oplus,sec_override1_reg = <0x221C8314>;
+        oplus,override1_en_value = <0x1>;
+    };
+    //#endif /*OPLUS_FEATURE_SECURITY_COMMON*/
+
+    /*Do not delete pcie1 node, will caused probe failed issue.*/
+    pcie1: qcom,pcie@1c08000 {
+            status = "disabled";
+    };
+};
+
+&reserved_memory {
+        /*
+        This size is from Core/Uefi/LAA/memmap.dtsi
+        reg = <0x0 0x81CE4000 0x0 0x00010000>;
+        MemLabel = "UEFI_Log";
+        so we reserve this for bootloader log
+        */
+        bootloader_log_mem: botloader_mem@0x81CE4000 {
+                reg = <0 0x81CE4000 0 0x00010000>;
+                label = "bootloader_log_mem";
+        };
+
+	dump_device_info_mem: device_info_mem@0xA4F00000 {
+		reg = <0 0xA4F00000 0 0x00008000>;
+		label = "dump_device_info_mem";
+	};
+};
+
+&ramoops_mem {
+	alloc-ranges = <0x0 0x00000000 0xffffffff 0xffffffff>;
+	size = <0x0 0x240000>;
+	pmsg-size = <0x200000>;
+	console-size = <0x40000>;
+	mem-type = <2>;
+};
+
+&pmk8550 {
+//#ifdef CONFIG_OPLUS_FEATURE_QCOM_PMICWD
+//pmicwd depend on pon_pbs@800
+	pon_pbs@800 {
+		compatible = "qcom,qpnp-power-on";
+		reg = <0x800>;
+		qcom,system-reset;
+		qcom,store-hard-reset-reason;
+	};
+
+	pon_pmicwd@800 {
+		compatible = "oplus,pmicwd_qpnp-power-on";
+		qcom,pmicwd;
+	};
+//#endif /* CONFIG_OPLUS_FEATURE_QCOM_PMICWD */
+};

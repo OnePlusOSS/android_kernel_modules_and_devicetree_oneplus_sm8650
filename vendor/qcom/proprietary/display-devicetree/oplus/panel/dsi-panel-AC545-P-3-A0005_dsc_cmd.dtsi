@@ -1,0 +1,1036 @@
+&mdss_mdp {
+	dsi_panel_AA545_P_3_A0005_dsc_cmd: qcom,mdss_dsi_panel_AA545_P_3_A0005_dsc_cmd {
+		qcom,mdss-dsi-panel-name = "AA545 P 3 A0005 dsc cmd mode panel";
+		qcom,mdss-dsi-panel-type = "dsi_cmd_mode";
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-dsi-bpp = <30>;
+		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
+		qcom,mdss-dsi-underflow-color = <0xff>;
+		qcom,mdss-dsi-border-color = <0>;
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+		qcom,mdss-dsi-traffic-mode = "burst_mode";
+		qcom,mdss-dsi-lane-map = "lane_map_0123";
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-reset-sequence = <1 10>, <0 5>, <1 30>;
+		qcom,mdss-pan-physical-width-dimension = <71>;
+		qcom,mdss-pan-physical-height-dimension = <158>;
+		qcom,mdss-dsi-te-check-enable;
+		qcom,mdss-dsi-te-using-te-pin;
+		qcom,mdss-dsi-te-pin-select = <1>;
+		qcom,mdss-dsi-te-dcs-command = <1>;
+		qcom,mdss-dsi-wr-mem-start = <0x2C>;
+		qcom,mdss-dsi-wr-mem-continue = <0x3C>;
+		//qcom,mdss-dsi-lp11-init;
+		qcom,mdss-dsi-init-delay-us = <1000>;
+		qcom,mdss-dsi-panel-jitter = <0x4 0x1>;
+		qcom,dynamic-mode-switch-enabled;
+		qcom,dynamic-mode-switch-type = "dynamic-resolution-switch-immediate";
+		/* HDR Setting */
+		qcom,mdss-dsi-panel-hdr-enabled;
+		qcom,mdss-dsi-panel-hdr-color-primaries = <15635 16450 34000 16000 13250 34500 7500 3000>;
+		qcom,mdss-dsi-panel-peak-brightness = <14000000>;
+		qcom,mdss-dsi-panel-average-brightness = <2000000>;
+		qcom,mdss-dsi-panel-blackness-level = <2000>;
+
+		qcom,mdss-dsi-display-timings {
+			timing@wqhd_sdc_60 {
+				#include "dsi-panel-AC545-P-3-A0005-common.dtsi"
+				#include "dsi-panel-AC545-P-3-A0005_pwm_common_60fps.dtsi"
+				#include "dsi-panel-AC545-P-3-A0005-common-effect.dtsi"
+				#include "dsi-panel-AC545-P-3-A0005-adfr-common-sa60.dtsi"
+				cell-index = <0>;
+				qcom,mdss-mdp-transfer-time-us = <7300>;
+				qcom,mdss-dsi-panel-framerate = <60>;
+				qcom,mdss-dsi-panel-clockrate = <1363200000>;
+				qcom,mdss-dsi-panel-width = <1440>;
+				qcom,mdss-dsi-panel-height = <3168>;
+				qcom,mdss-dsi-h-front-porch = <64>;
+				qcom,mdss-dsi-h-back-porch = <50>;
+				qcom,mdss-dsi-h-pulse-width = <8>;
+				qcom,mdss-dsi-h-sync-pulse = <0>;
+				qcom,mdss-dsi-v-back-porch = <12>;
+				qcom,mdss-dsi-v-front-porch = <16>;
+				qcom,mdss-dsi-v-pulse-width = <4>;
+
+				qcom,mdss-dsi-timing-switch-command = [
+					//SA-60Hz
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 40 00 00 02 5A 00
+					15 00 00 40 00 00 02 5B 00
+					15 00 00 40 00 00 02 5E 01
+					15 00 00 40 00 00 02 60 01
+					39 00 00 40 00 00 04 FF 08 58 20
+					15 00 00 40 00 00 02 BD 45
+					15 00 00 40 00 00 02 BE 65
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 A7 00
+					39 00 00 40 00 00 07 B0 01 00 80 00 00 10
+					15 00 00 40 00 00 02 B6 00
+					15 00 00 40 00 00 02 B8 00
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 80 40
+					15 00 00 40 00 00 02 84 01
+					15 00 00 40 00 00 02 93 00
+					15 00 00 40 00 00 02 94 00
+					15 00 00 40 00 00 02 95 01
+					15 00 00 40 00 00 02 96 0D
+					15 00 00 40 00 00 02 98 00
+					15 00 00 40 00 00 02 99 FF
+					15 00 00 40 00 00 02 9A FF
+					15 00 00 40 00 00 02 9B FF
+					15 00 00 40 00 00 02 A0 00
+					15 00 00 40 00 00 02 A1 00
+					15 00 00 40 00 00 02 EB 00
+					39 00 00 00 00 00 04 FF 08 58 00
+				];
+				qcom,mdss-dsi-on-command = [
+					//debug mode set alway on page 0
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 F8 01
+					39 00 00 40 00 00 04 FF 08 58 20
+					15 00 00 40 00 00 02 B3 50
+					15 00 00 40 00 00 02 B5 03
+					39 00 00 40 00 00 04 FF 08 58 06
+					15 00 00 40 00 00 02 D2 01
+					15 00 00 00 00 00 02 A1 00
+
+					//Flash reload EN
+					39 00 00 40 00 00 04 FF 08 58 21
+					15 00 00 00 00 00 02 A4 18
+
+					//OTP don't reload
+					39 00 00 40 00 00 04 FF 08 58 08
+					15 00 00 00 00 00 02 C8 62
+
+					//BOE demura off
+					39 00 00 40 00 00 04 FF 08 58 30
+					15 00 00 00 00 00 02 AE 00
+					15 00 00 00 00 00 02 80 00
+
+					//DSC setting PPS table
+					39 00 00 40 00 00 04 FF 08 58 07
+					15 00 00 40 00 00 02 8A 01
+					39 00 00 40 00 00 03 8B 11 E0
+
+					39 00 00 40 00 00 64 81 00 00 00 00 00
+						11 00 00 ab 30 80 0c 60 05 a0 00 16
+						02 d0 02 d0 02 00 02 C2 00 20 02 1B
+						00 0a 00 0F 05 B7 03 78 18 00 10 f0
+						07 10 20 00 06 0f 0f 33 0e 1c 2a 38
+						46 54 62 69 70 77 79 7b 7d 7e 02 02
+						22 00 2a 40 2a be 3a fc 3a fa 3a f8
+						3b 38 3b 78 3b b6 4b B6 4B F4 4B F4
+						6c 34 84 74 00 00 00 00 00 00
+
+					//MSFC and timming switch effect together
+					39 00 00 40 00 00 04 FF 08 58 4F
+					15 00 00 40 00 00 02 80 01
+					15 00 00 00 00 00 02 81 02
+
+					//Corner off
+					39 00 00 40 00 00 04 FF 08 58 17
+					15 00 00 00 00 00 02 A0 00
+
+					//optimize BSM2.0 esd power off bright line
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 00 00 00 02 81 03
+
+					//1bit esd code
+					39 00 00 40 00 00 04 FF 08 58 06
+					15 00 00 40 00 00 02 C6 01
+					39 00 00 40 00 00 04 FF 08 58 08
+					15 00 00 40 00 00 02 D2 05
+
+					39 00 00 40 00 00 04 FF 08 58 00
+					39 00 00 00 00 00 05 51 0D BB 0D BB
+
+					//BC ON
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 53 20
+
+					//TE ON
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 35 00
+
+					//Refresh Frame Recount DBV
+					39 00 00 40 00 00 04 FF 08 58 49
+					15 00 00 00 00 00 02 AB 93
+
+					//cross talk
+					39 00 00 40 00 00 04 FF 08 58 31
+					15 00 00 40 01 00 02 D0 81
+					39 00 00 40 00 00 13 80 F0 A0 78 50 26 DA B0 88 60 F0 20 0D 0D 06 FA F3 F3 E0
+					39 00 00 40 00 00 13 81 F0 68 4E 34 19 E7 CC B2 98 F0 20 0D 0D 02 FE FC FC F5
+					39 00 00 40 00 00 13 82 F0 5A 44 2D 16 EA D3 BC A6 F0 20 0D 0D 04 FC F8 F8 EC
+					39 00 00 40 00 00 13 83 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 84 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 85 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 86 F0 A0 78 50 26 DA B0 88 60 F0 20 0D 0D 06 FA F3 F3 E0
+					39 00 00 40 00 00 13 87 F0 68 4E 34 19 E7 CC B2 98 F0 20 0D 0D 02 FE FC FC F5
+					39 00 00 40 00 00 13 88 F0 5A 44 2D 16 EA D3 BC A6 F0 20 0D 0D 04 FC F8 F8 EC
+					39 00 00 40 00 00 13 89 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 8A F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 01 00 13 8B F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					15 00 00 40 00 00 02 D0 80
+					15 00 00 00 00 00 02 A0 B3
+
+					//irc compensation (3515 <-> 3516 dbv)
+					39 00 00 40 00 00 04 FF 08 58 10
+					15 00 00 00 00 00 02 85 04
+
+					/* 1.8nit ~ 10nit */
+					39 00 00 40 00 00 04 FF 08 58 23
+					15 00 00 40 00 00 02 CC 01
+					39 00 00 40 00 00 04 FF 08 58 69
+					39 00 00 40 00 00 07 B6 44 55 44 43 43 33
+					39 00 00 40 00 00 07 B7 33 44 55 54 44 44
+					39 00 00 40 00 00 07 B8 23 44 55 45 44 44
+					39 00 00 40 00 00 07 B9 33 44 55 43 33 33
+					39 00 00 40 00 00 07 BA 43 55 22 32 23 43
+					39 00 00 40 00 00 07 BB 55 55 55 53 22 22
+					39 00 00 40 00 00 04 FF 08 58 6A
+					39 00 00 40 00 00 07 86 44 55 44 43 43 33
+					39 00 00 40 00 00 07 87 33 44 55 54 44 44
+					39 00 00 40 00 00 07 88 23 44 55 45 44 44
+					39 00 00 40 00 00 07 89 33 44 55 43 33 33
+					39 00 00 40 00 00 07 8A 43 55 22 32 23 43
+					39 00 00 40 00 00 07 8B 55 55 55 53 22 22
+					39 00 00 40 00 00 04 FF 08 58 6B
+					39 00 00 40 00 00 07 E6 44 55 44 43 43 33
+					39 00 00 40 00 00 07 E7 33 34 55 55 55 55
+					39 00 00 40 00 00 07 E8 23 44 55 45 44 44
+					39 00 00 40 00 00 07 E9 33 44 55 44 44 44
+					39 00 00 40 00 00 07 EA 43 55 22 32 23 43
+					39 00 00 40 00 00 07 EB 55 44 66 65 43 33
+					39 00 00 40 00 00 04 FF 08 58 6C
+					39 00 00 40 00 00 07 B6 44 55 44 43 43 33
+					39 00 00 40 00 00 07 B7 33 34 55 55 55 55
+					39 00 00 40 00 00 07 B8 23 44 55 45 44 44
+					39 00 00 40 00 00 07 B9 33 44 55 44 44 44
+					39 00 00 40 00 00 07 BA 43 55 22 32 23 43
+					39 00 00 40 00 00 07 BB 55 44 66 65 43 33
+					39 00 00 40 00 00 04 FF 08 58 23
+					15 00 00 00 00 00 02 CC 00
+
+					39 00 00 40 00 00 04 FF 08 58 00
+					05 00 00 00 78 00 01 11
+
+					//SA-60Hz
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 40 00 00 02 5A 00
+					15 00 00 40 00 00 02 5B 00
+					15 00 00 40 00 00 02 5E 01
+					15 00 00 40 00 00 02 60 01
+					39 00 00 40 00 00 04 FF 08 58 20
+					15 00 00 40 00 00 02 BD 45
+					15 00 00 40 00 00 02 BE 65
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 A7 00
+					39 00 00 40 00 00 07 B0 01 00 80 00 00 10
+					15 00 00 40 00 00 02 B6 00
+					15 00 00 40 00 00 02 B8 00
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 80 40
+					15 00 00 40 00 00 02 84 01
+					15 00 00 40 00 00 02 93 00
+					15 00 00 40 00 00 02 94 00
+					15 00 00 40 00 00 02 95 01
+					15 00 00 40 00 00 02 96 0D
+					15 00 00 40 00 00 02 98 00
+					15 00 00 40 00 00 02 99 FF
+					15 00 00 40 00 00 02 9A FF
+					15 00 00 40 00 00 02 9B FF
+					15 00 00 40 00 00 02 A0 00
+					15 00 00 40 00 00 02 A1 00
+					15 00 00 40 00 00 02 EB 00
+					39 00 00 00 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 29 00
+				];
+
+				//qcom,panel-roi-alignment=<1080 44 1080 44 1080 44>;
+				//qcom,partial-update-enabled = "single_roi";
+
+				qcom,lm-split = <720 720>;
+				qcom,mdss-dsc-slice-height = <22>;
+				qcom,mdss-dsc-slice-width = <720>;
+				oplus,apollo-panel-async-bl-delay = <9000>;
+			};
+			timing@wqhd_sdc_90 {
+				#include "dsi-panel-AC545-P-3-A0005-common.dtsi"
+				#include "dsi-panel-AC545-P-3-A0005_pwm_common_90fps.dtsi"
+				#include "dsi-panel-AC545-P-3-A0005-common-effect.dtsi"
+				#include "dsi-panel-AC545-P-3-A0005-adfr-common-sa90.dtsi"
+				cell-index = <1>;
+				qcom,mdss-mdp-transfer-time-us = <9000>;
+				qcom,mdss-dsi-panel-framerate = <90>;
+				qcom,mdss-dsi-panel-clockrate = <1363200000>;
+				qcom,mdss-dsi-panel-width = <1440>;
+				qcom,mdss-dsi-panel-height = <3168>;
+				qcom,mdss-dsi-h-front-porch = <64>;
+				qcom,mdss-dsi-h-back-porch = <50>;
+				qcom,mdss-dsi-h-pulse-width = <8>;
+				qcom,mdss-dsi-h-sync-pulse = <0>;
+				qcom,mdss-dsi-v-back-porch = <12>;
+				qcom,mdss-dsi-v-front-porch = <16>;
+				qcom,mdss-dsi-v-pulse-width = <4>;
+
+				qcom,mdss-dsi-timing-switch-command = [
+					//SA-90Hz
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 40 00 00 02 5A 00
+					15 00 00 40 00 00 02 5B 00
+					15 00 00 40 00 00 02 5E 01
+					15 00 00 40 00 00 02 60 08
+					39 00 00 40 00 00 04 FF 08 58 20
+					15 00 00 40 00 00 02 BD 45
+					15 00 00 40 00 00 02 BE 65
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 A7 00
+					39 00 00 40 00 00 07 B0 00 00 80 00 00 10
+					15 00 00 40 00 00 02 B6 00
+					15 00 00 40 00 00 02 B8 00
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 80 40
+					15 00 00 40 00 00 02 8B 00
+					15 00 00 40 00 00 02 93 00
+					15 00 00 40 00 00 02 94 00
+					15 00 00 40 00 00 02 95 01
+					15 00 00 40 00 00 02 96 0D
+					15 00 00 40 00 00 02 98 00
+					15 00 00 40 00 00 02 99 FF
+					15 00 00 40 00 00 02 9A FF
+					15 00 00 40 00 00 02 9B FF
+					15 00 00 40 00 00 02 A0 00
+					15 00 00 40 00 00 02 A1 00
+					15 00 00 40 00 00 02 EB 00
+					39 00 00 00 00 00 04 FF 08 58 00
+				];
+				qcom,mdss-dsi-on-command = [
+					//debug mode set alway on page 0
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 F8 01
+					39 00 00 40 00 00 04 FF 08 58 20
+					15 00 00 40 00 00 02 B3 50
+					15 00 00 40 00 00 02 B5 03
+					39 00 00 40 00 00 04 FF 08 58 06
+					15 00 00 40 00 00 02 D2 01
+					15 00 00 00 00 00 02 A1 00
+
+					//Flash reload EN
+					39 00 00 40 00 00 04 FF 08 58 21
+					15 00 00 00 00 00 02 A4 18
+
+					//OTP don't reload
+					39 00 00 40 00 00 04 FF 08 58 08
+					15 00 00 00 00 00 02 C8 62
+
+					//BOE demura off
+					39 00 00 40 00 00 04 FF 08 58 30
+					15 00 00 00 00 00 02 AE 00
+					15 00 00 00 00 00 02 80 00
+
+					//DSC setting PPS table
+					39 00 00 40 00 00 04 FF 08 58 07
+					15 00 00 40 00 00 02 8A 01
+					39 00 00 40 00 00 03 8B 11 E0
+
+					39 00 00 40 00 00 64 81 00 00 00 00 00
+						11 00 00 ab 30 80 0c 60 05 a0 00 16
+						02 d0 02 d0 02 00 02 C2 00 20 02 1B
+						00 0a 00 0F 05 B7 03 78 18 00 10 f0
+						07 10 20 00 06 0f 0f 33 0e 1c 2a 38
+						46 54 62 69 70 77 79 7b 7d 7e 02 02
+						22 00 2a 40 2a be 3a fc 3a fa 3a f8
+						3b 38 3b 78 3b b6 4b B6 4B F4 4B F4
+						6c 34 84 74 00 00 00 00 00 00
+
+					//MSFC and timming switch effect together
+					39 00 00 40 00 00 04 FF 08 58 4F
+					15 00 00 40 00 00 02 80 01
+					15 00 00 00 00 00 02 81 02
+
+					//Corner off
+					39 00 00 40 00 00 04 FF 08 58 17
+					15 00 00 00 00 00 02 A0 00
+
+					//optimize BSM2.0 esd power off bright line
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 00 00 00 02 81 03
+
+					//1bit esd code
+					39 00 00 40 00 00 04 FF 08 58 06
+					15 00 00 40 00 00 02 C6 01
+					39 00 00 40 00 00 04 FF 08 58 08
+					15 00 00 40 00 00 02 D2 05
+
+					39 00 00 40 00 00 04 FF 08 58 00
+					39 00 00 00 00 00 05 51 0D BB 0D BB
+
+					//BC ON
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 53 20
+
+					//TE ON
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 35 00
+
+					//Refresh Frame Recount DBV
+					39 00 00 40 00 00 04 FF 08 58 49
+					15 00 00 00 00 00 02 AB 93
+
+					//cross talk
+					39 00 00 40 00 00 04 FF 08 58 31
+					15 00 00 40 01 00 02 D0 81
+					39 00 00 40 00 00 13 80 F0 A0 78 50 26 DA B0 88 60 F0 20 0D 0D 06 FA F3 F3 E0
+					39 00 00 40 00 00 13 81 F0 68 4E 34 19 E7 CC B2 98 F0 20 0D 0D 02 FE FC FC F5
+					39 00 00 40 00 00 13 82 F0 5A 44 2D 16 EA D3 BC A6 F0 20 0D 0D 04 FC F8 F8 EC
+					39 00 00 40 00 00 13 83 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 84 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 85 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 86 F0 A0 78 50 26 DA B0 88 60 F0 20 0D 0D 06 FA F3 F3 E0
+					39 00 00 40 00 00 13 87 F0 68 4E 34 19 E7 CC B2 98 F0 20 0D 0D 02 FE FC FC F5
+					39 00 00 40 00 00 13 88 F0 5A 44 2D 16 EA D3 BC A6 F0 20 0D 0D 04 FC F8 F8 EC
+					39 00 00 40 00 00 13 89 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 8A F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 01 00 13 8B F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					15 00 00 40 00 00 02 D0 80
+					15 00 00 00 00 00 02 A0 B3
+
+					//irc compensation (3515 <-> 3516 dbv)
+					39 00 00 40 00 00 04 FF 08 58 10
+					15 00 00 00 00 00 02 85 04
+
+					/* 1.8nit ~ 10nit */
+					39 00 00 40 00 00 04 FF 08 58 23
+					15 00 00 40 00 00 02 CC 01
+					39 00 00 40 00 00 04 FF 08 58 69
+					39 00 00 40 00 00 07 B6 44 55 44 43 43 33
+					39 00 00 40 00 00 07 B7 33 44 55 54 44 44
+					39 00 00 40 00 00 07 B8 23 44 55 45 44 44
+					39 00 00 40 00 00 07 B9 33 44 55 43 33 33
+					39 00 00 40 00 00 07 BA 43 55 22 32 23 43
+					39 00 00 40 00 00 07 BB 55 55 55 53 22 22
+					39 00 00 40 00 00 04 FF 08 58 6A
+					39 00 00 40 00 00 07 86 44 55 44 43 43 33
+					39 00 00 40 00 00 07 87 33 44 55 54 44 44
+					39 00 00 40 00 00 07 88 23 44 55 45 44 44
+					39 00 00 40 00 00 07 89 33 44 55 43 33 33
+					39 00 00 40 00 00 07 8A 43 55 22 32 23 43
+					39 00 00 40 00 00 07 8B 55 55 55 53 22 22
+					39 00 00 40 00 00 04 FF 08 58 6B
+					39 00 00 40 00 00 07 E6 44 55 44 43 43 33
+					39 00 00 40 00 00 07 E7 33 34 55 55 55 55
+					39 00 00 40 00 00 07 E8 23 44 55 45 44 44
+					39 00 00 40 00 00 07 E9 33 44 55 44 44 44
+					39 00 00 40 00 00 07 EA 43 55 22 32 23 43
+					39 00 00 40 00 00 07 EB 55 44 66 65 43 33
+					39 00 00 40 00 00 04 FF 08 58 6C
+					39 00 00 40 00 00 07 B6 44 55 44 43 43 33
+					39 00 00 40 00 00 07 B7 33 34 55 55 55 55
+					39 00 00 40 00 00 07 B8 23 44 55 45 44 44
+					39 00 00 40 00 00 07 B9 33 44 55 44 44 44
+					39 00 00 40 00 00 07 BA 43 55 22 32 23 43
+					39 00 00 40 00 00 07 BB 55 44 66 65 43 33
+					39 00 00 40 00 00 04 FF 08 58 23
+					15 00 00 00 00 00 02 CC 00
+
+					39 00 00 40 00 00 04 FF 08 58 00
+					05 00 00 00 78 00 01 11
+
+					//SA-90Hz
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 40 00 00 02 5A 00
+					15 00 00 40 00 00 02 5B 00
+					15 00 00 40 00 00 02 5E 01
+					15 00 00 40 00 00 02 60 08
+					39 00 00 40 00 00 04 FF 08 58 20
+					15 00 00 40 00 00 02 BD 45
+					15 00 00 40 00 00 02 BE 65
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 A7 00
+					39 00 00 40 00 00 07 B0 00 00 80 00 00 10
+					15 00 00 40 00 00 02 B6 00
+					15 00 00 40 00 00 02 B8 00
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 80 40
+					15 00 00 40 00 00 02 8B 00
+					15 00 00 40 00 00 02 93 00
+					15 00 00 40 00 00 02 94 00
+					15 00 00 40 00 00 02 95 01
+					15 00 00 40 00 00 02 96 0D
+					15 00 00 40 00 00 02 98 00
+					15 00 00 40 00 00 02 99 FF
+					15 00 00 40 00 00 02 9A FF
+					15 00 00 40 00 00 02 9B FF
+					15 00 00 40 00 00 02 A0 00
+					15 00 00 40 00 00 02 A1 00
+					15 00 00 40 00 00 02 EB 00
+					39 00 00 00 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 29 00
+				];
+
+				//qcom,panel-roi-alignment=<1080 44 1080 44 1080 44>;
+				//qcom,partial-update-enabled = "single_roi";
+
+				qcom,lm-split = <720 720>;
+				qcom,mdss-dsc-slice-height = <22>;
+				qcom,mdss-dsc-slice-width = <720>;
+			};
+			timing@wqhd_sdc_120 {
+				#include "dsi-panel-AC545-P-3-A0005-common.dtsi"
+				#include "dsi-panel-AC545-P-3-A0005_pwm_common_120fps.dtsi"
+				#include "dsi-panel-AC545-P-3-A0005-common-effect.dtsi"
+				#include "dsi-panel-AC545-P-3-A0005-adfr-common-sa120.dtsi"
+				cell-index = <2>;
+				qcom,mdss-mdp-transfer-time-us = <7300>;
+				qcom,mdss-dsi-panel-framerate = <120>;
+				qcom,mdss-dsi-panel-clockrate = <1363200000>;
+				qcom,mdss-dsi-panel-width = <1440>;
+				qcom,mdss-dsi-panel-height = <3168>;
+				qcom,mdss-dsi-h-front-porch = <64>;
+				qcom,mdss-dsi-h-back-porch = <50>;
+				qcom,mdss-dsi-h-pulse-width = <8>;
+				qcom,mdss-dsi-h-sync-pulse = <0>;
+				qcom,mdss-dsi-v-back-porch = <12>;
+				qcom,mdss-dsi-v-front-porch = <16>;
+				qcom,mdss-dsi-v-pulse-width = <4>;
+
+				qcom,mdss-dsi-timing-switch-command = [
+					//SA-120Hz + Fixed-TE
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 40 00 00 02 5A 00
+					15 00 00 40 00 00 02 5B 00
+					15 00 00 40 00 00 02 5E 01
+					15 00 00 40 00 00 02 60 02
+					39 00 00 40 00 00 04 FF 08 58 20
+					15 00 00 40 00 00 02 BD 45
+					15 00 00 40 00 00 02 BE 65
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 A7 00
+					39 00 00 40 00 00 07 B0 00 00 80 00 00 10
+					15 00 00 40 00 00 02 B6 00
+					15 00 00 40 00 00 02 B8 03
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 80 40
+					15 00 00 40 00 00 02 85 00
+					15 00 00 40 00 00 02 93 00
+					15 00 00 40 00 00 02 94 00
+					15 00 00 40 00 00 02 95 01
+					15 00 00 40 00 00 02 96 0D
+					15 00 00 40 00 00 02 A0 00
+					15 00 00 40 00 00 02 A1 00
+					15 00 00 40 00 00 02 EB 00
+					39 00 00 00 00 00 04 FF 08 58 00
+				];
+				qcom,mdss-dsi-on-command = [
+					//debug mode set alway on page 0
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 F8 01
+					39 00 00 40 00 00 04 FF 08 58 20
+					15 00 00 40 00 00 02 B3 50
+					15 00 00 40 00 00 02 B5 03
+					39 00 00 40 00 00 04 FF 08 58 06
+					15 00 00 40 00 00 02 D2 01
+					15 00 00 00 00 00 02 A1 00
+
+					//Flash reload EN
+					39 00 00 40 00 00 04 FF 08 58 21
+					15 00 00 00 00 00 02 A4 18
+
+					//OTP don't reload
+					39 00 00 40 00 00 04 FF 08 58 08
+					15 00 00 00 00 00 02 C8 62
+
+					//BOE demura off
+					39 00 00 40 00 00 04 FF 08 58 30
+					15 00 00 00 00 00 02 AE 00
+					15 00 00 00 00 00 02 80 00
+
+					//DSC setting PPS table
+					39 00 00 40 00 00 04 FF 08 58 07
+					15 00 00 40 00 00 02 8A 01
+					39 00 00 40 00 00 03 8B 11 E0
+
+					39 00 00 40 00 00 64 81 00 00 00 00 00
+						11 00 00 ab 30 80 0c 60 05 a0 00 16
+						02 d0 02 d0 02 00 02 C2 00 20 02 1B
+						00 0a 00 0F 05 B7 03 78 18 00 10 f0
+						07 10 20 00 06 0f 0f 33 0e 1c 2a 38
+						46 54 62 69 70 77 79 7b 7d 7e 02 02
+						22 00 2a 40 2a be 3a fc 3a fa 3a f8
+						3b 38 3b 78 3b b6 4b B6 4B F4 4B F4
+						6c 34 84 74 00 00 00 00 00 00
+
+					//MSFC and timming switch effect together
+					39 00 00 40 00 00 04 FF 08 58 4F
+					15 00 00 40 00 00 02 80 01
+					15 00 00 00 00 00 02 81 02
+
+					//Corner off
+					39 00 00 40 00 00 04 FF 08 58 17
+					15 00 00 00 00 00 02 A0 00
+
+					//optimize BSM2.0 esd power off bright line
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 00 00 00 02 81 03
+
+					//1bit esd code
+					39 00 00 40 00 00 04 FF 08 58 06
+					15 00 00 40 00 00 02 C6 01
+					39 00 00 40 00 00 04 FF 08 58 08
+					15 00 00 40 00 00 02 D2 05
+
+					39 00 00 40 00 00 04 FF 08 58 00
+					39 00 00 00 00 00 05 51 0D BB 0D BB
+
+					//BC ON
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 53 20
+
+					//TE ON
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 35 00
+
+					//Refresh Frame Recount DBV
+					39 00 00 40 00 00 04 FF 08 58 49
+					15 00 00 00 00 00 02 AB 93
+
+					//cross talk
+					39 00 00 40 00 00 04 FF 08 58 31
+					15 00 00 40 01 00 02 D0 81
+					39 00 00 40 00 00 13 80 F0 A0 78 50 26 DA B0 88 60 F0 20 0D 0D 06 FA F3 F3 E0
+					39 00 00 40 00 00 13 81 F0 68 4E 34 19 E7 CC B2 98 F0 20 0D 0D 02 FE FC FC F5
+					39 00 00 40 00 00 13 82 F0 5A 44 2D 16 EA D3 BC A6 F0 20 0D 0D 04 FC F8 F8 EC
+					39 00 00 40 00 00 13 83 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 84 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 85 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 86 F0 A0 78 50 26 DA B0 88 60 F0 20 0D 0D 06 FA F3 F3 E0
+					39 00 00 40 00 00 13 87 F0 68 4E 34 19 E7 CC B2 98 F0 20 0D 0D 02 FE FC FC F5
+					39 00 00 40 00 00 13 88 F0 5A 44 2D 16 EA D3 BC A6 F0 20 0D 0D 04 FC F8 F8 EC
+					39 00 00 40 00 00 13 89 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 8A F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 01 00 13 8B F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					15 00 00 40 00 00 02 D0 80
+					15 00 00 00 00 00 02 A0 B3
+
+					//irc compensation (3515 <-> 3516 dbv)
+					39 00 00 40 00 00 04 FF 08 58 10
+					15 00 00 00 00 00 02 85 04
+
+					/* 1.8nit ~ 10nit */
+					39 00 00 40 00 00 04 FF 08 58 23
+					15 00 00 40 00 00 02 CC 01
+					39 00 00 40 00 00 04 FF 08 58 69
+					39 00 00 40 00 00 07 B6 44 55 44 43 43 33
+					39 00 00 40 00 00 07 B7 33 44 55 54 44 44
+					39 00 00 40 00 00 07 B8 23 44 55 45 44 44
+					39 00 00 40 00 00 07 B9 33 44 55 43 33 33
+					39 00 00 40 00 00 07 BA 43 55 22 32 23 43
+					39 00 00 40 00 00 07 BB 55 55 55 53 22 22
+					39 00 00 40 00 00 04 FF 08 58 6A
+					39 00 00 40 00 00 07 86 44 55 44 43 43 33
+					39 00 00 40 00 00 07 87 33 44 55 54 44 44
+					39 00 00 40 00 00 07 88 23 44 55 45 44 44
+					39 00 00 40 00 00 07 89 33 44 55 43 33 33
+					39 00 00 40 00 00 07 8A 43 55 22 32 23 43
+					39 00 00 40 00 00 07 8B 55 55 55 53 22 22
+					39 00 00 40 00 00 04 FF 08 58 6B
+					39 00 00 40 00 00 07 E6 44 55 44 43 43 33
+					39 00 00 40 00 00 07 E7 33 34 55 55 55 55
+					39 00 00 40 00 00 07 E8 23 44 55 45 44 44
+					39 00 00 40 00 00 07 E9 33 44 55 44 44 44
+					39 00 00 40 00 00 07 EA 43 55 22 32 23 43
+					39 00 00 40 00 00 07 EB 55 44 66 65 43 33
+					39 00 00 40 00 00 04 FF 08 58 6C
+					39 00 00 40 00 00 07 B6 44 55 44 43 43 33
+					39 00 00 40 00 00 07 B7 33 34 55 55 55 55
+					39 00 00 40 00 00 07 B8 23 44 55 45 44 44
+					39 00 00 40 00 00 07 B9 33 44 55 44 44 44
+					39 00 00 40 00 00 07 BA 43 55 22 32 23 43
+					39 00 00 40 00 00 07 BB 55 44 66 65 43 33
+					39 00 00 40 00 00 04 FF 08 58 23
+					15 00 00 00 00 00 02 CC 00
+
+					39 00 00 40 00 00 04 FF 08 58 00
+					05 00 00 00 78 00 01 11
+
+					//SA-120Hz + Fixed-TE
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 40 00 00 02 5A 00
+					15 00 00 40 00 00 02 5B 00
+					15 00 00 40 00 00 02 5E 01
+					15 00 00 40 00 00 02 60 02
+					39 00 00 40 00 00 04 FF 08 58 20
+					15 00 00 40 00 00 02 BD 45
+					15 00 00 40 00 00 02 BE 65
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 A7 00
+					39 00 00 40 00 00 07 B0 00 00 80 00 00 10
+					15 00 00 40 00 00 02 B6 00
+					15 00 00 40 00 00 02 B8 03
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 80 40
+					15 00 00 40 00 00 02 85 00
+					15 00 00 40 00 00 02 93 00
+					15 00 00 40 00 00 02 94 00
+					15 00 00 40 00 00 02 95 01
+					15 00 00 40 00 00 02 96 0D
+					15 00 00 40 00 00 02 A0 00
+					15 00 00 40 00 00 02 A1 00
+					15 00 00 40 00 00 02 EB 00
+					39 00 00 00 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 29 00
+				];
+
+				//qcom,panel-roi-alignment=<1080 44 1080 44 1080 44>;
+				//qcom,partial-update-enabled = "single_roi";
+
+				qcom,lm-split = <720 720>;
+				qcom,mdss-dsc-slice-height = <22>;
+				qcom,mdss-dsc-slice-width = <720>;
+			};
+			timing@wqhd_oplus_120 {
+				#include "dsi-panel-AC545-P-3-A0005-common.dtsi"
+				#include "dsi-panel-AC545-P-3-A0005_pwm_common_oa120fps.dtsi"
+				#include "dsi-panel-AC545-P-3-A0005-common-effect.dtsi"
+				#include "dsi-panel-AC545-P-3-A0005-adfr-common-oa120.dtsi"
+				cell-index = <3>;
+				qcom,mdss-mdp-transfer-time-us = <7300>;
+				qcom,mdss-dsi-panel-framerate = <120>;
+				qcom,mdss-dsi-panel-clockrate = <1363200000>;
+				qcom,mdss-dsi-panel-width = <1440>;
+				qcom,mdss-dsi-panel-height = <3168>;
+				qcom,mdss-dsi-h-front-porch = <64>;
+				qcom,mdss-dsi-h-back-porch = <50>;
+				qcom,mdss-dsi-h-pulse-width = <8>;
+				qcom,mdss-dsi-h-sync-pulse = <0>;
+				qcom,mdss-dsi-v-back-porch = <12>;
+				qcom,mdss-dsi-v-front-porch = <16>;
+				qcom,mdss-dsi-v-pulse-width = <4>;
+
+				qcom,mdss-dsi-timing-switch-command = [
+					//OA-120Hz + Single-TE
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 40 00 00 02 5A 00
+					15 00 00 40 00 00 02 5B 00
+					15 00 00 40 00 00 02 5E 01
+					15 00 00 40 00 00 02 60 02
+					39 00 00 40 00 00 04 FF 08 58 20
+					15 00 00 40 00 00 02 BD 45
+					15 00 00 40 00 00 02 BE 65
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 A7 00
+					39 00 00 40 00 00 07 B0 00 00 80 00 00 10
+					15 00 00 40 00 00 02 B6 20
+					15 00 00 40 00 00 02 B8 03
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 80 40
+					15 00 00 40 00 00 02 85 00
+					15 00 00 40 00 00 02 93 00
+					15 00 00 40 00 00 02 94 00
+					15 00 00 40 00 00 02 95 01
+					15 00 00 40 00 00 02 96 0D
+					15 00 00 40 00 00 02 A0 00
+					15 00 00 40 00 00 02 A1 00
+					15 00 00 40 00 00 02 EB 00
+					39 00 00 00 00 00 04 FF 08 58 00
+				];
+				qcom,mdss-dsi-on-command = [
+					//debug mode set alway on page 0
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 F8 01
+					39 00 00 40 00 00 04 FF 08 58 20
+					15 00 00 40 00 00 02 B3 50
+					15 00 00 40 00 00 02 B5 03
+					39 00 00 40 00 00 04 FF 08 58 06
+					15 00 00 40 00 00 02 D2 01
+					15 00 00 00 00 00 02 A1 00
+
+					//Flash reload EN
+					39 00 00 40 00 00 04 FF 08 58 21
+					15 00 00 00 00 00 02 A4 18
+
+					//OTP don't reload
+					39 00 00 40 00 00 04 FF 08 58 08
+					15 00 00 00 00 00 02 C8 62
+
+					//BOE demura off
+					39 00 00 40 00 00 04 FF 08 58 30
+					15 00 00 00 00 00 02 AE 00
+					15 00 00 00 00 00 02 80 00
+
+					//DSC setting PPS table
+					39 00 00 40 00 00 04 FF 08 58 07
+					15 00 00 40 00 00 02 8A 01
+					39 00 00 40 00 00 03 8B 11 E0
+
+					39 00 00 40 00 00 64 81 00 00 00 00 00
+						11 00 00 ab 30 80 0c 60 05 a0 00 16
+						02 d0 02 d0 02 00 02 C2 00 20 02 1B
+						00 0a 00 0F 05 B7 03 78 18 00 10 f0
+						07 10 20 00 06 0f 0f 33 0e 1c 2a 38
+						46 54 62 69 70 77 79 7b 7d 7e 02 02
+						22 00 2a 40 2a be 3a fc 3a fa 3a f8
+						3b 38 3b 78 3b b6 4b B6 4B F4 4B F4
+						6c 34 84 74 00 00 00 00 00 00
+
+					//MSFC and timming switch effect together
+					39 00 00 40 00 00 04 FF 08 58 4F
+					15 00 00 40 00 00 02 80 01
+					15 00 00 00 00 00 02 81 02
+
+					//Corner off
+					39 00 00 40 00 00 04 FF 08 58 17
+					15 00 00 00 00 00 02 A0 00
+
+					//optimize BSM2.0 esd power off bright line
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 00 00 00 02 81 03
+
+					//1bit esd code
+					39 00 00 40 00 00 04 FF 08 58 06
+					15 00 00 40 00 00 02 C6 01
+					39 00 00 40 00 00 04 FF 08 58 08
+					15 00 00 40 00 00 02 D2 05
+
+					39 00 00 40 00 00 04 FF 08 58 00
+					39 00 00 00 00 00 05 51 0D BB 0D BB
+
+					//BC ON
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 53 20
+
+					//TE ON
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 35 00
+
+					//Refresh Frame Recount DBV
+					39 00 00 40 00 00 04 FF 08 58 49
+					15 00 00 00 00 00 02 AB 93
+
+					//cross talk
+					39 00 00 40 00 00 04 FF 08 58 31
+					15 00 00 40 01 00 02 D0 81
+					39 00 00 40 00 00 13 80 F0 A0 78 50 26 DA B0 88 60 F0 20 0D 0D 06 FA F3 F3 E0
+					39 00 00 40 00 00 13 81 F0 68 4E 34 19 E7 CC B2 98 F0 20 0D 0D 02 FE FC FC F5
+					39 00 00 40 00 00 13 82 F0 5A 44 2D 16 EA D3 BC A6 F0 20 0D 0D 04 FC F8 F8 EC
+					39 00 00 40 00 00 13 83 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 84 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 85 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 86 F0 A0 78 50 26 DA B0 88 60 F0 20 0D 0D 06 FA F3 F3 E0
+					39 00 00 40 00 00 13 87 F0 68 4E 34 19 E7 CC B2 98 F0 20 0D 0D 02 FE FC FC F5
+					39 00 00 40 00 00 13 88 F0 5A 44 2D 16 EA D3 BC A6 F0 20 0D 0D 04 FC F8 F8 EC
+					39 00 00 40 00 00 13 89 F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 00 00 13 8A F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					39 00 00 40 01 00 13 8B F0 50 3C 28 13 ED D8 C4 B0 F0 20 0D 03 02 FE FD F3 E0
+					15 00 00 40 00 00 02 D0 80
+					15 00 00 00 00 00 02 A0 B3
+
+					//irc compensation (3515 <-> 3516 dbv)
+					39 00 00 40 00 00 04 FF 08 58 10
+					15 00 00 00 00 00 02 85 04
+
+					/* 1.8nit ~ 10nit */
+					39 00 00 40 00 00 04 FF 08 58 23
+					15 00 00 40 00 00 02 CC 01
+					39 00 00 40 00 00 04 FF 08 58 69
+					39 00 00 40 00 00 07 B6 44 55 44 43 43 33
+					39 00 00 40 00 00 07 B7 33 44 55 54 44 44
+					39 00 00 40 00 00 07 B8 23 44 55 45 44 44
+					39 00 00 40 00 00 07 B9 33 44 55 43 33 33
+					39 00 00 40 00 00 07 BA 43 55 22 32 23 43
+					39 00 00 40 00 00 07 BB 55 55 55 53 22 22
+					39 00 00 40 00 00 04 FF 08 58 6A
+					39 00 00 40 00 00 07 86 44 55 44 43 43 33
+					39 00 00 40 00 00 07 87 33 44 55 54 44 44
+					39 00 00 40 00 00 07 88 23 44 55 45 44 44
+					39 00 00 40 00 00 07 89 33 44 55 43 33 33
+					39 00 00 40 00 00 07 8A 43 55 22 32 23 43
+					39 00 00 40 00 00 07 8B 55 55 55 53 22 22
+					39 00 00 40 00 00 04 FF 08 58 6B
+					39 00 00 40 00 00 07 E6 44 55 44 43 43 33
+					39 00 00 40 00 00 07 E7 33 34 55 55 55 55
+					39 00 00 40 00 00 07 E8 23 44 55 45 44 44
+					39 00 00 40 00 00 07 E9 33 44 55 44 44 44
+					39 00 00 40 00 00 07 EA 43 55 22 32 23 43
+					39 00 00 40 00 00 07 EB 55 44 66 65 43 33
+					39 00 00 40 00 00 04 FF 08 58 6C
+					39 00 00 40 00 00 07 B6 44 55 44 43 43 33
+					39 00 00 40 00 00 07 B7 33 34 55 55 55 55
+					39 00 00 40 00 00 07 B8 23 44 55 45 44 44
+					39 00 00 40 00 00 07 B9 33 44 55 44 44 44
+					39 00 00 40 00 00 07 BA 43 55 22 32 23 43
+					39 00 00 40 00 00 07 BB 55 44 66 65 43 33
+					39 00 00 40 00 00 04 FF 08 58 23
+					15 00 00 00 00 00 02 CC 00
+
+					39 00 00 40 00 00 04 FF 08 58 00
+					05 00 00 00 78 00 01 11
+
+					//OA-120Hz + Single-TE
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 40 00 00 02 5A 00
+					15 00 00 40 00 00 02 5B 00
+					15 00 00 40 00 00 02 5E 01
+					15 00 00 40 00 00 02 60 02
+					39 00 00 40 00 00 04 FF 08 58 20
+					15 00 00 40 00 00 02 BD 45
+					15 00 00 40 00 00 02 BE 65
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 A7 00
+					39 00 00 40 00 00 07 B0 00 00 80 00 00 10
+					15 00 00 40 00 00 02 B6 20
+					15 00 00 40 00 00 02 B8 03
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 80 40
+					15 00 00 40 00 00 02 85 00
+					15 00 00 40 00 00 02 93 00
+					15 00 00 40 00 00 02 94 00
+					15 00 00 40 00 00 02 95 01
+					15 00 00 40 00 00 02 96 0D
+					15 00 00 40 00 00 02 A0 00
+					15 00 00 40 00 00 02 A1 00
+					15 00 00 40 00 00 02 EB 00
+					39 00 00 00 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 29 00
+				];
+
+				//qcom,panel-roi-alignment=<1080 44 1080 44 1080 44>;
+				//qcom,partial-update-enabled = "single_roi";
+
+				qcom,lm-split = <720 720>;
+				qcom,mdss-dsc-slice-height = <22>;
+				qcom,mdss-dsc-slice-width = <720>;
+			};
+
+		};
+	};
+};
+
+&dsi_panel_AA545_P_3_A0005_dsc_cmd {
+	qcom,ulps-enabled;
+	qcom,dsi-select-clocks = "pll_byte_clk0", "pll_dsi_clk0";
+	qcom,mdss-dsi-display-timings {
+		timing@wqhd_sdc_60 {
+			qcom,mdss-dsi-panel-phy-timings = [00 2C 0C 0C 1D 1A 0C 0C 0B 02 04 00 24 11];
+			qcom,display-topology = <1 1 1>,<2 2 1>;
+			qcom,default-topology-index = <1>;
+		};
+		timing@wqhd_sdc_90 {
+			qcom,mdss-dsi-panel-phy-timings = [00 2C 0C 0C 1D 1A 0C 0C 0B 02 04 00 24 11];
+			qcom,display-topology = <1 1 1>,<2 2 1>;
+			qcom,default-topology-index = <1>;
+		};
+		timing@wqhd_sdc_120 {
+			qcom,mdss-dsi-panel-phy-timings = [00 2C 0C 0C 1D 1A 0C 0C 0B 02 04 00 24 11];
+			qcom,display-topology = <1 1 1>,<2 2 1>;
+			qcom,default-topology-index = <1>;
+		};
+		timing@wqhd_oplus_120 {
+			qcom,mdss-dsi-panel-phy-timings = [00 2C 0C 0C 1D 1A 0C 0C 0B 02 04 00 24 11];
+			qcom,display-topology = <1 1 1>,<2 2 1>;
+			qcom,default-topology-index = <1>;
+		};
+	};
+};
+
+&dsi_panel_AA545_P_3_A0005_dsc_cmd {
+	/* HARDWARE CONFIG */
+	qcom,panel-supply-entries = <&oplus_dsi_panel_custom_pwr_supply>;
+	qcom,mdss-dsi-panel-controller = <&mdss_dsi0>;
+	qcom,platform-te-gpio = <&tlmm 86 0>;
+	qcom,platform-reset-gpio = <&tlmm 133 0>;
+	qcom,platform-panel-vout-gpio = <&tlmm 91 0>;
+	qcom,panel_voltage_vddi_name = "vddio";
+	qcom,panel_voltage_vddi = <1 1750000 1850000 1950000>;
+	qcom,panel_voltage_vddr_name = "vci";
+	qcom,panel_voltage_vddr = <1 3000000 3200000 3300000>;
+
+	//enable mipi strength
+	oplus,enhance_mipi_strength;
+
+	/* BRIGHTNESS CONFIG */
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,bl-dsc-cmd-state = "dsi_hs_mode";
+	qcom,mdss-dsi-bl-inverted-dbv;
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4094>;
+	qcom,mdss-brightness-max-level = <4094>;
+	oplus,dsi-bl-normal-max-level = <2923>;
+	oplus,dsi-brightness-normal-max-level = <2923>;
+	oplus,dsi-brightness-default-level = <1433>;
+	oplus,dsi-dc-backlight-threshold = <1102>;
+	oplus,dsi-global-hbm-case-id = <1>;
+	//oplus,dsi-global-hbm-case23-threshold = <2048>;
+
+	/* ESD CONFIG */
+	qcom,esd-check-enabled;
+	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
+	qcom,mdss-dsi-panel-status-command = [
+		06 00 00 00 00 00 01 0A
+		06 00 00 00 00 00 01 B0
+	];
+	qcom,mdss-dsi-panel-status-command-state = "dsi_lp_mode";
+	qcom,mdss-dsi-panel-status-value = <
+		0x9C 0x0F
+		0x9C 0x05
+	>;
+	qcom,mdss-dsi-panel-status-read-length = <1 1>;
+	oplus,mdss-dsi-panel-status-match-modes = <0x00000002>;
+
+	/* FACTORY CONFIG */
+	oplus,mdss-dsi-vendor-name = "A0005";
+	oplus,mdss-dsi-manufacture = "P_3";
+	oplus,color_vivid_status;
+	oplus,color_srgb_status;
+	oplus,color_softiris_status;
+	//oplus,color_oplus_calibrate_status;
+	oplus,color_dual_brightness_status;
+	oplus,color_2nit_status;
+	oplus,color_loading_status;
+	oplus,color_nature_profession_status;
+	oplus,mdss-dsi-panel-type = <0>;
+
+	/* OPLUS FEATURES CONFIG */
+	oplus,dp-enabled;
+	//oplus,dsi-cabc-enabled;
+	//oplus,dsi-dre-enabled;
+	oplus,dsi-serial-number-enabled;
+	//oplus,dsi-serial-number-lock;
+	oplus,dsi-serial-number-switch-page;
+	oplus,dsi-serial-number-reg= <0x82>;
+	oplus,dsi-serial-number-index= <0>;
+	oplus,dsi-serial-number-read-count= <7>;
+
+	/* adfr config */
+	oplus,adfr-config = <0x201>;  // 0b0010'0000'0001
+	oplus,adfr-test-te-gpio = <&tlmm 85 0>;
+	/* just for qsync enable */
+	qcom,qsync-enable;
+	qcom,mdss-dsi-qsync-min-refresh-rate = <24>;
+
+	oplus,pwm-switch-support;
+	oplus,pwm-switch-backlight-threshold = <1100>;
+	oplus,pwm-onepulse-support;
+	oplus,pwm-onepulse-backlight-threshold = <1100>;
+
+	/* demura dbv config */
+	oplus,bl_denura-dbv-switch-support;
+
+	/* add for panel id compatibility */
+	oplus,panel_init_compatibility_enable;
+
+	/* ofp config */
+	oplus,ofp-fp-type = <0x188>;
+	oplus,ofp-need-to-bypass-gamut;
+	oplus,ofp-need-to-wait-data-before-aod-on;
+};

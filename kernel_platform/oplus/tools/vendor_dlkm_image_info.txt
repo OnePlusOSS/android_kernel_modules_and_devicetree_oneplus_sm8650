@@ -1,0 +1,8 @@
+vendor_dlkm_fs_type=ext4
+
+use_dynamic_partition_size=true
+
+ext_mkuserimg=mkuserimg_mke2fs
+
+ext4_share_dup_blocks=true
+

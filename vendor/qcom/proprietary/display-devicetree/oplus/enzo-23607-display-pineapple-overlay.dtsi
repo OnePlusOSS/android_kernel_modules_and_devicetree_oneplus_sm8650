@@ -1,0 +1,64 @@
+#include "panel/dsi-panel-enzo-boe-ili7838e-1264-2780-dsc-cmd.dtsi"
+#include "panel/dsi-panel-enzo-boe-ili7838e-1264-2780-high-pre-dsc-cmd.dtsi"
+#include "panel/dsi-panel-enzo-boe-ili7838e-1264-2780-evt-dsc-cmd.dtsi"
+#include "panel/dsi-panel-enzo-boe-ili7838e-1264-2780-evt-old-dsc-cmd.dtsi"
+#include "panel/dsi-panel-enzo-boe-ili7838e-1264-2780-dvt-dsc-cmd.dtsi"
+#include "panel/dsi-panel-enzo-boe-ili7838e-1264-2780-dvt-low-dsc-cmd.dtsi"
+#include "panel/dsi-panel-enzo-boe-ili7838e-1264-2780-pvt-dsc-cmd.dtsi"
+&soc {
+	oplus_display_dev: oplus,dsi-display-dev {
+		oplus,dsi-panel-primary = <
+			&dsi_panel_enzo_boe_ili7838e_1264_2780_dsc_cmd
+                        &dsi_panel_enzo_boe_ili7838e_1264_2780_high_pre_dsc_cmd
+			&dsi_panel_enzo_boe_ili7838e_1264_2780_evt_dsc_cmd
+			&dsi_panel_enzo_boe_ili7838e_1264_2780_evt_old_dsc_cmd
+			&dsi_panel_enzo_boe_ili7838e_1264_2780_dvt_dsc_cmd
+			&dsi_panel_enzo_boe_ili7838e_1264_2780_dvt_low_dsc_cmd
+			&dsi_panel_enzo_boe_ili7838e_1264_2780_pvt_dsc_cmd
+		>;
+		oplus,dsi-panel-secondary = <
+		>;
+		oplus,dsi-panel-extended = <>;
+	};
+
+
+	dsi_panel_pwr_supply_enzo: dsi_panel_pwr_supply_enzo {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                qcom,panel-supply-entry@0 {
+                        reg = <0>;
+                        qcom,supply-name = "vddio";
+                        qcom,supply-min-voltage = <1800000>;
+                        qcom,supply-max-voltage = <1800000>;
+                        qcom,supply-enable-load = <220000>;
+                        qcom,supply-disable-load = <8000>;
+                        qcom,supply-post-on-sleep = <2>;
+                        qcom,supply-pre-off-sleep = <10>;
+                };
+
+                qcom,panel-supply-entry@1 {
+                        reg = <1>;
+                        qcom,supply-name = "vci";
+                        qcom,supply-min-voltage = <3200000>;
+                        qcom,supply-max-voltage = <3200000>;
+                        qcom,supply-enable-load = <10000>;
+                        qcom,supply-disable-load = <300>;
+                        qcom,supply-pre-on-sleep = <1>;
+                        qcom,supply-post-on-sleep = <5>;
+                        qcom,supply-pre-off-sleep = <1>;
+                        qcom,supply-post-off-sleep = <1>;
+                };
+        };
+};
+
+&sde_dp {
+	qcom,hbr-rbr-voltage-swing = <0x07 0x0f 0x16 0x1f>,
+				<0x11 0x1e 0x1f 0xff>,
+				<0x1a 0x1f 0xff 0xff>,
+				<0x1f 0xff 0xff 0xff>;
+	qcom,hbr-rbr-pre-emphasis = <0x00 0x0c 0x14 0x1a>,
+				<0x00 0x0e 0x15 0xff>,
+				<0x02 0x0e 0xff 0xff>,
+				<0x02 0xff 0xff 0xff>;
+};

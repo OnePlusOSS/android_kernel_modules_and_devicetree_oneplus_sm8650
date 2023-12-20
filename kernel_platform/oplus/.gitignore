@@ -1,0 +1,4 @@
+prebuild/
+dts_check/
+platform/
+bazel/oplus_modules_variant.bzl

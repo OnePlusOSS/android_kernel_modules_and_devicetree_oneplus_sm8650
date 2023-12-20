@@ -1,0 +1,12 @@
+/dts-v1/;
+/plugin/;
+
+#include "kalama-v2-ese-common.dtsi"
+
+/ {
+    model = "Qualcomm Technologies, Inc. Kalama QRD";
+    compatible = "qcom,kalama-qrd", "qcom,kalama", "qcom,qrd";
+    //AS of now for V2 devices, we have mapped the msm-id and board id same as V1. We would update this once we receive the specs of V2 devices.
+    qcom,msm-id = <557 0x10000>;
+    qcom,board-id = <11 0>;
+};

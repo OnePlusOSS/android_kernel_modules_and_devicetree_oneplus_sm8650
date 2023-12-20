@@ -1,0 +1,633 @@
+&qupv3_hub_i2c8 {
+	/delete-property/ pinctrl-0;
+	/delete-property/ pinctrl-1;
+	pinctrl-0 = <&qupv3_i2c8_sda_active>, <&qupv3_i2c8_scl_active>;
+	pinctrl-1 = <&qupv3_i2c8_sleep>;
+};
+
+&qupv3_hub_i2c8 {
+	status = "ok";
+	qcom,clk-freq-out = <400000>;
+	/delete-node/ magnachip@0D;
+	/delete-node/ magnachip@0C;
+	/delete-node/ ist8801@19;
+	/delete-node/ ist8801@18;
+
+	magnachip@0D {
+		compatible = "oplus,hall-mxm1120,up";
+		reg = <0x0D>;
+		vdd-supply = <&L2B>;
+		vdd_volt = <3008000>;
+		vio-supply = <&L1B>;
+		vio_volt = <1800000>;
+		magnachip,init-interval = <200>;
+		interrupt-parent = <&tlmm>;
+		interrups = <112 0x02>;
+		dhall,irq-gpio = <&tlmm 112 0x2008>;
+		pinctrl-names = "uphall_tri_state_key_active";
+		pinctrl-0 = <&uphall_tri_state_key_active>;
+		esd-check-support;
+	};
+
+	magnachip@0C {
+		compatible = "oplus,hall-mxm1120,down";
+		reg = <0x0C>;
+		vdd-supply = <&L2B>;
+		vdd_volt = <3008000>;
+		vio-supply = <&L1B>;
+		vio_volt = <1800000>;
+		magnachip,init-interval = <200>;
+		interrupt-parent = <&tlmm>;
+		interrups = <99 0x02>;
+		dhall,irq-gpio = <&tlmm 99 0x2008>;
+		pinctrl-names = "downhall_tri_state_key_active";
+		pinctrl-0 = <&downhall_tri_state_key_active>;
+		esd-check-support;
+	};
+};
+
+&soc {
+
+	devinfo_pangu {
+		compatible = "oplus-devinfo";
+		pinctrl-names = "default", "sleep", "active", "idle";
+		pinctrl-0 = <&hw_pins_default>;
+		pinctrl-1 = <&aboard_pin_gpio0_sleep>;
+		pinctrl-2 = <&aboard_pin_gpio0_active>;
+		pinctrl-3 = <&aboard_pin_gpio0_idle>;
+
+		main-sub {
+			compatible = "hw-match, main-sub";
+			use_tristate_gpio;
+			aboard-gpio0 = <&tlmm 90 0>;
+			aboard-patterns = <0>;	/*0[high-resistance] 1[pull-down] 2[pull-up]*/
+			/*main board*/
+			match-projects = <22111>;
+		};
+	};
+};
+
+&qupv3_se4_spi{
+	/delete-property/ pinctrl-0;
+	/delete-property/ pinctrl-1;
+	pinctrl-0 = <&qupv3_se4_spi_mosi_active>, <&qupv3_se4_spi_miso_active>,
+				<&qupv3_se4_spi_clk_active>, <&qupv3_se4_spi_cs_active>;
+	pinctrl-1 = <&qupv3_se4_spi_sleep>, <&qupv3_se4_spi_cs_sleep>;
+};
+
+&qupv3_se4_spi {
+	status = "ok";
+
+	goodix-berlin@0 {
+		status = "disabled";
+	};
+
+	synaptics_tcm@0{
+		compatible = "synaptics-s3910";
+		reg = <0x0>;
+		chip-name = "S3910";
+		status = "okay";
+		spi-max-frequency = <19000000>;
+
+		/* Interrupt && Irq-gpio */
+		interrupt-parent = <&tlmm>;
+		interrupts = <162 0x2008>;
+
+		/* Power Config */
+		enable2v8_gpio = <&tlmm 108 0x1>;
+		//enable1v8_gpio = <&tlmm 97 0x1>;
+		//vdd_2v8-supply = <&L14B>;
+		vcc_1v8-supply = <&L4B>;
+		vdd_2v8_volt = <3008000>;
+
+		/* Other HW Resource */
+		irq-gpio = <&tlmm 162 0x2008>;
+		reset-gpio = <&tlmm 161 0x1>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+
+		touchpanel,max-num-support = <10>;
+		touchpanel,tx-rx-num = <17 38>;
+		earsense,tx-rx-num = <17 18>;
+		touchpanel,panel-coords = <23040 50688>;
+		touchpanel,display-coords = <1440 3168>;
+		touchpanel,touchmajor-limit = <256 256>;
+		touchpanel,int-mode = <1>; /*0: interrupt and disable, 1:interrupt and not disable*/
+		touchpanel,curved-size = <45>;
+
+		prevention,curved_screen_V2;
+		prevention,grip_disable_level = <6>;
+		prevention,updelay_time_ms = <30>;
+		prevention,makeup_cnt_weight = <4 1 2 2 2>;
+		prevention,large_corner_range = <2564 6217>;
+		prevention,large_corner_judge_condition = <500 300 2194 7 7>;
+		prevention,trx_reject_condition = <8 7 7>;
+		prevention,trx_strict_reject_condition = <8 6 6>;
+		prevention,large_judge_time_ms = <500 50 30>;
+		prevention,large_exit_condition = <8 8 2>;
+		prevention,single_channel_width = <320 320>;
+		prevention,normal_tap_condition = <10 350>;
+		prevention,long_edge_condition = <179 90 120 80>;
+		prevention,long_strict_edge_condition = <160 60>;
+		prevention,long_fingerhold_condition = <70 6 4 4>;
+		prevention,short_edge_condition = <179 90 120 80>;
+		prevention,short_strict_edge_condition = <160 60>;
+		prevention,large_strict_exit_condition = <6 6>;
+		prevention,top_corner_config = <464 1371 1000>;
+		prevention,edge_swipe_config = <340 1130>;
+
+		prevention,curved_screen_V4;
+		prevention,long_eliminate_point_type = <2 23040 16896 445 50688 300 1>;
+		prevention,long_fingerhold_condition2 = <1300 3657 0 0>;
+		prevention,top_corner_config2 = <3 80 600 1500 0>;
+		prevention,hor_long_top_corner_config = <557 3657 0 0>;
+		prevention,top_middle_config = <23040 1858 1858 0>;
+		prevention,corner_eliminate_point_type = <0 3400 4150 1>;
+		prevention,finger_hold_differ_size = <1 0 400 300>;
+		prevention,finger_hold_max_rx_exit_distance = <5 650 4205>;
+		prevention,max_rx_exit_distance = <1 5 150 650 3657>;
+		prevention,dynamic_finger_hold_exit_distance = <1 650 4205 836>;
+		prevention,edge_sliding_matched_support = <1 150 3 0>;
+
+		//grip v4.2 reclining mode
+		prevention,reclining_mode_support = <1>;
+		prevention,long_eliminate_point_type_recli = <2 23040 16896 160 50688 500 1>;
+		prevention,finger_hold_differ_size_recli = <1 0 180 400>;
+		prevention,finger_hold_max_rx_exit_distance_recli = <4 160 1000>;
+		prevention,max_rx_exit_distance_recli = <1 4 100 160 800>;
+		prevention,dynamic_finger_hold_exit_distance_recli = <1 160 1000 320>;
+		prevention,edge_sliding_matched_support_recli = <1 200 3 0>;
+
+		touchpanel,smooth-level = <0 1 2 4 7 9>;
+		touchpanel,smooth-level-charging = <0 2 4 7 8 9>;
+		touchpanel,sensitive-level = <0 70 55 40 25 10>;
+		touchpanel,single-optimized-time = <8>;
+		touchpanel,high-frame-rate-time = <60>;
+
+		end_stretch_value = <480 250 16 16>;
+		//touchpanel,tp_ic_type = <2>;
+		panel_type = <3 7 8>;
+		// type of tp_dev ,TP-SAMSUNG = 8;
+		platform_support_project = <22111>;
+		platform_support_project_dir = <22825>;
+		platform_support_project_commandline = "mdss_dsi_panel_AA545_P_3_A0005_dsc_cmd", "mdss_dsi_panel_AA545_P_2_A0007_dsc_cmd", "mdss_dsi_panel_AA545_P_1_A0006_dsc_cmd";
+
+		/* SW Support Feature Control */
+		black_gesture_support;
+		//fw_edge_limit_support;
+		pressure_report_support;
+		charger_pump_support;
+		game_switch_support;
+		smart_gesture_support;
+		fw_update_app_support;
+		fingerprint_underscreen_support;
+		freq_hop_simulate_support;
+		report_flow_unlock_support;
+		screenoff_fingerprint_info_support;
+		irq_need_dev_resume_ok;
+		//firmware_in_dts;
+		enable_point_auto_change;
+		kernel_grip_support;
+		//grip_no_driver_support;
+		health_monitor_support;
+		black_gesture_indep_support;
+		exception_upload_support;
+		sportify_aod_gesture_support;
+		glove_mode_support;
+		fingerprint_not_report_in_suspend;
+		snr_read_support;
+		//temperature_detect_support;
+		palm_to_sleep_support;
+		tp_data_record_support;
+		skip_reinit_device_support;
+
+		/*
+		 *Virtual Key Config:
+		 *1:touchpanel,button-type: <virtualkey_type  supportted_button-map>
+		 *virtualkey_type:
+		 *Type 1: using board_properties
+		 *Type 2: using same IC (button zone&& touch zone are seprate)
+		 *Type 3: using diffrent IC (button zone&& touch zone are seprate)
+		 *Type 4: No need of virtual key process
+		 *supportted_button-map:select|menu|home|back
+		 *
+		 *2:touchpanel,button-map
+		 *type (X1,Y1)(X2,Y2)(X3,Y3)(Width_X,Hight_Y)--Only when button-type is 0
+		 */
+		touchpanel,button-type = <4>;
+		touchpanel.button-TRx = <0 0>;
+
+		S3910 {
+			switch_report_rate;
+			report_rate_default = <60>;
+			report_rate_game_value = <3>;
+			fps_report_rate = <60 2 90 3 120 3>;//1:360Hz 2:125Hz 3:240Hz
+			default_gesture_mask = <8191>;
+			fwupdate_bootloader = <1>;
+			normal_config_version = <2>;
+		};
+
+		S3910_PANEL7 {
+			interrupts = <162 0x2008>;
+			irq-gpio = <&tlmm 162 0x2008>;
+			reset-gpio = <&tlmm 161 0x1>;
+
+			touchpanel,max-num-support = <10>;
+			touchpanel,tx-rx-num = <18 40>;
+			touchpanel,panel-coords = <23040 50688>;
+			touchpanel,display-coords = <1440 3168>;
+			touchpanel,touchmajor-limit = <256 256>;
+			touchpanel,int-mode = <1>; /*0: interrupt and disable, 1:interrupt and not disable*/
+			touchpanel,curved-size = <45>;
+			touchpanel,smooth-level = <0 1 2 4 7 9>;
+			touchpanel,smooth-level-charging = <0 2 4 7 8 9>;
+			touchpanel,sensitive-level = <0 70 55 40 25 10>;
+			touchpanel,single-optimized-time = <8>;
+			touchpanel,high-frame-rate-time = <60>;
+
+			prevention,curved_screen_V2;
+			prevention,grip_disable_level = <6>;
+			prevention,updelay_time_ms = <30>;
+			prevention,makeup_cnt_weight = <4 1 2 2 2>;
+			prevention,large_corner_range = <2564 6217>;
+			prevention,large_corner_judge_condition = <500 300 2194 7 7>;
+			prevention,trx_reject_condition = <8 7 7>;
+			prevention,trx_strict_reject_condition = <8 6 6>;
+			prevention,large_judge_time_ms = <500 50 30>;
+			prevention,large_exit_condition = <8 8 2>;
+			prevention,single_channel_width = <320 320>;
+			prevention,normal_tap_condition = <10 350>;
+			prevention,long_edge_condition = <179 90 120 80>;
+			prevention,long_strict_edge_condition = <160 60>;
+			prevention,long_fingerhold_condition = <70 6 4 4>;
+			prevention,short_edge_condition = <179 90 120 80>;
+			prevention,short_strict_edge_condition = <160 60>;
+			prevention,large_strict_exit_condition = <6 6>;
+			prevention,top_corner_config = <464 1371 1000>;
+			prevention,edge_swipe_config = <340 1130>;
+
+			prevention,curved_screen_V4;
+			prevention,long_eliminate_point_type = <2 23040 16896 445 50688 300 1>;
+			prevention,long_fingerhold_condition2 = <1300 3657 0 0>;
+			prevention,top_corner_config2 = <3 80 600 1500 0>;
+			prevention,hor_long_top_corner_config = <557 3657 0 0>;
+			prevention,top_middle_config = <23040 1858 1858 0>;
+			prevention,corner_eliminate_point_type = <0 3400 4150 1>;
+			prevention,finger_hold_differ_size = <1 0 400 300>;
+			prevention,finger_hold_max_rx_exit_distance = <5 650 4205>;
+			prevention,max_rx_exit_distance = <1 5 150 650 3657>;
+			prevention,dynamic_finger_hold_exit_distance = <1 650 4205 836>;
+			prevention,edge_sliding_matched_support = <1 150 3 0>;
+
+			//grip v4.2 reclining mode
+			prevention,reclining_mode_support = <1>;
+			prevention,long_eliminate_point_type_recli = <2 23040 16896 160 50688 500 1>;
+			prevention,finger_hold_differ_size_recli = <1 0 180 400>;
+			prevention,finger_hold_max_rx_exit_distance_recli = <4 160 1000>;
+			prevention,max_rx_exit_distance_recli = <1 4 100 160 800>;
+			prevention,dynamic_finger_hold_exit_distance_recli = <1 160 1000 320>;
+			prevention,edge_sliding_matched_support_recli = <1 200 3 0>;
+		};
+	};
+
+	synaptics_tcm_hbp@0{
+		compatible = "synaptics,tcm-spi-hbp";
+		reg = <0x0>;
+		chip-name = "S3910";
+		status = "disabled";
+		spi-max-frequency = <19000000>;
+		qcom,rt;
+
+		/* Interrupt && Irq-gpio */
+		interrupt-parent = <&tlmm>;
+		interrupts = <162 0x2008>;
+
+		/* Power Config */
+		synaptics,avdd-gpio = <&tlmm 108 0x1>;
+		vdd-supply = <&L4B>;
+		synaptics,vdd-name = "vdd";
+
+		/* Other HW Resource */
+		synaptics,irq-gpio = <&tlmm 162 0x2008>;
+		synaptics,reset-gpio = <&tlmm 161 0x1>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&ts_int_active &ts_reset_active>;
+
+		touchpanel,panel-coords = <23040 50688>;
+		touchpanel,tx-rx-num = <17 38>;
+		//touchpanel,tp_ic_type = <2>;
+		panel_type = <3 7 8>;
+		// type of tp_dev ,TP-SAMSUNG = 8;
+		firmware_name = "AA545";
+		platform_support_project = <22111>;
+		platform_support_project_dir = <22825>;
+		platform_support_project_commandline = "mdss_dsi_panel_AA545_P_3_A0005_dsc_cmd", "mdss_dsi_panel_AA545_P_2_A0007_dsc_cmd", "mdss_dsi_panel_AA545_P_1_A0006_dsc_cmd";
+
+		synaptics,power-on-state = <1>;
+		synaptics,power-delay-ms = <200>;
+		synaptics,irq-on-state = <0>;
+		synaptics,reset-on-state = <0>;
+		synaptics,reset-active-ms = <10>;
+		synaptics,reset-delay-ms = <80>;
+		synaptics,spi-mode = <0>;
+		synaptics,spi-byte-delay-us = <0>;
+		synaptics,spi-block-delay-us = <0>;
+
+		S3910_PANEL7 {
+			touchpanel,tx-rx-num = <18 40>;
+		};
+	};
+};
+
+&pm8550ve_gpios {
+	led_en_active: led_en_active {
+		pins = "gpio2";
+		function = "normal";
+		bias-disable;
+		power-source = <0>;
+		output-high;
+		qcom,drive-strength = <3>;
+	};
+
+	led_en_sleep: led_en_sleep {
+		pins = "gpio2";
+		function = "normal";
+		bias-disable;
+		power-source = <0>;
+		output-low;
+		qcom,drive-strength = <3>;
+	};
+};
+
+&qupv3_hub_i2c4 {
+	status = "ok";
+        qcom,clk-freq-out = <400000>;
+	aw20198_led@20 {
+		compatible = "awinic,aw20198_led";
+		reg = <0x20>;
+		status = "ok";
+		pinctrl-names = "led_en_active","led_en_sleep","led_default";
+		pinctrl-0 = <&led_en_active>;
+		pinctrl-1 = <&led_en_sleep>;
+		pinctrl-2 = <&led_default>;
+		enable_gpio = <&tlmm 2 0x00>;
+		vcc-enable_gpio = <&pm8550ve_gpios 5 0x00>;
+		aw20198,imax = <30>;
+		aw20198,sl_current = <255>;
+		aw20198,max_brightness = <255>;
+		aw20198,effect-bin;
+                aw20198,white {
+                        aw210xx,name = "white";
+                        aw210xx,id = <0>;
+                        aw210xx,imax = <1>;
+                        aw210xx,led_default_trigger = "none";
+                        aw210xx,brightness = <0>;
+                        aw210xx,max-brightness = <255>;
+                };
+
+
+	};
+};
+
+&tlmm {
+	pmx_led_default {
+		led_default: led_default {
+			mux {
+				pins = "gpio2";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio2";
+				drive-strength = <16>;
+				bias-disable;
+				output-high;
+				qcom,apps;
+			};
+		};
+	};
+
+	pmx_ts_int_active {
+		ts_int_active: ts_int_active {
+			mux {
+				pins = "gpio162";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio162";
+				drive-strength = <8>;
+				bias-pull-up;
+				input-enable;
+			};
+		};
+	};
+
+	pmx_ts_reset_active {
+		ts_reset_active: ts_reset_active {
+			mux {
+				pins = "gpio161";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio161";
+				drive-strength = <8>;
+				output-low;
+				bias-disable;
+			};
+		};
+	};
+
+	qupv3_se4_spi_pins: qupv3_se4_spi_pins {
+		qupv3_se4_spi_miso_active: qupv3_se4_spi_miso_active {
+			mux {
+				pins = "gpio48";
+				function = "qup1_se4_l0";
+			};
+
+			config {
+				pins = "gpio48";
+				drive-strength = <6>;
+				bias-disable;
+			};
+		};
+
+		qupv3_se4_spi_mosi_active: qupv3_se4_spi_mosi_active {
+			mux {
+				pins = "gpio49";
+				function = "qup1_se4_l1";
+			};
+
+			config {
+				pins = "gpio49";
+				drive-strength = <6>;
+				bias-disable;
+			};
+		};
+
+		qupv3_se4_spi_clk_active: qupv3_se4_spi_clk_active {
+			mux {
+				pins = "gpio50";
+				function = "qup1_se4_l2";
+			};
+
+			config {
+				pins = "gpio50";
+				drive-strength = <6>;
+				bias-disable;
+			};
+		};
+
+		qupv3_se4_spi_cs_active: qupv3_se4_spi_cs_active {
+			mux {
+				pins = "gpio51";
+				function = "qup1_se4_l3";
+			};
+
+			config {
+				pins = "gpio51";
+				drive-strength = <6>;
+				bias-disable;
+			};
+		};
+
+		qupv3_se4_spi_sleep: qupv3_se4_spi_sleep {
+			mux {
+				pins = "gpio48", "gpio49",
+						"gpio50";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio48", "gpio49",
+						"gpio50";
+				drive-strength = <6>;
+				bias-disable;
+			};
+		};
+
+		qupv3_se4_spi_cs_sleep: qupv3_se4_spi_cs_sleep {
+			mux {
+				pins = "gpio51";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio51";
+				drive-strength = <6>;
+				bias-disable;
+				output-high;
+			};
+		};
+	};
+
+	uphall_tri_state_key_active: uphall_tri_state_key_active {
+		mux {
+			pins = "gpio112";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio112";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+
+	downhall_tri_state_key_active: downhall_tri_state_key_active {
+		mux {
+			pins = "gpio99";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio99";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+
+	hw_pins_default:hw_pins_default {
+	};
+	aboard_pin_gpio0_sleep:aboard_pin_gpio0_sleep {
+		mux {
+			pins = "gpio90";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio90";
+			drive-strength = <2>;
+			bias-pull-down;
+			input-enable;
+		};
+	};
+
+	aboard_pin_gpio0_active:aboard_pin_gpio0_active {
+		mux {
+			pins = "gpio90";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio90";
+			drive-strength = <2>;
+			bias-pull-up;
+			input-enable;
+		};
+	};
+
+	aboard_pin_gpio0_idle:aboard_pin_gpio0_idle {
+		mux {
+			pins = "gpio90";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio90";
+			bias-disable;
+			input-enable;
+		};
+	};
+
+	qupv3_i2c8_pins: qupv3_i2c8_pins {
+		qupv3_i2c8_sda_active: qupv3_i2c8_sda_active {
+			mux {
+				pins = "gpio206";
+				function = "i2chub0_se8_l0";
+			};
+
+			config {
+				pins = "gpio206";
+				drive-strength = <2>;
+				bias-disable;
+				qcom,apps;
+			};
+		};
+
+		qupv3_i2c8_scl_active: qupv3_i2c8_scl_active {
+			mux {
+				pins = "gpio207";
+				function = "i2chub0_se8_l1";
+			};
+
+			config {
+				pins = "gpio207";
+				drive-strength = <2>;
+				bias-disable;
+				qcom,apps;
+			};
+		};
+
+		qupv3_i2c8_sleep: qupv3_i2c8_sleep {
+			mux {
+				pins = "gpio206", "gpio207";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio206", "gpio207";
+				drive-strength = <2>;
+				input-enable;
+				bias-disable;
+				qcom,apps;
+			};
+		};
+	};
+};

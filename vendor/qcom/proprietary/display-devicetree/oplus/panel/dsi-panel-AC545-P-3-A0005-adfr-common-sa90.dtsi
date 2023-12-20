@@ -1,0 +1,181 @@
+				/* standard adfr */
+				qcom,mdss-dsi-h-sync-skew = <0>;
+				oplus,adfr-min-fps-mapping-table = <90 45 30 15 10 5 1>;
+				oplus,adfr-fakeframe-config = <0>;
+				oplus,adfr-idle-off-min-fps = <15>;
+
+				qcom,mdss-dsi-adfr-min-fps-0-command = [
+					//8B XX, Min Freq = 90/(1+XX)
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 A5 00
+					15 00 00 40 00 00 02 8B 00
+					15 00 00 40 00 00 02 EB 15       //auto decreasing enable
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 2C 00
+				];
+
+				qcom,mdss-dsi-adfr-min-fps-1-command = [
+					//8B XX, Min Freq = 90/(1+XX)
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 A5 01
+					15 00 00 40 00 00 02 8B 01
+					15 00 00 40 00 00 02 EB 15       //auto decreasing enable
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 2C 00
+				];
+
+				qcom,mdss-dsi-adfr-min-fps-2-command = [
+					//8B XX, Min Freq = 90/(1+XX)
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 A5 02
+					15 00 00 40 00 00 02 8B 02
+					15 00 00 40 00 00 02 EB 15       //auto decreasing enable
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 2C 00
+				];
+
+				qcom,mdss-dsi-adfr-min-fps-3-command = [
+					//8B XX, Min Freq = 90/(1+XX)
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 A5 02
+					15 00 00 40 00 00 02 8B 05
+					15 00 00 40 00 00 02 EB 15       //auto decreasing enable
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 2C 00
+				];
+
+				qcom,mdss-dsi-adfr-min-fps-4-command = [
+					//8B XX, Min Freq = 90/(1+XX)
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 A5 02
+					15 00 00 40 00 00 02 8B 08
+					15 00 00 40 00 00 02 EB 15       //auto decreasing enable
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 2C 00
+				];
+
+				qcom,mdss-dsi-adfr-min-fps-5-command = [
+					//8B XX, Min Freq = 90/(1+XX)
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 A5 02
+					15 00 00 40 00 00 02 8B 11
+					15 00 00 40 00 00 02 EB 15       //auto decreasing enable
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 2C 00
+				];
+
+				qcom,mdss-dsi-adfr-min-fps-6-command = [
+					//8B XX, Min Freq = 90/(1+XX)
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 8B 59       //set min fps as 1hz
+					15 00 00 40 00 00 02 A5 02       //refresh as 30hz when receive a new frame
+					15 00 00 40 00 00 02 A6 08       //decreasing step1 freq=90/(N+1)=10Hz N=0x08
+					15 00 00 40 00 00 02 A7 11       //decreasing step2 freq=90/(N+1)=5Hz  N=0x11
+					15 00 00 40 00 00 02 A8 FF       //no decreasing step3，set FF
+					15 00 00 40 00 00 02 AD 20       //decreasing step1 frame count=N+1=3 N=2
+					15 00 00 40 00 00 02 AE 02       //decreasing step2 frame count=N+1=3 N=2
+					15 00 00 40 00 00 02 EB 15       //auto decreasing enable
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 2C 00
+				];
+
+				qcom,mdss-dsi-hpwm-adfr-min-fps-0-command = [
+					//8B XX, Min Freq = 90/(1+XX)
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 A5 00
+					15 00 00 40 00 00 02 8F 00
+					15 00 00 40 00 00 02 EB 15       //auto decreasing enable
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 2C 00
+				];
+
+				qcom,mdss-dsi-hpwm-adfr-min-fps-1-command = [
+					//8B XX, Min Freq = 90/(1+XX)
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 A5 01
+					15 00 00 40 00 00 02 8F 01
+					15 00 00 40 00 00 02 EB 15       //auto decreasing enable
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 2C 00
+				];
+
+				qcom,mdss-dsi-hpwm-adfr-min-fps-2-command = [
+					//8B XX, Min Freq = 90/(1+XX)
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 A5 02
+					15 00 00 40 00 00 02 8F 02
+					15 00 00 40 00 00 02 EB 15       //auto decreasing enable
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 2C 00
+				];
+
+				qcom,mdss-dsi-hpwm-adfr-min-fps-3-command = [
+					//8B XX, Min Freq = 90/(1+XX)
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 A5 02
+					15 00 00 40 00 00 02 8F 05
+					15 00 00 40 00 00 02 EB 15       //auto decreasing enable
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 2C 00
+				];
+
+				qcom,mdss-dsi-hpwm-adfr-min-fps-4-command = [
+					//8B XX, Min Freq = 90/(1+XX)
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 A5 02
+					15 00 00 40 00 00 02 8F 08
+					15 00 00 40 00 00 02 EB 15       //auto decreasing enable
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 2C 00
+				];
+
+				qcom,mdss-dsi-hpwm-adfr-min-fps-5-command = [
+					//8B XX, Min Freq = 90/(1+XX)
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 A5 02
+					15 00 00 40 00 00 02 8F 11
+					15 00 00 40 00 00 02 EB 15       //auto decreasing enable
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 2C 00
+				];
+
+				qcom,mdss-dsi-hpwm-adfr-min-fps-6-command = [
+					//8B XX, Min Freq = 90/(1+XX)
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 8F 59       //set min fps as 1hz
+					15 00 00 40 00 00 02 A5 02       //refresh as 30hz when receive a new frame
+					15 00 00 40 00 00 02 A6 08       //decreasing step1 freq=90/(N+1)=10Hz N=0x08
+					15 00 00 40 00 00 02 A7 11       //decreasing step2 freq=90/(N+1)=5Hz  N=0x11
+					15 00 00 40 00 00 02 A8 FF       //no decreasing step3，set FF
+					15 00 00 40 00 00 02 AD 20       //decreasing step1 frame count=N+1=3 N=2
+					15 00 00 40 00 00 02 AE 02       //decreasing step2 frame count=N+1=3 N=2
+					15 00 00 40 00 00 02 EB 15       //auto decreasing enable
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 2C 00
+				];
+
+				qcom,mdss-dsi-adfr-pre-switch-command = [
+					//locked to 90hz, next frame takes effect
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 98 00
+					15 00 00 40 00 00 02 8B 00
+					15 00 00 40 00 00 02 8F 00
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 00 00 00 02 2C 00
+				];
+
+				qcom,mdss-dsi-adfr-min-fps-0-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-adfr-min-fps-1-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-adfr-min-fps-2-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-adfr-min-fps-3-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-adfr-min-fps-4-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-adfr-min-fps-5-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-adfr-min-fps-6-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-hpwm-adfr-min-fps-0-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-hpwm-adfr-min-fps-1-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-hpwm-adfr-min-fps-2-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-hpwm-adfr-min-fps-3-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-hpwm-adfr-min-fps-4-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-hpwm-adfr-min-fps-5-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-hpwm-adfr-min-fps-6-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-adfr-pre-switch-command-state = "dsi_hs_mode";

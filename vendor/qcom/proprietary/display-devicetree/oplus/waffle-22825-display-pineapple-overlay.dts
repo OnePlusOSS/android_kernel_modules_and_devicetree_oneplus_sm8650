@@ -1,0 +1,17 @@
+/dts-v1/;
+/plugin/;
+#include <dt-bindings/oplus/hw-id.h>
+#include "../display/pineapple-sde-display-mtp-overlay.dts"
+#include "pineapple-display-overlay-common.dtsi"
+#include "waffle-22825-display-pineapple-overlay.dtsi"
+/* #if defined(CONFIG_PXLW_IRIS) */
+#include "pxlw-iris7-pineapple-common.dtsi"
+#include "pxlw-waffle/dsi-panel-pxlw-iris7.dtsi"
+/* #endif */
+/* #endif */
+
+/ {
+	model = "Qualcomm Technologies, Inc. Pineapple MTP,waffle";
+
+	oplus,project-id = <22825 22877>;
+};

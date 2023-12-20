@@ -1,0 +1,143 @@
+/* Copyright (c) 2020, Pixelworks
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&tlmm {
+	pxlw_iris_gpio: pxlw_iris_gpio {
+		iris_reset_active: iris_reset_active {
+			mux {
+				pins = "gpio97";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio97";
+				drive-strength = <8>;  /* 8 mA */
+				bias-disable;
+			};
+		};
+
+		iris_reset_suspend: iris_reset_suspend {
+			mux {
+				pins = "gpio97";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio97";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+
+		iris_abyp_ready_active: iris_abyp_ready_active {
+			mux {
+				pins = "gpio174";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio174";
+				drive-strength = <8>;
+				bias-disable;
+			};
+		};
+
+		iris_abyp_ready_suspend: iris_abyp_ready_suspend {
+			mux {
+				pins = "gpio174";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio174";
+				drive-strength = <2>;
+				bias-pull-down;
+			};
+		};
+	};
+};
+
+&pm8550ve_gpios {
+	iris_wakeup_active: iris_wakeup_active {
+		pins = "gpio4";
+		function = "normal";
+		input-disable;
+		output-enable;
+		bias-disable;
+		output-low;
+		power-source = <1>;
+		qcom,drive-strength = <3>;
+	};
+
+	iris_wakeup_suspend: iris_wakeup_suspend {
+		pins = "gpio4";
+		function = "normal";
+		input-disable;
+		output-enable;
+		bias-pull-down;
+		power-source = <1>;
+		qcom,drive-strength = <2>;
+	};
+
+	iris_vdd18_active: iris_vdd18_active {
+		pins = "gpio7";
+		function = "normal";
+		input-disable;
+		output-enable;
+		bias-disable;
+		output-high;
+		power-source = <0>;
+		qcom,drive-strength = <3>;
+	};
+
+	iris_vdd18_suspend: iris_vdd18_suspend {
+		pins = "gpio7";
+		function = "normal";
+		input-disable;
+		output-enable;
+		bias-pull-down;
+		power-source = <0>;
+		qcom,drive-strength = <2>;
+	};
+};
+
+&soc {
+	pxlw,iris {
+		compatible = "pxlw,iris";
+		index = <0>;
+
+		pinctrl-names = "iris_active", "iris_suspend";
+		pinctrl-0 = <&iris_reset_active &iris_wakeup_active &iris_abyp_ready_active>;
+		pinctrl-1 = <&iris_reset_suspend &iris_wakeup_suspend &iris_abyp_ready_suspend>;
+
+		qcom,iris-reset-gpio = <&tlmm 97 0>;
+		qcom,iris-wakeup-gpio = <&pm8550ve_gpios 4 0>;
+		qcom,iris-abyp-ready-gpio = <&tlmm 174 0>;
+		qcom,iris-vdd-gpio = <&pm8550ve_gpios 7 0>;
+	};
+};
+
+&qupv3_hub_i2c4 {
+	status = "ok";
+	qcom,clk-freq-out = <400000>;
+	pixelworks@26 {  //i2c: 22, i3c: 26
+		status = "ok";
+		compatible = "pixelworks,iris";
+		reg = <0x26>;
+	};
+
+	pixelworks@22 {  //i2c: 22, i3c: 26
+		status = "ok";
+		compatible = "pixelworks,iris-i2c";
+		reg = <0x22>;
+	};
+};

@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config TANGO32
+	tristate "32-bit syscall support for the Tango binary translator"
+	depends on 64BIT && COMPAT
+	help
+	This driver exposes 32-bit compat syscalls to 64-bit processes. It is
+	intended for the use of the Tango binary translator.

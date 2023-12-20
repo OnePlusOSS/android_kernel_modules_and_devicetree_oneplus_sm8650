@@ -1,0 +1,19 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/qcom,gcc-pineapple.h>
+#include <dt-bindings/clock/qcom,camcc-pineapple.h>
+#include <dt-bindings/interconnect/qcom,pineapple.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
+
+#include <dt-bindings/oplus/hw-id.h>
+#include "../pineapple-camera-v2.dtsi"
+#include "waffle_camera_overlay_common.dtsi"
+#include "waffle_camera_main_actuator_pid.dtsi"
+/ {
+	model = "Qualcomm Technologies, Inc. Pineapple MTP";
+	compatible = "qcom,pineapple-mtp", "qcom,pineapple", "qcom,mtp";
+        oplus,project-id = <22825 22877>;
+        oplus,hw-id = <OPLUS_T0 OPLUS_EVT1 OPLUS_EVT2 OPLUS_DVT1 OPLUS_DVT2 OPLUS_PVT1>;
+};

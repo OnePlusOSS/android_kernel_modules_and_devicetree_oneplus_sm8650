@@ -1,0 +1,45 @@
+#include "panel/dsi-panel-AC545-P-3-A0005_dsc_cmd.dtsi"
+#include "panel/dsi_panel_AA545_P_1_A0006_dsc_cmd.dtsi"
+
+&soc {
+	oplus_display_dev: oplus,dsi-display-dev {
+		oplus,dsi-panel-primary = <
+			&dsi_vtdr6130_amoled_video
+			&dsi_panel_AA545_P_3_A0005_dsc_cmd
+			&dsi_panel_AA545_P_1_A0006_dsc_cmd
+		>;
+		oplus,dsi-panel-secondary = <
+		>;
+		oplus,dsi-panel-extended = <>;
+	};
+
+
+	oplus_dsi_panel_custom_pwr_supply: oplus_dsi_panel_custom_pwr_supply {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "vddio";
+			qcom,supply-min-voltage = <1800000>;
+			qcom,supply-max-voltage = <1800000>;
+			qcom,supply-enable-load = <220000>;
+			qcom,supply-disable-load = <8000>;
+			qcom,supply-post-on-sleep = <2>;
+			qcom,supply-pre-off-sleep = <30>;
+		};
+
+		qcom,panel-supply-entry@1 {
+			reg = <1>;
+			qcom,supply-name = "vci";
+			qcom,supply-min-voltage = <3200000>;
+			qcom,supply-max-voltage = <3200000>;
+			qcom,supply-enable-load = <10000>;
+			qcom,supply-disable-load = <300>;
+			qcom,supply-pre-on-sleep = <1>;
+			qcom,supply-post-on-sleep = <15>;
+			qcom,supply-pre-off-sleep = <1>;
+		};
+	};
+};
+

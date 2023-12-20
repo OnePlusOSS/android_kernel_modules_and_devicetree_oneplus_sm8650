@@ -1,0 +1,94 @@
+/***************************************************************
+** Copyright (C), 2023, OPLUS Mobile Comm Corp., Ltd
+**
+** Description : pwm common config
+** Version : NA
+** Date : 2023/09/18
+** Author : Oplus Display
+******************************************************************/
+				/* ofp config */
+				oplus,ofp-aod-off-insert-black-frame = <2>;
+				oplus,ofp-aod-off-black-frame-total-time = <59>;
+
+				qcom,mdss-dsi-timming-pwm-switch-onepulse-command = [
+					//1pulse code 60hz
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 40 00 00 02 5A 00
+					15 00 00 40 00 00 02 5B 00
+					15 00 00 40 00 00 02 5E 01
+					15 00 00 40 00 00 02 60 06
+					39 00 00 40 00 00 04 FF 08 58 20
+					15 00 00 40 00 00 02 BD 45
+					15 00 00 40 00 00 02 BE 65
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 A7 00
+					39 00 00 40 00 00 07 B0 01 00 80 00 00 10
+					15 00 00 40 00 00 02 B6 00
+					15 00 00 40 00 00 02 B8 03
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 80 40
+					15 00 00 40 00 00 02 89 01
+					15 00 00 40 00 00 02 93 00
+					15 00 00 40 00 00 02 94 00
+					15 00 00 40 00 00 02 95 01
+					15 00 00 40 00 00 02 96 0D
+					15 00 00 40 00 00 02 A0 00
+					15 00 00 40 00 00 02 A1 00
+					15 00 00 40 00 00 02 EB 00
+					39 00 00 00 00 00 04 FF 08 58 00
+				];
+				qcom,mdss-dsi-pwm-switch-onepulse-command = [
+					//SA-60Hz (1pulse)
+					39 00 00 40 00 00 04 FF 08 58 00
+					39 00 00 00 10 00 03 51 04 4D
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 40 00 00 02 60 06
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 B8 03
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 89 01
+					39 00 00 00 00 00 04 FF 08 58 00
+				];
+				qcom,mdss-dsi-hbm-on-onepulse-command = [
+					39 00 00 40 00 00 04 FF 08 58 00
+					39 00 00 40 00 00 05 51 0D BB 00 00
+					39 00 00 40 00 00 04 FF 08 58 20
+					//SA-60Hz (1pulse)
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 40 00 00 02 60 06
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 B8 03
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 89 01
+					15 00 00 40 00 00 02 EB 00
+					39 00 00 00 00 00 04 FF 08 58 00
+				];
+				qcom,mdss-dsi-pwm-switch-threepulse-command = [
+					//SA-60Hz (3pulse)
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 40 00 00 02 60 01
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 B8 00
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 84 01
+					39 00 00 00 00 00 04 FF 08 58 00
+				];
+				qcom,mdss-dsi-hbm-on-command = [
+					39 00 00 40 00 00 04 FF 08 58 00
+					39 00 00 40 00 00 05 51 0D BB 00 00
+					39 00 00 40 00 00 04 FF 08 58 20
+					//SA-60Hz (3pulse)
+					39 00 00 40 00 00 04 FF 08 58 00
+					15 00 00 40 00 00 02 60 01
+					39 00 00 40 00 00 04 FF 08 58 02
+					15 00 00 40 00 00 02 B8 00
+					39 00 00 40 00 00 04 FF 08 58 2D
+					15 00 00 40 00 00 02 84 01
+					15 00 00 40 00 00 02 EB 00
+					39 00 00 00 00 00 04 FF 08 58 00
+				];
+				qcom,mdss-dsi-timming-pwm-switch-onepulse-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-pwm-switch-onepulse-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-hbm-on-onepulse-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-pwm-switch-threepulse-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-hbm-on-command-state = "dsi_hs_mode";

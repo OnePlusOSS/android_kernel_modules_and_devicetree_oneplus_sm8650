@@ -1,0 +1,27 @@
+#!/bin/bash
+if [ $# -ne 2 ]; then
+  echo "usage 7z_new <raw_img_path> <output_put>"
+  exit 1
+fi
+input=$(realpath $1)
+output=$(realpath $2)
+my_dir=$(realpath $(dirname $0))
+tool_bin=$my_dir/7z
+echo "extract $input into $output with 7z"
+rm -rf $output
+mkdir -p $output
+pushd  $output  > /dev/null 2>&1
+echo "extract ..."
+$tool_bin x $input > /dev/null 2>&1
+
+echo "treat with links"
+file_and_link=$($tool_bin l -slt $input | grep -E "Path =|Symbolic Link =")
+echo $file_and_link | sed "s|Path =|\nPath =|g" | awk -F "Path = | Symbolic Link = " '{if($3!="") {
+  system("rm -rf "$2";ln -sf "$3" "$2)
+}}'
+
+echo "remove SYS dir"
+rm \[SYS\]/ -rf
+echo "done"
+popd > /dev/null 2>&1
+

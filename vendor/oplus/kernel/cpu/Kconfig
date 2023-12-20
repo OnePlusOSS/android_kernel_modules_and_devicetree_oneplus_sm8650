@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2018-2022 Oplus. All rights reserved.
+
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/cpu/cpufreq_health/Kconfig"
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/cpu/cpufreq_bouncing/Kconfig"
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/cpu/sched/Kconfig"
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/cpu/uad/Kconfig"
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/cpu/oplus_omrg/Kconfig"
+source "$(KCONFIG_EXT_PREFIX)drivers/soc/oplus/cpu/oplus_overload/Kconfig"
+

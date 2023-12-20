@@ -1,0 +1,34 @@
+&pm8550b_haptics {
+	qcom,vmax-mv = <1280>;
+	qcom,cl-vmax-mv = <1280>;
+	qcom,lra-period-us = <5882>;
+	qcom,fifo-vmax-mv = <7700>;
+	qcom,old-steady-vmax-mv = <8000>;
+	qcom,cal-data-restore;
+	qcom,vibrator-type = <809>;//ela0809
+	qcom,drv-duty = <4>;//75%
+};
+
+&soc {
+	feedback_fb: feedback_fb {
+		compatible = "oplus,haptic-feedback";
+	};
+};
+
+&pm8550b_eusb2_repeater {
+	qcom,param-override-seq = <0x0d 0x51 0x07 0x53 0x05 0x54 0x03 0x57>;
+	qcom,param-override-seq-host = <0x0c 0x51 0x07 0x53 0x05 0x54 0x03 0x57>;
+};
+
+&wcd_usbss {
+	qcom,wcd_usbss_equalizer1 = /bits/ 8 <0x6>;
+};
+
+&usb0 {
+	qcom,wcd_usbss = <&wcd_usbss>;
+	dwc3@a600000 {
+		maximum-speed = "super-speed";
+		snps,usb2-lpm-disable;
+		snps,usb2-gadget-lpm-disable;
+	};
+};
