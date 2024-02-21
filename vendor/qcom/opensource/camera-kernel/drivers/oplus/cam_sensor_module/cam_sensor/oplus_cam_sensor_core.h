@@ -32,7 +32,7 @@ struct cam_sensor_settings {
 	struct cam_sensor_i2c_reg_setting_array imx888_setting;
 	struct cam_sensor_i2c_reg_setting_array ov64b40_setting;
 	struct cam_sensor_i2c_reg_setting_array imx858_setting;
-	struct cam_sensor_i2c_reg_setting_array imx966_setting;
+	struct cam_sensor_i2c_reg_setting_array lyt808_setting;
 	struct cam_sensor_i2c_reg_setting_array imx06A_setting;
 	struct cam_sensor_i2c_reg_setting_array imx355_setting;
 	struct cam_sensor_i2c_reg_setting_array imx882_setting;

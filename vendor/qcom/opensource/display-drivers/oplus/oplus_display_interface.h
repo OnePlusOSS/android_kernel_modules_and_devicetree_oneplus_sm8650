@@ -186,7 +186,7 @@ int oplus_display_send_dcs_lock(struct dsi_display *display,
 /**
  * oplus_panel_id_compatibility_init() - oplus panel initialization code of the same screen is compatible through the panel id
  */
-int oplus_panel_id_compatibility_init(struct dsi_display *display, u32 bl_lvl);
+int oplus_panel_id_compatibility_init(struct dsi_display *display);
 
 /**
  * oplus_panel_cmd_reg_replace() - replace cmd regs

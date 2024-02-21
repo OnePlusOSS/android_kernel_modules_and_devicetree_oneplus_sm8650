@@ -41,6 +41,7 @@
 #define CSIPHY_VERSION_V220_ENHANCE               0xF220
 #define CSIPHY_VERSION_V220_ENHANCE1               0xF221
 #define CSIPHY_VERSION_V220_ENHANCE_ENZO          0xF222
+#define CSIPHY_VERSION_V220_ENHANCE4WIDE          0xF223
 #endif
 
 /**

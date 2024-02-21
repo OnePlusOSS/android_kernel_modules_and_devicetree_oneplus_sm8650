@@ -17,6 +17,8 @@ typedef enum {
 	EXCEP_I2C,
 	EXCEP_SOF_TIMEOUT,
 	EXCEP_CRC,
+	EXCEP_ACTUATOR,
+	EXCEP_EEPROM,
 	MAX_EXCEP_TYPE
 } cam_excep_type;
 
@@ -31,6 +33,14 @@ int cam_event_proc_init(void);
 void cam_event_proc_exit(void);
 int cam_olc_raise_exception(int excep_tpye, unsigned char *pay_load);
 const unsigned char *acquire_event_field(int excepId);
+#define KEVENT_FB_SNESOR_WR_FAILED(connext, msg, err)                                 \
+	do {                                                                             \
+		snprintf(                                                                \
+			connext, sizeof(connext),                                        \
+			"FBField@@%s$$ExceptId@@0x%x$$detailData@@ErrMsg=%s,SensorId=%d", \
+			acquire_event_field(EXCEP_I2C), EXCEP_I2C, msg, err);            \
+		cam_olc_raise_exception(EXCEP_I2C, connext);                             \
+	} while (0)
 
 #define KEVENT_FB_SNESOR_PROBE_FAILED(connext, msg, sensor)                               \
 	do {                                                                              \
@@ -47,8 +57,8 @@ const unsigned char *acquire_event_field(int excepId);
 		snprintf(                                                                \
 			connext, sizeof(connext),                                        \
 			"FBField@@%s$$ExceptId@@0x%x$$detailData@@ErrMsg=%s,ErrCode=%d", \
-			acquire_event_field(EXCEP_I2C), EXCEP_I2C, msg, err);            \
-		cam_olc_raise_exception(EXCEP_I2C, connext);                             \
+			acquire_event_field(EXCEP_EEPROM), EXCEP_EEPROM, msg, err);            \
+		cam_olc_raise_exception(EXCEP_EEPROM, connext);                             \
 	} while (0)
 
 #define KEVENT_FB_ACTUATOR_CTL_FAILED(connext, msg, err)                                 \
@@ -56,8 +66,8 @@ const unsigned char *acquire_event_field(int excepId);
 		snprintf(                                                                \
 			connext, sizeof(connext),                                        \
 			"FBField@@%s$$ExceptId@@0x%x$$detailData@@ErrMsg=%s,ErrCode=%d", \
-			acquire_event_field(EXCEP_I2C), EXCEP_I2C, msg, err);            \
-		cam_olc_raise_exception(EXCEP_I2C, connext);                             \
+			acquire_event_field(EXCEP_ACTUATOR), EXCEP_ACTUATOR, msg, err);            \
+		cam_olc_raise_exception(EXCEP_ACTUATOR, connext);                             \
 	} while (0)
 
 #define KEVENT_FB_CRC_FAILED(connext, msg, err)                                 \
@@ -69,5 +79,13 @@ const unsigned char *acquire_event_field(int excepId);
 		cam_olc_raise_exception(EXCEP_CRC, connext);                             \
 	} while (0)
 
+#define KEVENT_FB_FRAME_ERROR(connext, msg, err)                                 \
+	do {                                                                             \
+		snprintf(                                                                \
+			connext, sizeof(connext),                                        \
+			"FBField@@%s$$ExceptId@@0x%x$$detailData@@ErrMsg=%s,ErrCode=%d", \
+			acquire_event_field(EXCEP_SOF_TIMEOUT), EXCEP_SOF_TIMEOUT, msg, err);            \
+		cam_olc_raise_exception(EXCEP_SOF_TIMEOUT, connext);                             \
+	} while (0)
 #endif /*__OPLUS_CAM_KEVENT_FB__*/
 

@@ -66,7 +66,7 @@ enum tri_key_position {
 	MID_STATE,
 };
 
-#define MAX_LEN     16
+#define MAX_LENGTH     16
 #define READ_OFFECT 255
 #define OFFECT_DOWN "down"
 #define OFFECT_UP   "up"
@@ -188,6 +188,7 @@ struct extcon_dev_data {
 	int			manual2auto_down_switch;
 	int			irq;
 	int         data_offect;
+	int         project_id;
 	char        data_offect_name[8];
 	int         threeaxis_calib_data[9];
 	bool        threeaxis_hall_support;

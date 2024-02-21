@@ -5770,7 +5770,7 @@ static int oplus_chg_wls_get_third_adapter_v_id(struct oplus_chg_wls *wls_dev)
 	return rc;
 }
 
-#define WAIT_FOR_2CEP_INTERVAL_MS	300
+#define WAIT_FOR_2CEP_INTERVAL_MS	500
 static int oplus_chg_wls_rx_handle_state_default(struct oplus_chg_wls *wls_dev)
 {
 	struct oplus_chg_wls_status *wls_status = &wls_dev->wls_status;
@@ -7018,6 +7018,8 @@ static int oplus_chg_wls_rx_exit_state_fast(struct oplus_chg_wls *wls_dev)
 
 	/*if (is_comm_ocm_available(wls_dev))
 		oplus_chg_comm_update_config(wls_dev->comm_ocm);*/
+
+	oplus_chg_wls_config(wls_dev);
 
 	(void)oplus_chg_wls_rx_set_fod_parm(wls_dev->wls_rx->rx_ic,
 		wls_dev->static_config.disable_fod_parm, wls_dev->static_config.fod_parm_len);
@@ -8405,8 +8407,15 @@ static void oplus_chg_wls_online_keep_remove_work(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct oplus_chg_wls *wls_dev = container_of(dwork, struct oplus_chg_wls, online_keep_remove_work);
+	union mms_msg_data pre_present = { 0 };
+	union mms_msg_data cur_present = { 0 };
 
+	oplus_mms_get_item_data(wls_dev->wls_topic, WLS_ITEM_PRESENT, &pre_present, true);
 	wls_dev->wls_status.online_keep = false;
+	oplus_mms_get_item_data(wls_dev->wls_topic, WLS_ITEM_PRESENT, &cur_present, true);
+	if (pre_present.intval != cur_present.intval)
+		schedule_work(&wls_dev->wls_present_handler_work);
+
 	if (!wls_dev->wls_status.rx_online) {
 		if (wls_dev->rx_wake_lock_on) {
 			chg_info("release rx_wake_lock\n");
@@ -9664,21 +9673,42 @@ static ssize_t oplus_chg_wls_proc_user_sleep_mode_write(struct file *file,
 	if (rc != 0)
 		return -EINVAL;
 	if (pmw_pulse == WLS_FASTCHG_MODE) {
-		/*pval.intval = 0;
-		rc = oplus_chg_mod_set_property(wls_dev->wls_ocm,
-				OPLUS_CHG_PROP_QUIET_MODE, &pval);
-		if (rc == 0)*/
+		if (!wls_dev->wls_status.rx_present ||
+		    wls_dev->wls_status.adapter_type == WLS_ADAPTER_TYPE_USB ||
+		    wls_dev->wls_status.adapter_type == WLS_ADAPTER_TYPE_NORMAL ||
+		    wls_dev->wls_status.adapter_type == WLS_ADAPTER_TYPE_UNKNOWN) {
+			chg_err("wls not present or isn't op_tx, can't enter quiet mode!\n");
+		} else {
+			wls_dev->wls_status.switch_quiet_mode = false;
+			if (wls_dev->wls_status.switch_quiet_mode != wls_dev->wls_status.quiet_mode
+				|| wls_dev->wls_status.quiet_mode_init == false) {
+				cancel_delayed_work(&wls_dev->wls_rx_sm_work);
+				queue_delayed_work(wls_dev->wls_wq, &wls_dev->wls_rx_sm_work, 0);
+			}
 			wls_dev->wls_status.quiet_mode_need = WLS_FASTCHG_MODE;
-		chg_info("set user mode: %d, fastchg mode, rc: %d\n", pmw_pulse,
-		       rc);
+		}
+
+		chg_info("set user mode: %d, switch_quiet_mode: %d fastchg mode, rc: %d\n", pmw_pulse,
+		       wls_dev->wls_status.switch_quiet_mode, rc);
 	} else if (pmw_pulse == WLS_SILENT_MODE) {
-		/*pval.intval = 1;
-		rc = oplus_chg_mod_set_property(wls_dev->wls_ocm,
-				OPLUS_CHG_PROP_QUIET_MODE, &pval);
-		if (rc == 0)*/
+		if (!wls_dev->wls_status.rx_present ||
+		    wls_dev->wls_status.adapter_type == WLS_ADAPTER_TYPE_USB ||
+		    wls_dev->wls_status.adapter_type == WLS_ADAPTER_TYPE_NORMAL ||
+		    wls_dev->wls_status.adapter_type == WLS_ADAPTER_TYPE_UNKNOWN) {
+			rc = -EINVAL;
+			chg_err("wls not present or isn't op_tx, can't enter quiet mode!\n");
+		} else {
+			wls_dev->wls_status.switch_quiet_mode = true;
+			if (wls_dev->wls_status.switch_quiet_mode != wls_dev->wls_status.quiet_mode
+				|| wls_dev->wls_status.quiet_mode_init == false) {
+				cancel_delayed_work(&wls_dev->wls_rx_sm_work);
+				queue_delayed_work(wls_dev->wls_wq, &wls_dev->wls_rx_sm_work, 0);
+			}
 			wls_dev->wls_status.quiet_mode_need = WLS_SILENT_MODE;
-		chg_info("set user mode: %d, silent mode, rc: %d\n", pmw_pulse,
-		       rc);
+		}
+
+		chg_info("set user mode: %d, switch_quiet_mode: %d silent mode, rc: %d\n", pmw_pulse,
+		       wls_dev->wls_status.switch_quiet_mode, rc);
 		/*nu1619_set_dock_led_pwm_pulse(3);*/
 	} else if (pmw_pulse == WLS_BATTERY_FULL_MODE) {
 		chg_info("set user mode: %d, battery full mode\n", pmw_pulse);

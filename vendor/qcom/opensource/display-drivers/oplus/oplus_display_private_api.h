@@ -52,6 +52,6 @@ int oplus_display_set_power(struct drm_connector *connector, int power_mode,
 		void *disp);
 int dsi_panel_read_panel_reg_unlock(struct dsi_display_ctrl *ctrl,
 		struct dsi_panel *panel, u8 cmd, void *rbuf,  size_t len);
-
+int oplus_display_panel_get_id_unlock(void *buf);
 #endif /* _OPLUS_DISPLAY_PRIVATE_API_H_ */
 

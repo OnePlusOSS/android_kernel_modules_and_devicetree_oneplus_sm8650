@@ -129,7 +129,7 @@ int __read_register_with_poll_timeout(struct msm_vidc_core *core, u32 reg,
 	 * register.
 	 */
 	rmb();
-	d_vpr_e(
+	d_vpr_l(
 		"regread(%pK + %#x) = %#x. rc %d, mask %#x, exp_val %#x, cond %u, sleep %u, timeout %u\n",
 		core->resource->register_base_addr, reg, val, rc, mask, exp_val,
 		((val & mask) == exp_val), sleep_us, timeout_us);

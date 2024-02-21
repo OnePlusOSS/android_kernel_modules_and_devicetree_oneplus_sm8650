@@ -44,6 +44,13 @@ static int cam_actuator_subdev_close_internal(struct v4l2_subdev *sd,
 	cam_actuator_shutdown(a_ctrl);
 	mutex_unlock(&(a_ctrl->actuator_mutex));
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if(a_ctrl->camera_actuator_shake_detect_enable &&
+		a_ctrl->cam_act_last_state == CAM_ACTUATOR_LOCK){
+		oplus_cam_actuator_unlock(a_ctrl);
+		CAM_INFO(CAM_ACTUATOR, "oplus_cam_actuator_unlock");
+	}
+#endif
 	return 0;
 }
 

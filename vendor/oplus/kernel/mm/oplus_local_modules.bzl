@@ -65,9 +65,13 @@ def define_oplus_local_modules():
         srcs = native.glob([
             "**/*.h",
             "zram_opt/zram_opt.c",
+            "kswapd_opt/kswapd_opt.c",
         ]),
         includes = ["."],
         local_defines = ["CONFIG_DYNAMIC_TUNING_SWAPPINESS", "CONFIG_OPLUS_BALANCE_ANON_FILE_RECLAIM", "CONFIG_HYBRIDSWAP_SWAPD"],
+        conditional_defines = {
+            "qcom":["CONFIG_ALLOC_ADJUST_FLAGS"],
+        },
         )
 
     define_oplus_ddk_module(

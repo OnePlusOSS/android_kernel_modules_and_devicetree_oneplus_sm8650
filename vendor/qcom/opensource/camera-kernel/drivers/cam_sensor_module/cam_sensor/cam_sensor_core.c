@@ -1024,7 +1024,9 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 	int rc = 0;
 	uint32_t chipid = 0;
 	struct cam_camera_slave_info *slave_info;
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	char fb_payload[PAYLOAD_LENGTH] = {0};
+#endif
 	slave_info = &(s_ctrl->sensordata->slave_info);
 
 	if (!slave_info) {
@@ -1047,6 +1049,7 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 		CAM_DBG(CAM_SENSOR, "%s id mismatch.read id: 0x%x expected id 0x%x:",
 				s_ctrl->sensor_name, chipid,
 				slave_info->sensor_id);
+		KEVENT_FB_SNESOR_PROBE_FAILED(fb_payload, "sensor match failed", s_ctrl->sensordata->slave_info.sensor_id);
 #else
 		CAM_WARN(CAM_SENSOR, "%s read id: 0x%x expected id 0x%x:",
 				s_ctrl->sensor_name, chipid,
@@ -1232,7 +1235,6 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 				s_ctrl->sensordata->slave_info.sensor_slave_addr,
 				s_ctrl->sensordata->slave_info.sensor_id);
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
-			KEVENT_FB_SNESOR_PROBE_FAILED(fb_payload, "sensor match failed", s_ctrl->sensordata->slave_info.sensor_id);
 			cam_sensor_power_down_advance(s_ctrl);
 #else
 			cam_sensor_power_down(s_ctrl);
@@ -1666,6 +1668,7 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		rc = oplus_cam_sensor_apply_settings(s_ctrl);
 		if (rc < 0) {
 				CAM_ERR(CAM_SENSOR,"%s: Fail in oplus_cam_sensor_apply_settings",s_ctrl->sensor_name);
+				KEVENT_FB_SNESOR_WR_FAILED(fb_payload, "apply setting fail", s_ctrl->sensordata->slave_info.sensor_id);
 				goto release_mutex;
 		}
 #endif
@@ -1729,6 +1732,7 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		rc = post_cam_sensor_driver_cmd(s_ctrl, arg);
 		if (rc < 0) {
 			CAM_ERR(CAM_SENSOR, "oplus cmd failed");
+			KEVENT_FB_SNESOR_WR_FAILED(fb_payload, "oem cmd error", s_ctrl->sensordata->slave_info.sensor_id);
 			goto release_mutex;
 		}
 		break;

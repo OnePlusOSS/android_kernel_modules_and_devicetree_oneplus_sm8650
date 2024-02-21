@@ -279,11 +279,6 @@ int dsi_display_set_backlight(struct drm_connector *connector,
 
 	panel = dsi_display->panel;
 
-#ifdef OPLUS_FEATURE_DISPLAY
-	/*add for panel init code compatibility*/
-	oplus_panel_id_compatibility_init(dsi_display, bl_lvl);
-#endif /* OPLUS_FEATURE_DISPLAY */
-
 	mutex_lock(&panel->panel_lock);
 	if (!dsi_panel_initialized(panel)) {
 		rc = -EINVAL;
@@ -9170,6 +9165,11 @@ int dsi_display_enable(struct dsi_display *display)
 #ifdef OPLUS_FEATURE_DISPLAY_ADFR
 		oplus_adfr_need_resend_osync_cmd(display, true);
 #endif /* OPLUS_FEATURE_DISPLAY_ADFR */
+#ifdef OPLUS_FEATURE_DISPLAY
+		/*add for panel init code compatibility*/
+		oplus_panel_id_compatibility_init(display);
+#endif /* OPLUS_FEATURE_DISPLAY */
+
 	}
 
 	dsi_display_panel_id_notification(display);

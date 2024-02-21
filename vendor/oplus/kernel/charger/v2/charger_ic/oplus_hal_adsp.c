@@ -2401,6 +2401,14 @@ static void battery_chg_update_usb_type_work(struct work_struct *work)
 #endif
 }
 
+static int voocphy_push_gan_mos_err(struct oplus_chg_ic_dev *ic_dev)
+{
+	oplus_chg_ic_creat_err_msg(ic_dev,
+			OPLUS_IC_ERR_GAN_MOS_ERROR, 0, "$$err_reason@@Gan_mos_10V");
+	oplus_chg_ic_virq_trigger(ic_dev, OPLUS_IC_VIRQ_ERR);
+	return 0;
+}
+
 static void handle_notification(struct battery_chg_dev *bcdev, void *data,
 				size_t len)
 {
@@ -2515,6 +2523,10 @@ static void handle_notification(struct battery_chg_dev *bcdev, void *data,
 	case BC_UFCS_HANDSHAKE_OK:
 		bcdev->ufcs_handshake_ok = true;
 		chg_info("ufcs handshake ok = %d\n", bcdev->ufcs_handshake_ok);
+		break;
+	case BC_VOOC_GAN_MOS_ERROR:
+		voocphy_push_gan_mos_err(bcdev->buck_ic);
+		chg_err("gan_mos_err\n");
 		break;
 #endif
 	default:
@@ -6567,6 +6579,28 @@ int oplus_adsp_voocphy_set_cool_down(int cool_down)
 
 	return rc;
 }
+
+int oplus_adsp_voocphy_set_curve_num(int number)
+{
+	int rc = 0;
+	struct battery_chg_dev *bcdev = g_bcdev;
+	struct psy_state *pst = NULL;
+
+	if (!bcdev) {
+		chg_err("bcdev is NULL!\n");
+		return -1;
+	}
+	pst = &bcdev->psy_list[PSY_TYPE_BATTERY];
+
+	rc = write_property_id(bcdev, pst, BATT_SET_VOOC_CURVE_NUM, number);
+	if (rc < 0)
+		chg_err("write curve num fail, rc=%d\n", rc);
+	else
+		chg_info("set curve num to %d, rc=%d\n", number, rc);
+
+	return rc;
+}
+
 
 static int oplus_chg_8350_set_match_temp(struct oplus_chg_ic_dev *ic_dev, int match_temp)
 {

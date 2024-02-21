@@ -14,6 +14,7 @@
 
 #include "oplus_display_interface.h"
 #include "oplus_display_panel_common.h"
+#include "oplus_display_private_api.h"
 #include "oplus_display_high_frequency_pwm.h"
 #include "sde_color_processing.h"
 
@@ -206,9 +207,15 @@ int oplus_panel_init(struct dsi_panel *panel)
 {
 	int rc = 0;
 	static bool panel_need_init = true;
+	struct dsi_display *display = container_of(&panel, struct dsi_display, panel);
 
 	if (!panel_need_init)
 		return 0;
+
+	if (!display) {
+		LCD_ERR("display is null\n");
+		return 0;
+	}
 
 	LCD_INFO("Send panel init dcs\n");
 
@@ -220,11 +227,14 @@ int oplus_panel_init(struct dsi_panel *panel)
 
 	mutex_unlock(&panel->panel_lock);
 
+	/*add for panel init code compatibility*/
+	oplus_panel_id_compatibility_init(display);
+
 	return rc;
 }
 
 /*add for panel init code compatibility*/
-int oplus_panel_id_compatibility_init(struct dsi_display *display, u32 bl_lvl)
+int oplus_panel_id_compatibility_init(struct dsi_display *display)
 {
 	int rc = 0;
 	int compatibility_cmd = DSI_OPTIMIZE_INIT_ON;
@@ -239,12 +249,10 @@ int oplus_panel_id_compatibility_init(struct dsi_display *display, u32 bl_lvl)
 		return rc;
 	}
 
-	if (!panel->need_power_on_backlight || !bl_lvl) {
-		return rc;
-	}
-
 	if (!already_readid) {
-		rc = oplus_display_panel_get_id(&panel_id);
+		mutex_lock(&display->panel->panel_lock);
+		rc = oplus_display_panel_get_id_unlock(&panel_id);
+		mutex_unlock(&display->panel->panel_lock);
 		if (rc < 0) {
 			LCD_ERR("panel id init compatibility get panel id failed!\n");
 			return rc;
@@ -269,11 +277,9 @@ int oplus_panel_id_compatibility_init(struct dsi_display *display, u32 bl_lvl)
 	}
 	/* ID2 93、94 TODO */
 	LCD_INFO("Send panel id compatibility init dcs panel id DA = 0x%02X, DB = 0x%02X\n", panel_id.DA, panel_id.DB);
-	mutex_lock(&display->display_lock);
 	mutex_lock(&panel->panel_lock);
 	rc = dsi_panel_tx_cmd_set(panel, compatibility_cmd);
 	mutex_unlock(&panel->panel_lock);
-	mutex_unlock(&display->display_lock);
 	if (rc) {
 		LCD_ERR("Send panel id compatibility init code failed! \n");
 	}

@@ -51,7 +51,9 @@
 #define ICP_WORKQ_TASK_MSG_TYPE 2
 
 #define ICP_DEVICE_IDLE_TIMEOUT 400
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include "oplus_cam_kevent_fb.h"
+#endif
 /*
  * If synx fencing is enabled, send FW memory mapping
  * for synx hw_mutex, ipc hw_mutex, synx global mem
@@ -5208,7 +5210,9 @@ static int cam_icp_mgr_send_config_io(struct cam_icp_hw_ctx_data *ctx_data,
 	int timeout = 5000;
 	struct crm_workq_task *task;
 	uint32_t size_in_words;
-
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	char fb_payload[PAYLOAD_LENGTH] = {0};
+#endif
 	task = cam_req_mgr_workq_get_task(hw_mgr->cmd_work);
 	if (!task) {
 		CAM_ERR_RATE_LIMIT(CAM_ICP, "%s: No free cmd task", ctx_data->ctx_id_string);
@@ -5264,6 +5268,9 @@ static int cam_icp_mgr_send_config_io(struct cam_icp_hw_ctx_data *ctx_data,
 			"%s: FW response timeout for send IO cfg handle command on",
 			ctx_data->ctx_id_string);
 	if (!rem_jiffies) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		KEVENT_FB_FRAME_ERROR(fb_payload, "FW response timeout",ctx_data->ctx_id);
+#endif
 		/* send specific error for io config failure */
 		rc = -EREMOTEIO;
 		cam_icp_dump_debug_info(hw_mgr, false);

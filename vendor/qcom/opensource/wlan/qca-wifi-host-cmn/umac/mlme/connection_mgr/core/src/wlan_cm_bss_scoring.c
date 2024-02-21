@@ -35,6 +35,7 @@
 #endif
 #include "wlan_cm_main_api.h"
 #include "wlan_cm_public_struct.h"
+#include "cfg_ucfg_api.h"
 
 #define CM_PCL_RSSI_THRESHOLD -75
 
@@ -1439,10 +1440,21 @@ cm_get_band_score(uint32_t freq, struct scoring_cfg *score_config)
 #ifdef WLAN_FEATURE_11BE
 #ifdef WLAN_FEATURE_11BE_MLO_ADV_FEATURE
 bool wlan_cm_is_eht_allowed_for_current_security(
+			struct wlan_objmgr_psoc *psoc,
 			struct scan_cache_entry *scan_entry)
 {
 	const uint8_t *rsnxe, *rsnxe_caps;
 	uint8_t cap_len;
+
+	if (psoc) {
+		bool check_rsn_for_eht = cfg_get(psoc, CFG_ENABLE_EHT_RSN_CHECK);
+		if (!check_rsn_for_eht) {
+			mlme_debug("oplus no need check the rsn for eht");
+			return true;
+		}
+	} else {
+		mlme_debug("oplus psoc is null");
+	}
 
 	if (!scan_entry->ie_list.rsn) {
 		mlme_debug(QDF_MAC_ADDR_FMT ": RSN IE not present",
@@ -1497,7 +1509,8 @@ bool wlan_cm_is_eht_allowed_for_current_security(
 }
 #endif
 
-static int cm_calculate_eht_score(struct scan_cache_entry *entry,
+static int cm_calculate_eht_score(struct wlan_objmgr_psoc *psoc,
+				  struct scan_cache_entry *entry,
 				  struct scoring_cfg *score_config,
 				  struct psoc_phy_config *phy_config,
 				  uint8_t prorated_pcnt)
@@ -1508,7 +1521,7 @@ static int cm_calculate_eht_score(struct scan_cache_entry *entry,
 	if (!phy_config->eht_cap || !entry->ie_list.ehtcap)
 		return 0;
 
-	if (!wlan_cm_is_eht_allowed_for_current_security(entry))
+	if (!wlan_cm_is_eht_allowed_for_current_security(psoc, entry))
 		return 0;
 
 	weight_config = &score_config->weight_config;
@@ -1552,10 +1565,11 @@ static bool cm_get_su_beam_former(struct scan_cache_entry *entry)
 	return false;
 }
 #else
-static int cm_calculate_eht_score(struct scan_cache_entry *entry,
+static int cm_calculate_eht_score(struct wlan_objmgr_psoc *psoc,
+				  struct scan_cache_entry *entry,
 				  struct scoring_cfg *score_config,
 				  struct psoc_phy_config *phy_config,
-				uint8_t prorated_pcnt)
+				  uint8_t prorated_pcnt)
 {
 	return 0;
 }
@@ -2354,7 +2368,7 @@ static int cm_calculate_bss_score(struct wlan_objmgr_psoc *psoc,
 		return score;
 	}
 
-	if (wlan_cm_is_eht_allowed_for_current_security(entry))
+	if (wlan_cm_is_eht_allowed_for_current_security(psoc, entry))
 		score += cm_calculate_ml_scores(psoc, entry, score_config,
 						phy_config, scan_list,
 						is_link_score, bss_mlo_type,
@@ -2468,7 +2482,7 @@ static int cm_calculate_bss_score(struct wlan_objmgr_psoc *psoc,
 						     entry->neg_sec_info);
 	score += security_score;
 
-	eht_score = cm_calculate_eht_score(entry, score_config, phy_config,
+	eht_score = cm_calculate_eht_score(psoc, entry, score_config, phy_config,
 					   prorated_pcnt);
 	score += eht_score;
 

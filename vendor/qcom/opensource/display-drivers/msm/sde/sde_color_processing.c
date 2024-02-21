@@ -315,11 +315,24 @@ static int _set_dspp_gc_feature(struct sde_hw_dspp *hw_dspp,
 			       struct sde_crtc *hw_crtc)
 {
 	int ret = 0;
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+	if (oplus_ofp_is_supported()) {
+		oplus_ofp_set_dspp_gc_feature(hw_cfg, hw_crtc, true);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
+
 
 	if (!hw_dspp || !hw_dspp->ops.setup_gc)
 		ret = -EINVAL;
 	else
 		hw_dspp->ops.setup_gc(hw_dspp, hw_cfg);
+
+#ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
+	if (oplus_ofp_is_supported()) {
+		oplus_ofp_set_dspp_gc_feature(hw_cfg, hw_crtc, false);
+	}
+#endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
+
 	return ret;
 }
 

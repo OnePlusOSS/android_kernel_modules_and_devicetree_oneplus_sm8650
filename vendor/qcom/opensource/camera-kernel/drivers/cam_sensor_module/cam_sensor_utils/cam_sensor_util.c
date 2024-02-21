@@ -2473,6 +2473,10 @@ int cam_sensor_util_power_down(struct cam_sensor_power_ctrl_t *ctrl,
 			ctrl->power_setting_size);
 		return -EINVAL;
 	}
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if(ctrl->power_down_setting_size <= 0)
+		CAM_ERR(CAM_SENSOR_UTIL,"power_down_setting_size:%d",ctrl->power_down_setting_size);
+#endif
 
 	for (index = 0; index < ctrl->power_down_setting_size; index++) {
 		CAM_DBG(CAM_SENSOR_UTIL, "power_down_index %d",  index);

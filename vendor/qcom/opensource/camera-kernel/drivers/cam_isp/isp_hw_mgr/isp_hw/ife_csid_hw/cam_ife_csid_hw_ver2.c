@@ -1433,6 +1433,10 @@ static int cam_ife_csid_ver2_rx_err_bottom_half(
 			event_type |= CAM_ISP_HW_ERROR_CSID_UNBOUNDED_FRAME;
 			CAM_ERR_BUF(CAM_ISP, log_buf, CAM_IFE_CSID_LOG_BUF_LEN, &len,
 				"UNBOUNDED_FRAME: Frame started with EOF or No EOF");
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			KEVENT_FB_FRAME_ERROR(fb_payload, "UNBOUNDED FRAME", (csid_hw->rx_cfg.phy_sel - 1));
+#endif
+
 		}
 
 		if (irq_status & IFE_CSID_VER2_RX_CPHY_EOT_RECEPTION) {
@@ -1468,7 +1472,7 @@ static int cam_ife_csid_ver2_rx_err_bottom_half(
 					long_pkt_ftr_val >> 16);
 			}
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
-			KEVENT_FB_CRC_FAILED(fb_payload, "crc error", csid_hw->rx_cfg.lane_type);
+			KEVENT_FB_CRC_FAILED(fb_payload, "crc error", (csid_hw->rx_cfg.phy_sel - 1));
 #endif
 		}
 

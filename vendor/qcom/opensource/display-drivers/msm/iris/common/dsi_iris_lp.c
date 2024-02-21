@@ -45,7 +45,7 @@ static bool _dpg_temp_disable;
 static bool _ulps_temp_disable;
 static bool _flfp_temp_disable;
 static int _abyp_mode_config;
-
+extern u32 iris_pq_disable;
 #define IRIS_TRACE_FPS       0x01
 #define IRIS_TRACE_CADENCE   0X02
 #define IRIS_EFIFO_BW_128    0
@@ -977,6 +977,7 @@ enter_abyp_begin:
 #ifdef IRIS_EXT_CLK
 	iris_clk_disable(pcfg->panel);
 #endif
+	iris_pq_disable = 0;
 	pcfg->abyp_ctrl.abyp_failed = false;
 	return rc;
 }

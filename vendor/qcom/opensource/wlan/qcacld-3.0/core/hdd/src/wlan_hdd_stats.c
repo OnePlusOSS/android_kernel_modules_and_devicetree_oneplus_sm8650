@@ -7407,12 +7407,22 @@ static void wlan_hdd_update_rssi(struct wlan_hdd_link_info *link_info,
 					  sta_ctx->conn_info.bssid.bytes,
 					  &link_info->rssi, &snr);
 	}
+
+#ifndef OPLUS_FEATURE_WIFI_SIGNAL
+//Add for:Avoid upload RSSI 0dbm to upper layer shows as -128dbm of MLO link.
 	/* If RSSi is reported as positive then it is invalid */
 	if (link_info->rssi > 0) {
 		hdd_debug_rl("RSSI invalid %d", link_info->rssi);
 		link_info->rssi = 0;
 		link_info->hdd_stats.summary_stat.rssi = 0;
 	}
+#else
+	if (link_info->rssi >= 0) {
+		hdd_debug_rl("oplus RSSI invalid %d", link_info->rssi);
+		link_info->rssi = -1;
+		link_info->hdd_stats.summary_stat.rssi = -1;
+	}
+#endif /* OPLUS_FEATURE_WIFI_SIGNAL */
 
 	sinfo->signal = link_info->rssi;
 	hdd_debug("snr: %d, rssi: %d",

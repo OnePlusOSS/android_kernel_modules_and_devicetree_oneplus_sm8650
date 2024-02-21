@@ -39,6 +39,7 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 	struct cam_eeprom_soc_private     *eb_info = NULL;
 	uint8_t                           *memptr = block->mapdata;
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
+	int eeprom_cci = 8;
 	char fb_payload[PAYLOAD_LENGTH] = {0};
 #endif
 
@@ -129,7 +130,8 @@ static int cam_eeprom_read_memory(struct cam_eeprom_ctrl_t *e_ctrl,
 				emap[j].mem.valid_size);
 			if (rc < 0) {
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
-				KEVENT_FB_EEPRPOM_WR_FAILED(fb_payload, "camera eeprom read failed", rc);
+				eeprom_cci = (e_ctrl->cci_i2c_master << 1)|(e_ctrl->cci_num);
+				KEVENT_FB_EEPRPOM_WR_FAILED(fb_payload, "camera eeprom read failed",eeprom_cci);
 #endif
 				CAM_ERR(CAM_EEPROM, "read failed rc %d",
 					rc);
@@ -1492,6 +1494,7 @@ int32_t cam_eeprom_driver_cmd(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 	struct cam_eeprom_query_cap_t  eeprom_cap = {0};
 	struct cam_control            *cmd = (struct cam_control *)arg;
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
+	int eeprom_cci = 8;
 	char fb_payload[PAYLOAD_LENGTH] = {0};
 #endif
 
@@ -1511,7 +1514,8 @@ int32_t cam_eeprom_driver_cmd(struct cam_eeprom_ctrl_t *e_ctrl, void *arg)
 	rc = cam_eeprom_driver_cmd_oem(e_ctrl,arg);
 	if (rc) {
 		CAM_ERR(CAM_EEPROM, "Failed in check eeprom data");
-		KEVENT_FB_EEPRPOM_WR_FAILED(fb_payload, "camera eeprom write failed", rc);
+		eeprom_cci = (e_ctrl->cci_i2c_master << 1)|(e_ctrl->cci_num);
+		KEVENT_FB_EEPRPOM_WR_FAILED(fb_payload, "camera eeprom write failed", eeprom_cci);
 		goto release_mutex;
 	}
 #endif

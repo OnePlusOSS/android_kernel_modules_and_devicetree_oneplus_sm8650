@@ -1697,6 +1697,40 @@ int oplus_ofp_set_dspp_pcc_feature(void *sde_hw_cp_cfg, void *s_crtc, bool befor
 	return 0;
 }
 
+
+int oplus_ofp_set_dspp_gc_feature(void *sde_hw_cp_cfg, void *s_crtc, bool before_setup_pgc)
+{
+	struct sde_hw_cp_cfg *hw_cfg = sde_hw_cp_cfg;
+	static struct drm_msm_pgc_lut *saved_pgc = NULL;
+	struct sde_crtc *sde_crtc = s_crtc;
+	struct oplus_ofp_params *p_oplus_ofp_params = oplus_ofp_get_params(oplus_ofp_display_id);
+
+	OFP_DEBUG("start\n");
+
+	if (!hw_cfg || !sde_crtc || !p_oplus_ofp_params) {
+		return -EINVAL;
+	}
+
+	OPLUS_OFP_TRACE_BEGIN("oplus_ofp_set_dspp_pcc_feature");
+
+	if (before_setup_pgc) {
+		saved_pgc = hw_cfg->payload;
+
+		if (oplus_ofp_need_to_bypass_pq(sde_crtc)) {
+			hw_cfg->payload = NULL;
+		}
+	} else {
+		hw_cfg->payload = saved_pgc;
+	}
+
+	OPLUS_OFP_TRACE_END("oplus_ofp_set_dspp_gc_feature");
+
+	OFP_DEBUG("end\n");
+
+	return 0;
+}
+
+
 int oplus_ofp_bypass_dspp_gamut(void *sde_hw_cp_cfg, void *s_crtc)
 {
 	struct sde_hw_cp_cfg *hw_cfg = sde_hw_cp_cfg;

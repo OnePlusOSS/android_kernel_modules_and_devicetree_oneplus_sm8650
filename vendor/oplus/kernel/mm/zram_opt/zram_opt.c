@@ -16,6 +16,8 @@
 #include <linux/proc_fs.h>
 #include <linux/mm.h>
 
+#include "kswapd_opt/kswapd_opt.h"
+
 static int g_direct_swappiness = 60;
 static int g_swappiness = 160;
 
@@ -420,6 +422,8 @@ static int __init zram_opt_init(void)
 	}
 #endif
 
+	kswapd_opt_init();
+
 	pr_info("zram_opt_init succeed kswapd %d!\n", g_kswapd_pid);
 	return 0;
 }
@@ -432,8 +436,9 @@ static void __exit zram_opt_exit(void)
 	unregister_zram_opt_vendor_hooks();
 	destroy_swappiness_para_proc();
 
-	pr_info("zram_opt_exit succeed!\n");
+	kswapd_opt_exit();
 
+	pr_info("zram_opt_exit succeed!\n");
 	return;
 }
 

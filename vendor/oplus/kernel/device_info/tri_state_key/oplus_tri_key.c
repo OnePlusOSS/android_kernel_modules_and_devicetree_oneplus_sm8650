@@ -42,6 +42,7 @@
 
 #include <linux/string.h>
 #include <linux/version.h>
+#include <soc/oplus/system/oplus_project.h>
 
 #include "oplus_tri_key.h"
 
@@ -654,6 +655,34 @@ static int judge_interference(struct extcon_dev_data *chip)
 			}
 			return 0;
 		}
+		if ((chip->project_id == 22825) &&
+			(last_position == UP_STATE) &&
+			(delta < (calib_mdvaluemin - mid_down_tol))) {
+			TRI_KEY_LOG("calib_Min:%d, mid_down_tol:%d\n", calib_mdvaluemin, mid_down_tol);
+			if (sum > calib_mdvaluesum + tol2 || sum < calib_mdvaluesum - tol2) {
+				chip->interf = 1;
+				chip->state = 2;
+			} else {
+				chip->interf = 0;
+				chip->state = 2;
+				chip->position = MID_STATE;
+			}
+			return 0;
+		}
+		if ((chip->project_id == 22825) &&
+			(last_position == DOWN_STATE) &&
+			(delta > (calib_mdvaluemin + up_mid_tol))) {
+			TRI_KEY_LOG("calib_Min:%d, up_mid_tol:%d\n", calib_mdvaluemin, up_mid_tol);
+			if (sum > calib_mdvaluesum + tol2 || sum < calib_mdvaluesum - tol2) {
+				chip->interf = 1;
+				chip->state = 2;
+			} else {
+				chip->interf = 0;
+				chip->state = 2;
+				chip->position = MID_STATE;
+			}
+			return 0;
+		}
 		chip->interf = 1;
 		chip->state = 0;
 	} else {/*the hall data is negative number*/
@@ -1011,6 +1040,9 @@ static int reupdata_threshold(struct extcon_dev_data *chip)
 	int res = 0;
 	int tolen = 22;
 
+	if (chip->project_id == 22825) {
+		tolen = 16;
+	}
 	switch (chip->position) {
 	case UP_STATE:
 			res = oplus_hall_update_threshold(DHALL_1, UP_STATE,
@@ -1019,8 +1051,12 @@ static int reupdata_threshold(struct extcon_dev_data *chip)
 				TRI_KEY_LOG("updata_threshold fail:%d\n", res);
 				goto fail;
 			}
-			res = oplus_hall_update_threshold(DHALL_0, UP_STATE,
-				-500, 500);
+			if (chip->project_id == 22825) {
+				res = oplus_hall_update_threshold(DHALL_0, UP_STATE,
+				chip->dhall_data0-tolen, chip->dhall_data0+tolen);
+			} else {
+				res = oplus_hall_update_threshold(DHALL_0, UP_STATE, -500, 500);
+			}
 			if (res < 0) {
 				TRI_KEY_LOG("updata_threshold fail:%d\n", res);
 				goto fail;
@@ -1081,8 +1117,12 @@ static int reupdata_threshold(struct extcon_dev_data *chip)
 		}
 		TRI_KEY_LOG("tri_key:updata_threshold down:low:%d,high:%d\n",
 			chip->dhall_data0 - tolen, chip->dhall_data0 + tolen);
-		res = oplus_hall_update_threshold(DHALL_1, DOWN_STATE,
-			-500, 500);
+		if (chip->project_id == 22825) {
+			res = oplus_hall_update_threshold(DHALL_1, DOWN_STATE,
+			chip->dhall_data1 - tolen, chip->dhall_data1 + tolen);
+		} else {
+			res = oplus_hall_update_threshold(DHALL_1, DOWN_STATE, -500, 500);
+		}
 		if (res < 0) {
 			TRI_KEY_LOG("updata_threshold fail:%d\n", res);
 			goto fail;
@@ -1870,12 +1910,12 @@ static ssize_t proc_hall_data_offect_write(struct file *file, const char __user 
 			size_t count, loff_t *ppos)
 {
 	int tmp = 0;
-	char buf[MAX_LEN] = {0};
+	char buf[MAX_LENGTH] = {0};
 	int ret = -1;
 	char *token  = NULL;
 	char *tmp_str = NULL;
 
-	if (count >= MAX_LEN)
+	if (count >= MAX_LENGTH)
 		return count;
 
 	mutex_lock(&g_hall_dev->mtx);
@@ -1912,18 +1952,18 @@ static ssize_t proc_hall_data_offect_read(struct file *file, char __user *user_b
 			 size_t count, loff_t *ppos)
 {
 	int ret = -1;
-	char page[MAX_LEN] = {0};
+	char page[MAX_LENGTH] = {0};
 
 	mutex_lock(&g_hall_dev->mtx);
 
 	if (!g_the_chip) {
 		TRI_KEY_ERR("g_the_chip null\n");
-		snprintf(page, MAX_LEN, "%d\n", -1);
+		snprintf(page, MAX_LENGTH, "%d\n", -1);
 	} else {
 		if (!strcmp(g_hall_dev->data_offect_name, OFFECT_UP)) {
 			TRI_KEY_ERR("now get up offect data\n");
 			ret = g_the_chip->dhall_up_ops->offect_data_handle(READ_OFFECT);
-			snprintf(page, MAX_LEN, "up: offect:%d\n", ret);
+			snprintf(page, MAX_LENGTH, "up: offect:%d\n", ret);
 		}
 	}
 
@@ -2378,6 +2418,8 @@ int oplus_register_hall(const char *name, struct dhall_operations *ops,
 		return -1;
 	}
 	if (hall_count > 1 || g_the_chip->threeaxis_hall_support) {
+		g_the_chip->project_id = get_project();
+		TRI_KEY_LOG("%s: project_id:%d.\n", __func__, g_the_chip->project_id);
 		INIT_WORK(&g_the_chip->register_work, register_tri_key_dev_work);
 		schedule_work(&g_the_chip->register_work);
 	}

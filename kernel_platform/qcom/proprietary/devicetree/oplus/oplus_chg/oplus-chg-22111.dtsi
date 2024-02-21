@@ -300,22 +300,6 @@
 	};
 };
 
-&soc {
-	oplus,track-charge {
-		compatible = "oplus,track-charge";
-		track,fast_chg_break_t_thd = <1400>;
-		track,general_chg_break_t_thd = <300>;
-		track,voocphy_type = <1>;
-		track,wired_max_power = <100000>;
-		track,wired_fast_chg_scheme = <0>;
-
-		track,wls_max_power = <50000>;
-		track,wls_bpp_chg_scheme = <0>;
-		track,wls_epp_chg_scheme = <0>;
-		track,wls_fast_chg_scheme = <0>;
-	};
-};
-
 &battery_charger {
 	//for oplus chg framework:
 	oplus,chg_ops = "plat-pmic";
@@ -499,9 +483,14 @@
 
 		track,fast_chg_break_t_thd = <1400>;
 		track,general_chg_break_t_thd = <300>;
-		track,voocphy_type = <2>;
+		track,voocphy_type = <1>;
 		track,wired_max_power = <100000>;
 		track,wired_fast_chg_scheme = <0>;
+
+		track,wls_max_power = <50000>;
+		track,wls_bpp_chg_scheme = <0>;
+		track,wls_epp_chg_scheme = <0>;
+		track,wls_fast_chg_scheme = <0>;
 	};
 
 	oplus_vooc: oplus,vooc {

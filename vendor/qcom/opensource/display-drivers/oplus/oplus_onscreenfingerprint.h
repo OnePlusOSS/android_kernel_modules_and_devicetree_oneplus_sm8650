@@ -176,6 +176,7 @@ int oplus_ofp_notify_uiready(void *sde_encoder_phys);
 bool oplus_ofp_backlight_filter(void *dsi_panel, unsigned int bl_level);
 bool oplus_ofp_need_pcc_change(void *s_crtc);
 int oplus_ofp_set_dspp_pcc_feature(void *sde_hw_cp_cfg, void *s_crtc, bool before_setup_pcc);
+int oplus_ofp_set_dspp_gc_feature(void *sde_hw_cp_cfg, void *s_crtc, bool before_setup_pgc);
 int oplus_ofp_bypass_dspp_gamut(void *sde_hw_cp_cfg, void *s_crtc);
 
 /* -------------------- aod -------------------- */

@@ -5414,6 +5414,10 @@ static int oplus_chg_track_upload_ic_err_info(struct oplus_chg_track *track)
 		index += oplus_chg_track_obtain_power_info(track_buf + index,
 			OPLUS_CHG_TRIGGER_MSG_LEN - index);
 		break;
+	case OPLUS_IC_ERR_GAN_MOS_ERROR:
+		track->ic_err_msg_load_trigger.flag_reason =
+			TRACK_NOTIFY_FLAG_DCHG_ABNORMAL;
+		break;
 	case OPLUS_IC_ERR_I2C:
 	case OPLUS_IC_ERR_UNKNOWN:
 	default:

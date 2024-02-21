@@ -38,6 +38,10 @@
 	cell-index = <0>;
 	compatible = "qcom,csiphy-v2.2.0-enhance", "qcom,csiphy";
 };
+&cam_csiphy1{
+	cell-index = <1>;
+	compatible = "qcom,csiphy-v2.2.0-enhance4wide", "qcom,csiphy";
+};
 &cam_csiphy2{
 	cell-index = <2>;
 	compatible = "qcom,csiphy-v2.2.0-enhance", "qcom,csiphy";

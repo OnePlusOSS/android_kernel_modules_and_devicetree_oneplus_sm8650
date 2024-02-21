@@ -20,6 +20,9 @@
 #include "cam_common_util.h"
 #include "cam_mem_mgr.h"
 #include "cam_cpas_api.h"
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include "oplus_cam_kevent_fb.h"
+#endif
 
 static struct cam_req_mgr_core_device *g_crm_core_dev;
 static struct cam_req_mgr_core_link g_links[MAXIMUM_LINKS_PER_SESSION];
@@ -2655,6 +2658,9 @@ static int __cam_req_mgr_process_sof_freeze(void *priv, void *data)
 	struct cam_req_mgr_message       msg = {0};
 	int rc = 0;
 	int64_t last_applied_req_id = -EINVAL;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	char fb_payload[PAYLOAD_LENGTH] = {0};
+#endif
 
 	if (!data || !priv) {
 		CAM_ERR(CAM_CRM, "input args NULL %pK %pK", data, priv);
@@ -2691,6 +2697,9 @@ static int __cam_req_mgr_process_sof_freeze(void *priv, void *data)
 		"SOF freeze for session: %d link: 0x%x max_pd: %d last_req_id:%d",
 		session->session_hdl, link->link_hdl, link->max_delay,
 		last_applied_req_id);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		KEVENT_FB_FRAME_ERROR(fb_payload, "SOF freeze", session->session_hdl);
+#endif
 
 	__cam_req_mgr_send_evt(0, CAM_REQ_MGR_LINK_EVT_SOF_FREEZE,
 		CRM_KMD_ERR_FATAL, link);

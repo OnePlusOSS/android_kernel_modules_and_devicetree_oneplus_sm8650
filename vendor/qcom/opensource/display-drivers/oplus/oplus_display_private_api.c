@@ -325,8 +325,6 @@ int dsi_display_read_panel_reg(struct dsi_display *display, u8 cmd, void *data,
 		return -EINVAL;
 	}
 
-	mutex_lock(&display->display_lock);
-
 	m_ctrl = &display->ctrl[display->cmd_master_idx];
 
 	if (display->tx_cmd_buf == NULL) {
@@ -368,7 +366,6 @@ int dsi_display_read_panel_reg(struct dsi_display *display, u8 cmd, void *data,
 	dsi_display_cmd_engine_disable(display);
 
 done:
-	mutex_unlock(&display->display_lock);
 	LCD_INFO("return: %d\n", rc);
 	return rc;
 }
@@ -648,9 +645,10 @@ static ssize_t oplus_display_get_panel_serial_number(struct kobject *obj,
 				continue;
 			}
 		}
-
+		mutex_lock(&display->display_lock);
 		ret = dsi_display_read_panel_reg(display, display->panel->oplus_ser.serial_number_reg,
 				read, display->panel->oplus_ser.serial_number_conut);
+		mutex_unlock(&display->display_lock);
 
 		if (ret < 0) {
 			ret = sysfs_emit(buf,
@@ -776,8 +774,9 @@ static ssize_t oplus_display_set_panel_reg(struct kobject *obj,
 			LCD_ERR("failed\n");
 			return -EINVAL;
 		}
-
+		mutex_lock(&display->display_lock);
 		dsi_display_read_panel_reg(display, value, reg, len);
+		mutex_unlock(&display->display_lock);
 
 		for (index = 0; index < len; index++) {
 			LCD_INFO("%x\n", reg[index]);
@@ -837,6 +836,66 @@ static ssize_t oplus_display_set_panel_reg(struct kobject *obj,
 	return count;
 }
 
+int oplus_display_panel_get_id_unlock(void *buf)
+{
+	struct dsi_display *display = get_main_display();
+	int ret = 0;
+	unsigned char read[30];
+	struct dsi_display_ctrl *m_ctrl = NULL;
+	struct panel_id *panel_rid = buf;
+	int panel_id = panel_rid->DA;
+
+	if (panel_id == 1)
+		display = get_sec_display();
+
+	if (!display || !display->panel) {
+		LCD_ERR("display is null\n");
+		ret = -1;
+		return ret;
+	}
+	/* if (__oplus_get_power_status() == OPLUS_DISPLAY_POWER_ON) { */
+	if (display->panel->power_mode == SDE_MODE_DPMS_ON) {
+		if (!strcmp(display->panel->oplus_priv.vendor_name, "A0005")) {
+			ret = dsi_panel_tx_cmd_set(display->panel, DSI_CMD_PANEL_INFO_SWITCH_PAGE);
+			if (ret < 0) {
+				DSI_ERR("Read AA545/AC090 P 3 A0005 panel id switch page failed!\n");
+			}
+		}
+
+		m_ctrl = &display->ctrl[display->cmd_master_idx];
+
+		ret = dsi_panel_read_panel_reg_unlock(m_ctrl, display->panel, 0xDA, read, 1);
+		if (ret < 0) {
+			LCD_ERR("failed to read DA ret=%d\n", ret);
+			return -EINVAL;
+		}
+
+		panel_rid->DA = (uint32_t)read[0];
+
+		ret = dsi_panel_read_panel_reg_unlock(m_ctrl, display->panel, 0xDB, read, 1);
+		if (ret < 0) {
+			LCD_ERR("failed to read DB ret=%d\n", ret);
+			return -EINVAL;
+		}
+
+		panel_rid->DB = (uint32_t)read[0];
+
+		ret = dsi_panel_read_panel_reg_unlock(m_ctrl, display->panel, 0xDC, read, 1);
+		if (ret < 0) {
+			LCD_ERR("failed to read DC ret=%d\n", ret);
+			return -EINVAL;
+		}
+
+		panel_rid->DC = (uint32_t)read[0];
+	} else {
+		LCD_WARN("display panel status is not on\n");
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
+
 static ssize_t oplus_display_get_panel_id(struct kobject *obj,
 		struct kobj_attribute *attr, char *buf)
 {
@@ -870,19 +929,25 @@ static ssize_t oplus_display_get_panel_id(struct kobject *obj,
 				DSI_ERR("Read AA545/AC090 P 3 A0005 panel id switch page failed!\n");
 			}
 		}
+		mutex_lock(&display->display_lock);
 		ret = dsi_display_read_panel_reg(display, 0xda, read, 1);
+		mutex_unlock(&display->display_lock);
 		if (ret < 0) {
 			LCD_ERR("failed to read da ret=%d\n", ret);
 			return -EINVAL;
 		}
 		da = read[0];
+		mutex_lock(&display->display_lock);
 		ret = dsi_display_read_panel_reg(display, 0xdb, read, 1);
+		mutex_unlock(&display->display_lock);
 		if (ret < 0) {
 			LCD_ERR("failed to read da ret=%d\n", ret);
 			return -EINVAL;
 		}
 		db = read[0];
+		mutex_lock(&display->display_lock);
 		ret = dsi_display_read_panel_reg(display, 0xdc, read, 1);
+		mutex_unlock(&display->display_lock);
 		if (ret < 0) {
 			LCD_ERR("failed to read da ret=%d\n", ret);
 			return -EINVAL;
@@ -916,8 +981,9 @@ static ssize_t oplus_display_get_panel_dsc(struct kobject *obj,
 			ret = -1;
 			return ret;
 		}
-
+		mutex_lock(&display->display_lock);
 		ret = dsi_display_read_panel_reg(get_main_display(), 0x03, read, 1);
+		mutex_unlock(&display->display_lock);
 
 		if (ret < 0) {
 			ret = sysfs_emit(buf,

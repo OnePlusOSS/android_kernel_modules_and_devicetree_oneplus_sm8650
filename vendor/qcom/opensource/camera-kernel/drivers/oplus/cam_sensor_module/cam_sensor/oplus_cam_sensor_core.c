@@ -183,11 +183,11 @@ int cam_ftm_power_up(struct cam_sensor_ctrl_t *s_ctrl)
 	{
 		oplus_shift_sensor_mode(s_ctrl);
 		CAM_ERR(CAM_SENSOR, "FTM sensor setting 0x%x",s_ctrl->sensordata->slave_info.sensor_id);
-		sensor_setting.reg_setting = sensor_init_settings.imx966_setting.reg_setting;
-		sensor_setting.addr_type = sensor_init_settings.imx966_setting.addr_type;
-		sensor_setting.data_type = sensor_init_settings.imx966_setting.data_type;
-		sensor_setting.size = sensor_init_settings.imx966_setting.size;
-		sensor_setting.delay = sensor_init_settings.imx966_setting.delay;
+		sensor_setting.reg_setting = sensor_init_settings.lyt808_setting.reg_setting;
+		sensor_setting.addr_type = sensor_init_settings.lyt808_setting.addr_type;
+		sensor_setting.data_type = sensor_init_settings.lyt808_setting.data_type;
+		sensor_setting.size = sensor_init_settings.lyt808_setting.size;
+		sensor_setting.delay = sensor_init_settings.lyt808_setting.delay;
 		rc = camera_io_dev_write(&(s_ctrl->io_master_info), &sensor_setting);
 	}
 	else if (s_ctrl->sensordata->slave_info.sensor_id == 0xa18a)

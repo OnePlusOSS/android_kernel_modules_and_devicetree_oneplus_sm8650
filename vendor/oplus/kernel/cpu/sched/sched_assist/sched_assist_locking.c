@@ -93,6 +93,9 @@ bool task_skip_protect(struct task_struct *p)
 
 bool task_inlock(struct oplus_task_struct *ots)
 {
+	if (global_sched_assist_enabled == 0)
+		return false;
+
 	if (locking_protect_disable ==  true) {
 		locking_wakeup_preepmt_enable = 0;
 		return false;

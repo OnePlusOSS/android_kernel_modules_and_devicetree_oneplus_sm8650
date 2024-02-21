@@ -1856,6 +1856,11 @@ static int oplus_ufcs_charge_start(struct oplus_ufcs *chip)
 			chg_err("set cp work start error, rc=%d\n", rc);
 			return rc;
 		}
+		rc = oplus_ufcs_pdo_set(chip, chip->config.target_vbus_mv, UFCS_START_DEF_CURR_MA);
+		if (rc < 0) {
+			chg_err("pdo set error, rc=%d\n", rc);
+			return rc;
+		}
 		chip->start_retry_count = 0;
 		chip->start_check = true;
 

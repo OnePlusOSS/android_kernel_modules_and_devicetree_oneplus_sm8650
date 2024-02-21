@@ -74,6 +74,7 @@ struct hybridswapd_task {
 #define SWAPD_SHRINK_SIZE_PER_WINDOW 1024
 #define PAGES_TO_MB(pages) ((pages) >> 8)
 #define PAGES_PER_1MB (1 << 8)
+#define BATCH_PER_CYCLE_MB (32)
 
 typedef bool (*free_swap_is_low_func)(void);
 static free_swap_is_low_func free_swap_is_low_fp;
@@ -875,13 +876,13 @@ static int zram_used_limit_mb_write(struct cgroup_subsys_state *css,
 static s64 zram_used_limit_mb_read(struct cgroup_subsys_state *css,
 				   struct cftype *cft)
 {
-	return zram_used_limit_pages << PAGE_SHIFT;
+	return chp_per_reclaim_mib;
 }
 
 static int chp_per_reclaim_mib_write(struct cgroup_subsys_state *css,
 				     struct cftype *cft, s64 val)
 {
-	if (val <= 0 || val > 1024)
+	if (val < BATCH_PER_CYCLE_MB || val > 1024)
 		return 0;
 
 	chp_per_reclaim_mib = (unsigned int)val;
@@ -1296,9 +1297,9 @@ static unsigned long shrink_memcg_chp_pages(void)
 {
 	struct mem_cgroup *memcg = NULL;
 	unsigned long tot_reclaimed = 0;
-	long nr_to_reclaim = 0;
+	long nr_to_reclaim = chp_per_reclaim_mib * (SZ_1M >> PAGE_SHIFT);
+	unsigned long batch_per_cycle = BATCH_PER_CYCLE_MB * (SZ_1M >> PAGE_SHIFT);
 	unsigned long global_reclaimed = 0;
-	unsigned long batch_per_cycle = (SZ_32M >> PAGE_SHIFT);
 	unsigned long start_js = jiffies;
 	unsigned long reclaim_cycles;
 	gfp_t gfp_mask = GFP_KERNEL;
@@ -1306,7 +1307,6 @@ static unsigned long shrink_memcg_chp_pages(void)
 	int zram_inx = 0;
 	int min_cluster = SWAP_CLUSTER_MAX;
 
-	nr_to_reclaim = chp_per_reclaim_mib * (SZ_1M >> PAGE_SHIFT);
 	type = get_hybridswapd_reclaim_type();
 	/* available mem is low, relaim nomal page! */
 	if (type == RT_NONE)
@@ -1317,12 +1317,15 @@ static unsigned long shrink_memcg_chp_pages(void)
 		min_cluster = CHP_SWAP_CLUSTER_MAX;
 	}
 
-	global_reclaimed = calc_each_memcg_pages(type);
-	if (unlikely(!global_reclaimed))
-		goto out;
-
 	if (zram_is_full(zram_arr[zram_inx]))
 		goto out;
+
+	global_reclaimed = calc_each_memcg_pages(type);
+	if (unlikely(global_reclaimed < batch_per_cycle)) {
+		log_err("global_reclaimed:%lu < %lu\n", global_reclaimed,
+			batch_per_cycle);
+		goto out;
+	}
 
 	nr_to_reclaim = min(nr_to_reclaim, (long)global_reclaimed);
 	reclaim_cycles = nr_to_reclaim / batch_per_cycle;

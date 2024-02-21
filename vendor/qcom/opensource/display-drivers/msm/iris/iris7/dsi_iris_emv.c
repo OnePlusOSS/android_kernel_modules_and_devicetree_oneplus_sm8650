@@ -2119,8 +2119,8 @@ void iris_emv_exit_i7(void)
 		iris_emv_pwil_display_mode_set_i7(0, 1, true, true, false, false);
 		idle = iris_emv_pipelines_idle_i7();
 		IRIS_LOGI("%s(%d), GET_IRIS_PIPELINES IDLEs %d for channels swap revert", __func__, __LINE__, idle);
-		if (idle == false)
-			iris_emv_pwil_1_swrst_enable_i7(1);
+		//if (idle == false)
+			//iris_emv_pwil_1_swrst_enable_i7(1);
 	}
 
 	if (iris_emv_debug > 0)

@@ -9978,7 +9978,7 @@
     .delay = 1,
 },
 
-.imx966_setting =
+.lyt808_setting =
 {
     .reg_setting =
     {

@@ -2117,7 +2117,7 @@ lim_get_bss_11be_mode_allowed(struct mac_context *mac_ctx,
 	 */
 	if (scan_entry) {
 		is_eht_allowed =
-			wlan_cm_is_eht_allowed_for_current_security(scan_entry);
+			wlan_cm_is_eht_allowed_for_current_security(mac_ctx->psoc, scan_entry);
 		util_scan_free_cache_entry(scan_entry);
 		if (!is_eht_allowed) {
 			pe_debug("Downgrade to 11ax mode due to AP security validation failure");

@@ -587,7 +587,8 @@ int32_t EEPROM_CommonWrite(struct cam_eeprom_ctrl_t *e_ctrl,
                  ||(strcmp(cam_write_eeprom->eepromName, "ov08a10_gt24p128e") == 0)
                  ||(strcmp(cam_write_eeprom->eepromName, "imx766_p24c256c_main") == 0)
                  ||(strcmp(cam_write_eeprom->eepromName, "unicorn_imx766_main_gt24p256c") == 0)
-                 ||(strcmp(cam_write_eeprom->eepromName, "imx966_p24c256f") == 0)){
+                 ||(strcmp(cam_write_eeprom->eepromName, "lyt808_p24c256f") == 0)
+		 ||(strcmp(cam_write_eeprom->eepromName, "imx882_p24c128e") == 0)){
 			i2c_reg_array.reg_addr = 0xA000;
 			i2c_reg_array.reg_data = 0x00;
 		} else if (strcmp(cam_write_eeprom->eepromName, "imx789_p24c128e") == 0) {

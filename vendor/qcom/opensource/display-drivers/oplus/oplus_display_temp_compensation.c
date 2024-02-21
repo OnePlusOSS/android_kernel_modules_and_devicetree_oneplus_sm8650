@@ -544,7 +544,9 @@ int oplus_temp_compensation_data_update(void *dsi_display)
 		OPLUS_TEMP_COMPENSAITON_TRACE_END("oplus_temp_compensation_data_update");
 		return rc;
 	}
+	mutex_lock(&display->display_lock);
 	rc = dsi_display_read_panel_reg(display, 0xE0, rx_buf, 7);
+	mutex_unlock(&display->display_lock);
 	if (rc) {
 		TEMP_COMPENSATION_ERR("failed to read panel reg 0xE0, rc=%d\n", rc);
 		OPLUS_TEMP_COMPENSAITON_TRACE_END("oplus_temp_compensation_data_update");

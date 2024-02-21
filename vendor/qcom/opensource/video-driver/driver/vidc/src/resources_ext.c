@@ -107,7 +107,7 @@ static int __acquire_regulator(struct msm_vidc_core *core,
 			/* clear handoff from core sub_state */
 			msm_vidc_change_core_sub_state(core,
 				CORE_SUBSTATE_GDSC_HANDOFF, 0, __func__);
-			d_vpr_e("Skip acquire regulator %s\n", rinfo->name);
+			d_vpr_h("Skip acquire regulator %s\n", rinfo->name);
 			goto exit;
 		}
 
@@ -126,7 +126,7 @@ static int __acquire_regulator(struct msm_vidc_core *core,
 			/* reset handoff from core sub_state */
 			msm_vidc_change_core_sub_state(core,
 				CORE_SUBSTATE_GDSC_HANDOFF, 0, __func__);
-			d_vpr_e("Acquired regulator control from HW: %s\n",
+			d_vpr_h("Acquired regulator control from HW: %s\n",
 					rinfo->name);
 
 		}
@@ -173,7 +173,7 @@ static int __hand_off_regulator(struct msm_vidc_core *core,
 			/* set handoff done in core sub_state */
 			msm_vidc_change_core_sub_state(core,
 				0, CORE_SUBSTATE_GDSC_HANDOFF, __func__);
-			d_vpr_e("Hand off regulator control to HW: %s\n",
+			d_vpr_h("Hand off regulator control to HW: %s\n",
 					rinfo->name);
 		}
 
@@ -233,7 +233,7 @@ static int __enable_regulator(struct msm_vidc_core *core, const char *reg_name)
 		if (rc)
 			d_vpr_e("%s: failed to release video_xo_reset reset\n", __func__);
 
-		d_vpr_e("%s: enabled regulator %s\n", __func__, rinfo->name);
+		d_vpr_h("%s: enabled regulator %s\n", __func__, rinfo->name);
 		break;
 	}
 	if (!found) {
@@ -294,7 +294,7 @@ static int __disable_regulator(struct msm_vidc_core *core, const char *reg_name)
 		if (rc)
 			d_vpr_e("%s: failed to release video_xo_reset reset\n", __func__);
 
-		d_vpr_e("%s: disabled regulator %s\n", __func__, rinfo->name);
+		d_vpr_h("%s: disabled regulator %s\n", __func__, rinfo->name);
 		break;
 	}
 	if (!found) {

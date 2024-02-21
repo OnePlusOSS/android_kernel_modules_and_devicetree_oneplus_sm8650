@@ -153,6 +153,39 @@ static int32_t cam_actuator_power_down(struct cam_actuator_ctrl_t *a_ctrl)
 		CAM_ERR(CAM_ACTUATOR, "failed: power_info %pK", power_info);
 		return -EINVAL;
 	}
+
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if ((power_info->power_setting == NULL) &&
+		(power_info->power_down_setting == NULL)) {
+		CAM_INFO(CAM_ACTUATOR,"Using default power settings");
+		rc = oplus_cam_actuator_construct_default_power_setting(a_ctrl, power_info);
+		if (rc < 0) {
+			CAM_ERR(CAM_ACTUATOR,
+				"Construct default actuator power setting failed.");
+			return rc;
+		}
+
+		/* Parse and fill vreg params for power up settings */
+		rc = msm_camera_fill_vreg_params(
+			&a_ctrl->soc_info,
+			power_info->power_setting,
+			power_info->power_setting_size);
+		if (rc) {
+			CAM_ERR(CAM_ACTUATOR,
+				"failed to fill vreg params for power up rc:%d", rc);
+			return rc;
+		}
+		/* Parse and fill vreg params for power down settings*/
+		rc = msm_camera_fill_vreg_params(
+			&a_ctrl->soc_info,
+			power_info->power_down_setting,
+			power_info->power_down_setting_size);
+		if (rc) {
+			CAM_ERR(CAM_ACTUATOR,
+				"failed to fill vreg params power down rc:%d", rc);
+		}
+	}
+#endif
 	rc = cam_sensor_util_power_down(power_info, soc_info);
 	if (rc) {
 		CAM_ERR(CAM_ACTUATOR, "power down the core is failed:%d", rc);
@@ -877,6 +910,7 @@ int32_t cam_actuator_driver_cmd(struct cam_actuator_ctrl_t *a_ctrl,
 	struct cam_actuator_soc_private *soc_private = NULL;
 	struct cam_sensor_power_ctrl_t  *power_info = NULL;
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
+	int af_cci = 8;
 	char fb_payload[PAYLOAD_LENGTH] = {0};
 #endif
 
@@ -1085,7 +1119,12 @@ int32_t cam_actuator_driver_cmd(struct cam_actuator_ctrl_t *a_ctrl,
 			else
 				CAM_ERR(CAM_ACTUATOR,
 					"Failed in actuator Parsing");
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			mutex_unlock(&(a_ctrl->actuator_mutex));
+			return rc;
+#else
 			goto release_mutex;
+#endif
 		}
 
 		if (a_ctrl->setting_apply_state ==
@@ -1125,7 +1164,8 @@ release_mutex:
 
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
 	if (rc < 0) {
-		KEVENT_FB_ACTUATOR_CTL_FAILED(fb_payload, "actuator control error", rc);
+		af_cci = (a_ctrl->cci_i2c_master << 1)|(a_ctrl->cci_num);
+		KEVENT_FB_ACTUATOR_CTL_FAILED(fb_payload, "actuator control error",af_cci);
 	}
 #endif
 

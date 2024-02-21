@@ -91,7 +91,9 @@ int oplus_display_panel_get_id(void *buf)
 				DSI_ERR("Read AA545/AC090 P 3 A0005 panel id switch page failed!\n");
 			}
 		}
+		mutex_lock(&display->display_lock);
 		ret = dsi_display_read_panel_reg(display, 0xDA, read, 1);
+		mutex_unlock(&display->display_lock);
 
 		if (ret < 0) {
 			LCD_ERR("failed to read DA ret=%d\n", ret);
@@ -99,8 +101,9 @@ int oplus_display_panel_get_id(void *buf)
 		}
 
 		panel_rid->DA = (uint32_t)read[0];
-
+		mutex_lock(&display->display_lock);
 		ret = dsi_display_read_panel_reg(display, 0xDB, read, 1);
+		mutex_unlock(&display->display_lock);
 
 		if (ret < 0) {
 			LCD_ERR("failed to read DB ret=%d\n", ret);
@@ -108,8 +111,9 @@ int oplus_display_panel_get_id(void *buf)
 		}
 
 		panel_rid->DB = (uint32_t)read[0];
-
+		mutex_lock(&display->display_lock);
 		ret = dsi_display_read_panel_reg(display, 0xDC, read, 1);
+		mutex_unlock(&display->display_lock);
 
 		if (ret < 0) {
 			LCD_ERR("failed to read DC ret=%d\n", ret);
@@ -398,11 +402,9 @@ int oplus_display_panel_get_ccd_check(void *buf)
 	dsi_display_cmd_engine_disable(display);
 
 	mutex_unlock(&display->panel->panel_lock);
-	mutex_unlock(&display->display_lock);
 	rc = dsi_display_read_panel_reg(display, 0xCC, read1, 1);
 	LCD_ERR("read ccd_check value = 0x%x rc=%d\n", read1[0], rc);
 	(*ccd_check) = read1[0];
-	mutex_lock(&display->display_lock);
 	mutex_lock(&display->panel->panel_lock);
 
 	if (!dsi_panel_initialized(display->panel)) {
@@ -540,9 +542,10 @@ int oplus_display_panel_get_serial_number(void *buf)
 				continue;
 			}
 		}
-
+		mutex_lock(&display->display_lock);
 		ret = dsi_display_read_panel_reg(display, display->panel->oplus_ser.serial_number_reg,
 				read, display->panel->oplus_ser.serial_number_conut);
+		mutex_unlock(&display->display_lock);
 
 		/*  0xA1               11th        12th    13th    14th    15th
 		 *  HEX                0x32        0x0C    0x0B    0x29    0x37
@@ -805,7 +808,9 @@ int oplus_display_panel_get_id2(void)
 	/* if(__oplus_get_power_status() == OPLUS_DISPLAY_POWER_ON) { */
 	if (display->panel->power_mode == SDE_MODE_DPMS_ON) {
 		if (!strcmp(display->panel->name, "AA545 P 1 A0006 dsc cmd mode panel")) {
+			mutex_lock(&display->display_lock);
 			ret = dsi_display_read_panel_reg(display, 0xDB, read, 1);
+			mutex_unlock(&display->display_lock);
 			if (ret < 0) {
 				LCD_ERR("failed to read DB ret=%d\n", ret);
 				return -EINVAL;
@@ -962,7 +967,9 @@ int oplus_display_panel_get_dsc(void *data) {
 
 	/* if (__oplus_get_power_status() == OPLUS_DISPLAY_POWER_ON) { */
 	if (display->panel->power_mode == SDE_MODE_DPMS_ON) {
+		mutex_lock(&display->display_lock);
 		ret = dsi_display_read_panel_reg(get_main_display(), 0x03, read, 1);
+		mutex_unlock(&display->display_lock);
 		if (ret < 0) {
 			LCD_ERR("read panel dsc reg error = %d\n", ret);
 			ret = -1;
@@ -1044,7 +1051,9 @@ int oplus_display_panel_set_reg(void *data)
 	if (reg_rw->rw_flags == REG_READ) {
 		value = reg_rw->cmd;
 		len = reg_rw->lens;
+		mutex_lock(&display->display_lock);
 		dsi_display_read_panel_reg(get_main_display(), value, reg, len);
+		mutex_unlock(&display->display_lock);
 
 		for (index=0; index < len; index++) {
 			LCD_INFO("reg[%d] = %x\n", index, reg[index]);

@@ -1209,6 +1209,7 @@ cm_get_ml_partner_info(struct wlan_objmgr_pdev *pdev,
 			 */
 			is_security_allowed =
 				wlan_cm_is_eht_allowed_for_current_security(
+							psoc,
 							part_scan_entry);
 			util_scan_free_cache_entry(part_scan_entry);
 			if (!is_security_allowed) {

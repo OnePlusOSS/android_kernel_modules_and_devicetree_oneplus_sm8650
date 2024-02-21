@@ -244,8 +244,6 @@
 
 &dsi_panel_AA545_P_3_A0005_dsc_cmd_2nd {
 	/* HARDWARE CONFIG */
-	qcom,panel-supply-entries = <&dsi_panel_pwr_sec_supply>;
-	qcom,mdss-dsi-panel-controller = <&mdss_dsi1>;
 
 	/* BRIGHTNESS CONFIG */
 	qcom,mdss-dsi-sec-bl-pmic-control-type = "bl_ctrl_dcs";
