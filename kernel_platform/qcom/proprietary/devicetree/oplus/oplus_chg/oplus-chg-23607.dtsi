@@ -947,9 +947,9 @@
 		 * The three parameters of each array
 		 * correspond to three temperature intervals: 0-5; 5-12; 12-44
 		 */
-		bcc_stop_curr_0_to_30 = <1000 1000 1300 1300 1300>;
-		bcc_stop_curr_30_to_70 = <1000 1000 1300 1300 1300>;
-		bcc_stop_curr_70_to_90 = <1000 1000 1300 1300 1300>;
+		bcc_stop_curr_0_to_30 = <1000 1000 1000 1600 1600>;
+		bcc_stop_curr_30_to_70 = <1000 1000 1000 1600 1600>;
+		bcc_stop_curr_70_to_90 = <1000 1000 1000 1600 1600>;
 
 		/*
 		 * | curr_ma | fallback_step | switch_to_bpp
@@ -1093,51 +1093,46 @@
 		 */
 		wireless_bcc_table {
 			bcc_soc_0_to_30 {
-				bcc_temp_0_to_50 =	<4184 2000 1000 0
-							 4454 1500 1000 0
-							 4460 1000 1000 1>;
-				bcc_temp_50_to_120 =	<4184 2500 1000 0
-							 4454 2000 1000 0
-							 4460 1000 1000 1>;
-				bcc_temp_120_to_160 =	<4184 5000 3500 0
-							 4484 4000 3000 0
-							 4514 3000 1000 0
-							 4520 1300 1000 1>;
-				bcc_temp_160_to_400 =	<4184 5000 3500 0
-							 4454 4000 3000 0
-							 4514 3000 1000 0
-							 4520 1300 1000 1>;
-				bcc_temp_400_to_440 =	<4184 5000 3500 0
-							 4454 4000 3000 0
-							 4514 3000 1000 0
-							 4520 1300 1000 1>;
+				bcc_temp_0_to_50 =	<4154 3000 2000 0
+							 4354 2500 1000 0
+							 4534 1500 1000 0
+							 4544 1000 1000 1>;
+				bcc_temp_50_to_120 =	<4354 3000 1000 0
+							 4534 1500 1000 0
+							 4544 1000 1000 1>;
+				bcc_temp_120_to_160 =	<4484 5000 3000 0
+							 4534 3200 1000 0
+							 4544 1000 1000 1>;
+				bcc_temp_160_to_400 =	<4484 5000 3000 0
+							 4534 3200 1000 0
+							 4544 1600 1000 1>;
+				bcc_temp_400_to_440 =	<4484 5000 3000 0
+							 4534 3200 1000 0
+							 4544 1600 1000 1>;
 			};
 
 			bcc_soc_30_to_70 {
-				bcc_temp_0_to_50 =	<4454 1500 1000 0
-							 4460 1000 1000 1>;
-				bcc_temp_50_to_120 =	<4454 2000 1000 0
-							 4460 1000 1000 1>;
-				bcc_temp_120_to_160 =	<4484 4000 3000 0
-							 4514 3000 1000 0
-							 4520 1300 1000 1>;
-				bcc_temp_160_to_400 =	<4484 4000 3000 0
-							 4514 3000 1000 0
-							 4520 1300 1000 1>;
-				bcc_temp_400_to_440 =	<4484 4000 3000 0
-							 4514 3000 1000 0
-							 4520 1300 1000 1>;
+				bcc_temp_0_to_50 =	<4534 1500 1000 0
+							 4544 1000 1000 1>;
+				bcc_temp_50_to_120 =	<4534 1500 1000 0
+							 4544 1000 1000 1>;
+				bcc_temp_120_to_160 =	<4534 3200 1000 0
+							 4544 1000 1000 1>;
+				bcc_temp_160_to_400 =	<4534 3200 1000 0
+							 4544 1600 1000 1>;
+				bcc_temp_400_to_440 =	<4534 3200 1000 0
+							 4544 1600 1000 1>;
 			};
 
 			bcc_soc_70_to_90 {
-				bcc_temp_0_to_50 =	<4460 1000 1000 1>;
-				bcc_temp_50_to_120 =	<4460 1000 1000 1>;
-				bcc_temp_120_to_160 =	<4514 3000 1000 0
-							 4520 1300 1000 1>;
-				bcc_temp_160_to_400 =	<4514 3000 1000 0
-							 4520 1300 1000 1>;
-				bcc_temp_400_to_440 =	<4514 3000 1000 0
-							 4520 1300 1000 1>;
+				bcc_temp_0_to_50 =	<4544 1000 1000 1>;
+				bcc_temp_50_to_120 =	<4544 1000 1000 1>;
+				bcc_temp_120_to_160 =	<4534 2000 1000 0
+							 4544 1000 1000 1>;
+				bcc_temp_160_to_400 =	<4534 2000 1000 0
+							 4544 1600 1000 1>;
+				bcc_temp_400_to_440 =	<4534 2000 1000 0
+							 4544 1600 1000 1>;
 			};
 		};
 	};
@@ -1434,14 +1429,14 @@
 		oplus,ufcs_timeout_oplus = <10800>;
 		oplus,ufcs_ibat_over_third = <4000>;
 		oplus,ufcs_ibat_over_oplus = <4000>;
-		oplus,ufcs_full_cool_sw_vbat = <4540>;
-		oplus,ufcs_full_normal_sw_vbat = <4540>;
-		oplus,ufcs_full_normal_hw_vbat = <4550>;
+		oplus,ufcs_full_cool_sw_vbat = <4470>;
+		oplus,ufcs_full_normal_sw_vbat = <4470>;
+		oplus,ufcs_full_normal_hw_vbat = <4480>;
 		oplus,ufcs_full_ffc_vbat = <4520>;
 		oplus,ufcs_full_warm_vbat = <4130>;
-		oplus,ufcs_full_cool_sw_vbat_third = <4540>;
-		oplus,ufcs_full_normal_sw_vbat_third= <4540>;
-		oplus,ufcs_full_normal_hw_vbat_third = <4550>;
+		oplus,ufcs_full_cool_sw_vbat_third = <4470>;
+		oplus,ufcs_full_normal_sw_vbat_third= <4470>;
+		oplus,ufcs_full_normal_hw_vbat_third = <4480>;
 		oplus,ufcs_current_change_timeout = <100>;
 		oplus,ufcs_strategy_batt_high_temp = <410 420 430 400 410 420>;
 		oplus,ufcs_strategy_high_current = <3000 2000 2000 3000 3000 3000>;

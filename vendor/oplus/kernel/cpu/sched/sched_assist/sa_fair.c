@@ -174,8 +174,8 @@ static inline bool strict_ux_task(struct task_struct *task)
 
 bool set_ux_task_to_prefer_cpu(struct task_struct *task, int *orig_target_cpu)
 {
-	struct rq *rq = NULL;
-	struct oplus_rq *orq = NULL;
+	struct rq *rq = NULL, *orig_rq = NULL;
+	struct oplus_rq *orq = NULL, *orig_orq = NULL;
 	struct ux_sched_cputopo ux_cputopo = ux_sched_cputopo;
 	int cls_nr = ux_cputopo.cls_nr - 1;
 	int start_cls = -1;
@@ -184,6 +184,7 @@ bool set_ux_task_to_prefer_cpu(struct task_struct *task, int *orig_target_cpu)
 	int strict_cpu = -1, subopt_cpu = -1;
 	bool walk_next_cls = false;
 	bool invalid_target = false;
+	int orig_cls_id = 0;
 
 	if (unlikely(!global_sched_assist_enabled))
 		return false;
@@ -197,10 +198,21 @@ bool set_ux_task_to_prefer_cpu(struct task_struct *task, int *orig_target_cpu)
 	if (*orig_target_cpu < 0 || *orig_target_cpu >= OPLUS_NR_CPUS)
 		invalid_target = true;
 
-	if (!invalid_target && !sched_assist_scene(SA_LAUNCH) && is_ux_task_prefer_cpu_for_scene(task, *orig_target_cpu))
+	if (!invalid_target) {
+		orig_rq = cpu_rq(*orig_target_cpu);
+		orig_orq = (struct oplus_rq *) orig_rq->android_oem_data1;
+		orig_cls_id = topology_cluster_id(*orig_target_cpu);
+	}
+	if (!invalid_target && !test_task_ux(orig_rq->curr) && !orq_has_ux_tasks(orig_orq) && !orig_rq->rt.rt_nr_running &&
+		!sched_assist_scene(SA_LAUNCH) && is_ux_task_prefer_cpu_for_scene(task, *orig_target_cpu))
 		return false;
 
 	start_cls = cls_nr = get_task_cls_for_scene(task);
+	/* Avoiding ux core selection can easily lead to small cores for tasks
+	 * that would otherwise be on large cores */
+	if (start_cls < orig_cls_id) {
+		start_cls = cls_nr = orig_cls_id;
+	}
 	if (cls_nr != ux_cputopo.cls_nr - 1)
 		direction = 1;
 retry:
@@ -399,6 +411,17 @@ inline void oplus_check_preempt_wakeup(struct rq *rq, struct task_struct *p, boo
 		*nopreempt = true;
 		goto update;
 	}
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+	/*
+	 * ui task can preempt pipeline task,
+	 * other ux task can not preempt pipeline task
+	 */
+	if ((p->pid != curr->tgid) && oplus_is_pipeline_task(curr)) {
+		*nopreempt = true;
+		goto update;
+	}
+#endif
 
 	/* both of wake_task and curr_task are ux */
 	if (prio_higher(oplus_get_ux_state(p), oplus_get_ux_state(curr)))

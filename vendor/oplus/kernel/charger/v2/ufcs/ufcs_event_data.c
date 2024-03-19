@@ -69,8 +69,8 @@ int ufcs_send_data_msg_output_cap(struct ufcs_class *class,
 	return -ENOTSUPP;
 }
 
-int __ufcs_send_data_msg_request(struct ufcs_class *class,
-	struct ufcs_data_msg_request *request)
+static int __ufcs_send_data_msg_request(struct ufcs_class *class,
+	struct ufcs_data_msg_request *request, bool retry)
 {
 	struct ufcs_msg *msg;
 	int rc;
@@ -97,7 +97,7 @@ int __ufcs_send_data_msg_request(struct ufcs_class *class,
 	msg->data_msg.length = sizeof(struct ufcs_data_msg_request);
 	msg->data_msg.request.request = request->request;
 
-	rc = ufcs_send_msg(class, msg);
+	rc = ufcs_send_msg(class, msg, retry);
 	if (rc < 0)
 		ufcs_err("send %s data msg error, rc=%d\n",
 			 ufcs_get_data_msg_name(DATA_MSG_REQUEST), rc);
@@ -116,7 +116,20 @@ int ufcs_send_data_msg_request(struct ufcs_class *class, u8 index, u32 vol, u32 
 	}
 
 	request.request = UFCS_REQUEST_DATA(index, vol, curr);
-	return __ufcs_send_data_msg_request(class, &request);
+	return __ufcs_send_data_msg_request(class, &request, false);
+}
+
+int ufcs_send_data_msg_request_retry(struct ufcs_class *class, u8 index, u32 vol, u32 curr)
+{
+	struct ufcs_data_msg_request request;
+
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+
+	request.request = UFCS_REQUEST_DATA(index, vol, curr);
+	return __ufcs_send_data_msg_request(class, &request, true);
 }
 
 int ufcs_send_data_msg_src_info(struct ufcs_class *class,
@@ -127,8 +140,16 @@ int ufcs_send_data_msg_src_info(struct ufcs_class *class,
 	return -ENOTSUPP;
 }
 
-int ufcs_send_data_msg_sink_info(struct ufcs_class *class,
-	struct ufcs_data_msg_sink_info *sink_info)
+int ufcs_send_data_msg_src_info_retry(struct ufcs_class *class,
+	struct ufcs_data_msg_source_info *src_info)
+{
+	ufcs_err("sink device not support send %s msg\n",
+		 ufcs_get_data_msg_name(DATA_MSG_SOURCE_INFO));
+	return -ENOTSUPP;
+}
+
+static int __ufcs_send_data_msg_sink_info(struct ufcs_class *class,
+	struct ufcs_data_msg_sink_info *sink_info, bool retry)
 {
 	struct ufcs_msg *msg;
 	int rc;
@@ -146,7 +167,7 @@ int ufcs_send_data_msg_sink_info(struct ufcs_class *class,
 	msg->data_msg.length = sizeof(struct ufcs_data_msg_sink_info);
 	msg->data_msg.sink_info.info = sink_info->info;
 
-	rc = ufcs_send_msg(class, msg);
+	rc = ufcs_send_msg(class, msg, retry);
 	if (rc < 0)
 		ufcs_err("send %s data msg error, rc=%d\n",
 			 ufcs_get_data_msg_name(DATA_MSG_SINK_INFO), rc);
@@ -155,8 +176,38 @@ int ufcs_send_data_msg_sink_info(struct ufcs_class *class,
 	return rc;
 }
 
-int ufcs_send_data_msg_cable_info(struct ufcs_class *class,
-	struct ufcs_data_msg_cable_info *cable_info)
+int ufcs_send_data_msg_sink_info(struct ufcs_class *class,
+	struct ufcs_data_msg_sink_info *sink_info)
+{
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (sink_info == NULL) {
+		ufcs_err("sink_info is NULL\n");
+		return -EINVAL;
+	}
+
+	return __ufcs_send_data_msg_sink_info(class, sink_info, false);
+}
+
+int ufcs_send_data_msg_sink_info_retry(struct ufcs_class *class,
+	struct ufcs_data_msg_sink_info *sink_info)
+{
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (sink_info == NULL) {
+		ufcs_err("sink_info is NULL\n");
+		return -EINVAL;
+	}
+
+	return __ufcs_send_data_msg_sink_info(class, sink_info, true);
+}
+
+static int __ufcs_send_data_msg_cable_info(struct ufcs_class *class,
+	struct ufcs_data_msg_cable_info *cable_info, bool retry)
 {
 	struct ufcs_msg *msg;
 	int rc;
@@ -174,7 +225,7 @@ int ufcs_send_data_msg_cable_info(struct ufcs_class *class,
 	msg->data_msg.length = sizeof(struct ufcs_data_msg_cable_info);
 	msg->data_msg.cable_info.info = cable_info->info;
 
-	rc = ufcs_send_msg(class, msg);
+	rc = ufcs_send_msg(class, msg, retry);
 	if (rc < 0)
 		ufcs_err("send %s data msg error, rc=%d\n",
 			 ufcs_get_data_msg_name(DATA_MSG_CABLE_INFO), rc);
@@ -183,8 +234,38 @@ int ufcs_send_data_msg_cable_info(struct ufcs_class *class,
 	return rc;
 }
 
-int ufcs_send_data_msg_dev_info(struct ufcs_class *class,
-	struct ufcs_data_msg_device_info *dev_info)
+int ufcs_send_data_msg_cable_info(struct ufcs_class *class,
+	struct ufcs_data_msg_cable_info *cable_info)
+{
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (cable_info == NULL) {
+		ufcs_err("cable_info is NULL\n");
+		return -EINVAL;
+	}
+
+	return __ufcs_send_data_msg_cable_info(class, cable_info, false);
+}
+
+int ufcs_send_data_msg_cable_info_retry(struct ufcs_class *class,
+	struct ufcs_data_msg_cable_info *cable_info)
+{
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (cable_info == NULL) {
+		ufcs_err("cable_info is NULL\n");
+		return -EINVAL;
+	}
+
+	return __ufcs_send_data_msg_cable_info(class, cable_info, true);
+}
+
+static int __ufcs_send_data_msg_dev_info(struct ufcs_class *class,
+	struct ufcs_data_msg_device_info *dev_info, bool retry)
 {
 	struct ufcs_msg *msg;
 	int rc;
@@ -202,7 +283,7 @@ int ufcs_send_data_msg_dev_info(struct ufcs_class *class,
 	msg->data_msg.length = sizeof(struct ufcs_data_msg_device_info);
 	msg->data_msg.dev_info.info = dev_info->info;
 
-	rc = ufcs_send_msg(class, msg);
+	rc = ufcs_send_msg(class, msg, retry);
 	if (rc < 0)
 		ufcs_err("send %s data msg error, rc=%d\n",
 			 ufcs_get_data_msg_name(DATA_MSG_DEVICE_INFO), rc);
@@ -211,8 +292,38 @@ int ufcs_send_data_msg_dev_info(struct ufcs_class *class,
 	return rc;
 }
 
-int ufcs_send_data_msg_err_info(struct ufcs_class *class,
-	struct ufcs_data_msg_error_info *err_info)
+int ufcs_send_data_msg_dev_info(struct ufcs_class *class,
+	struct ufcs_data_msg_device_info *dev_info)
+{
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (dev_info == NULL) {
+		ufcs_err("dev_info is NULL\n");
+		return -EINVAL;
+	}
+
+	return __ufcs_send_data_msg_dev_info(class, dev_info, false);
+}
+
+int ufcs_send_data_msg_dev_info_retry(struct ufcs_class *class,
+	struct ufcs_data_msg_device_info *dev_info)
+{
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (dev_info == NULL) {
+		ufcs_err("dev_info is NULL\n");
+		return -EINVAL;
+	}
+
+	return __ufcs_send_data_msg_dev_info(class, dev_info, true);
+}
+
+static int __ufcs_send_data_msg_err_info(struct ufcs_class *class,
+	struct ufcs_data_msg_error_info *err_info, bool retry)
 {
 	struct ufcs_msg *msg;
 	int rc;
@@ -230,7 +341,7 @@ int ufcs_send_data_msg_err_info(struct ufcs_class *class,
 	msg->data_msg.length = sizeof(struct ufcs_data_msg_error_info);
 	msg->data_msg.err_info.info = err_info->info;
 
-	rc = ufcs_send_msg(class, msg);
+	rc = ufcs_send_msg(class, msg, retry);
 	if (rc < 0)
 		ufcs_err("send %s data msg error, rc=%d\n",
 			 ufcs_get_data_msg_name(DATA_MSG_ERROR_INFO), rc);
@@ -239,8 +350,38 @@ int ufcs_send_data_msg_err_info(struct ufcs_class *class,
 	return rc;
 }
 
-int ufcs_send_data_msg_config_wd(struct ufcs_class *class,
-	struct ufcs_data_msg_config_watchdog *config_wd)
+int ufcs_send_data_msg_err_info(struct ufcs_class *class,
+	struct ufcs_data_msg_error_info *err_info)
+{
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (err_info == NULL) {
+		ufcs_err("err_info is NULL\n");
+		return -EINVAL;
+	}
+
+	return __ufcs_send_data_msg_err_info(class, err_info, false);
+}
+
+int ufcs_send_data_msg_err_info_retry(struct ufcs_class *class,
+	struct ufcs_data_msg_error_info *err_info)
+{
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (err_info == NULL) {
+		ufcs_err("err_info is NULL\n");
+		return -EINVAL;
+	}
+
+	return __ufcs_send_data_msg_err_info(class, err_info, true);
+}
+
+static int __ufcs_send_data_msg_config_wd(struct ufcs_class *class,
+	struct ufcs_data_msg_config_watchdog *config_wd, bool retry)
 {
 	struct ufcs_msg *msg;
 	int rc;
@@ -258,7 +399,7 @@ int ufcs_send_data_msg_config_wd(struct ufcs_class *class,
 	msg->data_msg.length = sizeof(struct ufcs_data_msg_config_watchdog);
 	msg->data_msg.config_wd.over_time_ms = config_wd->over_time_ms;
 
-	rc = ufcs_send_msg(class, msg);
+	rc = ufcs_send_msg(class, msg, retry);
 	if (rc < 0)
 		ufcs_err("send %s data msg error, rc=%d\n",
 			 ufcs_get_data_msg_name(DATA_MSG_CONFIG_WATCHDOG), rc);
@@ -267,8 +408,38 @@ int ufcs_send_data_msg_config_wd(struct ufcs_class *class,
 	return rc;
 }
 
+int ufcs_send_data_msg_config_wd(struct ufcs_class *class,
+	struct ufcs_data_msg_config_watchdog *config_wd)
+{
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (config_wd == NULL) {
+		ufcs_err("config_wd is NULL\n");
+		return -EINVAL;
+	}
+
+	return __ufcs_send_data_msg_config_wd(class, config_wd, false);
+}
+
+int ufcs_send_data_msg_config_wd_retry(struct ufcs_class *class,
+	struct ufcs_data_msg_config_watchdog *config_wd)
+{
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (config_wd == NULL) {
+		ufcs_err("config_wd is NULL\n");
+		return -EINVAL;
+	}
+
+	return __ufcs_send_data_msg_config_wd(class, config_wd, true);
+}
+
 static int __ufcs_send_data_msg_refuse(struct ufcs_class *class,
-	struct ufcs_data_msg_refuse *refuse)
+	struct ufcs_data_msg_refuse *refuse, bool retry)
 {
 	struct ufcs_msg *msg;
 	int rc;
@@ -286,7 +457,7 @@ static int __ufcs_send_data_msg_refuse(struct ufcs_class *class,
 	msg->data_msg.length = sizeof(struct ufcs_data_msg_refuse);
 	msg->data_msg.refuse.data = refuse->data;
 
-	rc = ufcs_send_msg(class, msg);
+	rc = ufcs_send_msg(class, msg, retry);
 	if (rc < 0)
 		ufcs_err("send %s data msg error, rc=%d\n",
 			 ufcs_get_data_msg_name(DATA_MSG_REFUSE), rc);
@@ -300,6 +471,15 @@ int ufcs_send_data_msg_refuse(struct ufcs_class *class, struct ufcs_msg *msg,
 {
 	struct ufcs_data_msg_refuse refuse;
 	u8 cmd;
+
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (msg == NULL) {
+		ufcs_err("msg is NULL\n");
+		return -EINVAL;
+	}
 
 	switch (msg->head.type) {
 	case UFCS_CTRL_MSG:
@@ -319,11 +499,47 @@ int ufcs_send_data_msg_refuse(struct ufcs_class *class, struct ufcs_msg *msg,
 
 	refuse.data = UFCS_REFUSE_INFO_DATA(msg->head.index, msg->head.type, cmd, reason);
 
-	return __ufcs_send_data_msg_refuse(class, &refuse);
+	return __ufcs_send_data_msg_refuse(class, &refuse, false);
 }
 
-int ufcs_send_data_msg_verify_request(struct ufcs_class *class,
-	struct ufcs_data_msg_verify_request *verify_request)
+int ufcs_send_data_msg_refuse_retry(struct ufcs_class *class, struct ufcs_msg *msg,
+			      enum ufcs_refuse_reason reason)
+{
+	struct ufcs_data_msg_refuse refuse;
+	u8 cmd;
+
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (msg == NULL) {
+		ufcs_err("msg is NULL\n");
+		return -EINVAL;
+	}
+
+	switch (msg->head.type) {
+	case UFCS_CTRL_MSG:
+		cmd = msg->ctrl_msg.command;
+		break;
+	case UFCS_DATA_MSG:
+		cmd = msg->data_msg.command;
+		break;
+	case UFCS_VENDOR_MSG:
+		cmd = 0;
+		break;
+	default:
+		cmd = 0;
+		reason = REFUSE_UNKNOWN_CMD;
+		break;
+	}
+
+	refuse.data = UFCS_REFUSE_INFO_DATA(msg->head.index, msg->head.type, cmd, reason);
+
+	return __ufcs_send_data_msg_refuse(class, &refuse, true);
+}
+
+static int __ufcs_send_data_msg_verify_request(struct ufcs_class *class,
+	struct ufcs_data_msg_verify_request *verify_request, bool retry)
 {
 	struct ufcs_msg *msg;
 	int rc;
@@ -343,7 +559,7 @@ int ufcs_send_data_msg_verify_request(struct ufcs_class *class,
 	memcpy(msg->data_msg.verify_request.random_data, verify_request->random_data,
 	       UFCS_VERIFY_RANDOM_DATA_SIZE);
 
-	rc = ufcs_send_msg(class, msg);
+	rc = ufcs_send_msg(class, msg, retry);
 	if (rc < 0)
 		ufcs_err("send %s data msg error, rc=%d\n",
 			 ufcs_get_data_msg_name(DATA_MSG_VERIFY_REQUEST), rc);
@@ -352,8 +568,38 @@ int ufcs_send_data_msg_verify_request(struct ufcs_class *class,
 	return rc;
 }
 
-int ufcs_send_data_msg_verify_response(struct ufcs_class *class,
-	struct ufcs_data_msg_verify_response *verify_response)
+int ufcs_send_data_msg_verify_request(struct ufcs_class *class,
+	struct ufcs_data_msg_verify_request *verify_request)
+{
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (verify_request == NULL) {
+		ufcs_err("verify_request is NULL\n");
+		return -EINVAL;
+	}
+
+	return __ufcs_send_data_msg_verify_request(class, verify_request, false);
+}
+
+int ufcs_send_data_msg_verify_request_retry(struct ufcs_class *class,
+	struct ufcs_data_msg_verify_request *verify_request)
+{
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (verify_request == NULL) {
+		ufcs_err("verify_request is NULL\n");
+		return -EINVAL;
+	}
+
+	return __ufcs_send_data_msg_verify_request(class, verify_request, true);
+}
+
+static int __ufcs_send_data_msg_verify_response(struct ufcs_class *class,
+	struct ufcs_data_msg_verify_response *verify_response, bool retry)
 {
 	struct ufcs_msg *msg;
 	int rc;
@@ -374,13 +620,43 @@ int ufcs_send_data_msg_verify_response(struct ufcs_class *class,
 	memcpy(msg->data_msg.verify_response.random_data, verify_response->random_data,
 	       UFCS_VERIFY_RANDOM_DATA_SIZE);
 
-	rc = ufcs_send_msg(class, msg);
+	rc = ufcs_send_msg(class, msg, retry);
 	if (rc < 0)
 		ufcs_err("send %s data msg error, rc=%d\n",
 			 ufcs_get_data_msg_name(DATA_MSG_VERIFY_RESPONSE), rc);
 	devm_kfree(&class->ufcs->dev, msg);
 
 	return rc;
+}
+
+int ufcs_send_data_msg_verify_response(struct ufcs_class *class,
+	struct ufcs_data_msg_verify_response *verify_response)
+{
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (verify_response == NULL) {
+		ufcs_err("verify_response is NULL\n");
+		return -EINVAL;
+	}
+
+	return __ufcs_send_data_msg_verify_response(class, verify_response, false);
+}
+
+int ufcs_send_data_msg_verify_response_retry(struct ufcs_class *class,
+	struct ufcs_data_msg_verify_response *verify_response)
+{
+	if (class == NULL) {
+		ufcs_err("class is NULL\n");
+		return -EINVAL;
+	}
+	if (verify_response == NULL) {
+		ufcs_err("verify_response is NULL\n");
+		return -EINVAL;
+	}
+
+	return __ufcs_send_data_msg_verify_response(class, verify_response, true);
 }
 
 int ufcs_send_data_msg_power_change(struct ufcs_class *class,
@@ -391,7 +667,23 @@ int ufcs_send_data_msg_power_change(struct ufcs_class *class,
 	return -ENOTSUPP;
 }
 
+int ufcs_send_data_msg_power_change_retry(struct ufcs_class *class,
+	struct ufcs_data_msg_power_change *power_change)
+{
+	ufcs_err("sink device not support send %s msg\n",
+		 ufcs_get_data_msg_name(DATA_MSG_POWER_CHANGE));
+	return -ENOTSUPP;
+}
+
 int ufcs_send_data_msg_test_request(struct ufcs_class *class,
+	struct ufcs_data_msg_test_request *test_request)
+{
+	ufcs_err("sink device not support send %s msg\n",
+		 ufcs_get_data_msg_name(DATA_MSG_TEST_REQUEST));
+	return -ENOTSUPP;
+}
+
+int ufcs_send_data_msg_test_request_retry(struct ufcs_class *class,
 	struct ufcs_data_msg_test_request *test_request)
 {
 	ufcs_err("sink device not support send %s msg\n",
@@ -564,10 +856,13 @@ bool ufcs_is_supported_data_msg(struct ufcs_data_msg *msg)
 
 	switch (msg->command) {
 	case DATA_MSG_OUTPUT_CAPABILITIES:
+	case DATA_MSG_REQUEST:
 	case DATA_MSG_SOURCE_INFO:
+	case DATA_MSG_SINK_INFO:
 	case DATA_MSG_CABLE_INFO:
 	case DATA_MSG_DEVICE_INFO:
 	case DATA_MSG_ERROR_INFO:
+	case DATA_MSG_CONFIG_WATCHDOG:
 	case DATA_MSG_REFUSE:
 	case DATA_MSG_VERIFY_REQUEST:
 	case DATA_MSG_VERIFY_RESPONSE:

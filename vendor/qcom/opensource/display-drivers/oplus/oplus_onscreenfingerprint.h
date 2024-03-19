@@ -54,6 +54,12 @@ enum oplus_ofp_ui_status {
 	OPLUS_OFP_UI_READY = 1,
 };
 
+enum oplus_ofp_lhbm_cmd {
+	OPLUS_OFP_POWER_ON_LHBM_ON = 0,
+	OPLUS_OFP_AOD_OFF_LHBM_ON = 1,
+	OPLUS_OFP_LHBM_OFF = 2,
+};
+
 /* remember to initialize params */
 struct oplus_ofp_params {
 	unsigned int fp_type;							/*
@@ -96,6 +102,9 @@ struct oplus_ofp_params {
 	struct workqueue_struct *aod_off_set_wq;		/* a workqueue used to send aod off cmds to speed up aod unlocking */
 	struct work_struct aod_off_set_work;			/* a work struct used to send aod off cmds to speed up aod unlocking */
 	struct notifier_block touchpanel_event_notifier;/* add for touchpanel event notifier */
+	bool lhbm_enable;                               /* indicates whether lhbm mode support or not */
+	bool lhbm_state;								/* indicates whether panel is lhbm state or not */
+	bool lhbm_state_changed;						/* indicates whether lhbm state changed or not */
 };
 
 /* log level config */
@@ -236,6 +245,10 @@ int oplus_ofp_get_ultra_low_power_aod_mode(void *buf);
 ssize_t oplus_ofp_set_ultra_low_power_aod_mode_attr(struct kobject *obj,
 	struct kobj_attribute *attr, const char *buf, size_t count);
 ssize_t oplus_ofp_get_ultra_low_power_aod_mode_attr(struct kobject *obj,
+	struct kobj_attribute *attr, char *buf);
+ssize_t oplus_ofp_set_lhbm_enable_attr(struct kobject *obj,
+	struct kobj_attribute *attr, const char *buf, size_t count);
+ssize_t oplus_ofp_get_lhbm_enable_attr(struct kobject *obj,
 	struct kobj_attribute *attr, char *buf);
 
 #endif /*_OPLUS_ONSCREENFINGERPRINT_H_*/

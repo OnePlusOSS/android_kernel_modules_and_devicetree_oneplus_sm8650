@@ -28,17 +28,8 @@ int ufcs_pe_oplus_get_emark_info(struct ufcs_class *class)
 	int rc;
 
 retry:
-	rc = ufcs_send_oplus_ctrl_msg_get_emark_info(class);
+	rc = ufcs_send_oplus_ctrl_msg_get_emark_info_retry(class);
 	if (rc < 0) {
-		if (rc == -EAGAIN) {
-			if (soft_reset) {
-				rc = -EIO;
-				goto out;
-			}
-			ufcs_send_ctrl_msg_soft_reset(class);
-			soft_reset = true;
-			goto retry;
-		}
 		ufcs_err("send oplus get emark info msg error, rc=%d\n", rc);
 		goto out;
 	}
@@ -120,17 +111,8 @@ int ufcs_pe_oplus_get_power_info(struct ufcs_class *class)
 	int rc;
 
 retry:
-	rc = ufcs_send_oplus_ctrl_msg_get_power_info_ext(class);
+	rc = ufcs_send_oplus_ctrl_msg_get_power_info_ext_retry(class);
 	if (rc < 0) {
-		if (rc == -EAGAIN) {
-			if (soft_reset) {
-				rc = -EIO;
-				goto out;
-			}
-			ufcs_send_ctrl_msg_soft_reset(class);
-			soft_reset = true;
-			goto retry;
-		}
 		ufcs_err("send oplus get emark info msg error, rc=%d\n", rc);
 		goto out;
 	}

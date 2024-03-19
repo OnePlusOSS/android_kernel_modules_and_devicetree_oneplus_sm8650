@@ -1178,16 +1178,18 @@ static inline int get_hybridswapd_reclaim_type(void)
 	else if ((long)(chp_factor - base_factor) > INBALANCE_BASE_FACTOR)
 		type =  RT_PAGE;
 
-	trace_printk("@ %s:%d total_cma_count/3: %lu anon_pg: %lu anon_chp_pg: %lu swap_pg: %lu "
-		     "swap_chp_pg: %lu base_factor:%lu chp_factor:%lu type:%s cma_count:%lu 2*high:%lu cma_pool_shallow:%d "
-		     "cma_pool_size_huge:%d (base_factor - chp_factor):%ld (chp_factor - base_factor):%ld @\n",
-		     __func__, __LINE__, pool_total_cma_count / 3,
-		     anon_pg, anon_chp_pg, swap_pg, swap_chp_pg, base_factor,
-		     chp_factor,  reclaim_type_text[type], pool_cma_count,
-		     SHALLOW_CMA_POOL_FACTOR * pool_high,
-		     cma_pool_shallow, cma_pool_size_huge,
-		     (long)(base_factor - chp_factor),
-		     (long)(chp_factor - base_factor));
+	if (hybridswap_loglevel() >= HS_LOG_DEBUG) {
+		trace_printk("@ %s:%d total_cma_count/3: %lu anon_pg: %lu anon_chp_pg: %lu swap_pg: %lu "
+			     "swap_chp_pg: %lu base_factor:%lu chp_factor:%lu type:%s cma_count:%lu 2*high:%lu cma_pool_shallow:%d "
+			     "cma_pool_size_huge:%d (base_factor - chp_factor):%ld (chp_factor - base_factor):%ld @\n",
+			     __func__, __LINE__, pool_total_cma_count / 3,
+			     anon_pg, anon_chp_pg, swap_pg, swap_chp_pg, base_factor,
+			     chp_factor,  reclaim_type_text[type], pool_cma_count,
+			     SHALLOW_CMA_POOL_FACTOR * pool_high,
+			     cma_pool_shallow, cma_pool_size_huge,
+			     (long)(base_factor - chp_factor),
+			     (long)(chp_factor - base_factor));
+	}
 
 	return type;
 }

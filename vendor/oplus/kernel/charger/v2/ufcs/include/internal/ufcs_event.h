@@ -139,41 +139,48 @@ const char *ufcs_get_event_name(struct ufcs_event *event);
 int ufcs_event_init(struct ufcs_class *class);
 int ufcs_event_reset(struct ufcs_class *class);
 int ufcs_push_event(struct ufcs_class *class, struct ufcs_event *event);
-int ufcs_send_msg(struct ufcs_class *class, struct ufcs_msg *msg);
+int ufcs_send_msg(struct ufcs_class *class, struct ufcs_msg *msg, bool retry);
 void ufcs_free_event(struct ufcs_class *class, struct ufcs_event **event);
 void ufcs_free_all_event(struct ufcs_class *class);
 struct ufcs_event *ufcs_get_next_event(struct ufcs_class *class);
 
 /* ctrl msg api */
 const char *ufcs_get_ctrl_msg_name(enum ufcs_ctrl_msg_type type);
-int ufcs_send_ctrl_msg(struct ufcs_class *class, enum ufcs_ctrl_msg_type type);
+int ufcs_send_ctrl_msg(struct ufcs_class *class, enum ufcs_ctrl_msg_type type, bool retry);
 bool ufcs_is_supported_ctrl_msg(struct ufcs_ctrl_msg *msg);
 bool ufcs_is_ack_nck_msg(struct ufcs_ctrl_msg *msg);
+bool ufcs_is_soft_reset_msg(struct ufcs_ctrl_msg *msg);
+bool ufcs_is_ping_msg(struct ufcs_ctrl_msg *msg);
 bool ufcs_recv_ack_nck_msg(struct ufcs_class *class, struct ufcs_ctrl_msg *msg);
 
 static inline int ufcs_send_ctrl_msg_ack(struct ufcs_class *class)
 {
-	return ufcs_send_ctrl_msg(class, CTRL_MSG_ACK);
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_ACK, false);
 }
 
 static inline int ufcs_send_ctrl_msg_nck(struct ufcs_class *class)
 {
-	return ufcs_send_ctrl_msg(class, CTRL_MSG_NCK);
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_NCK, false);
 }
 
 static inline int ufcs_send_ctrl_msg_ping(struct ufcs_class *class)
 {
-	return ufcs_send_ctrl_msg(class, CTRL_MSG_PING);
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_PING, false);
 }
 
 static inline int ufcs_send_ctrl_msg_accept(struct ufcs_class *class)
 {
-	return ufcs_send_ctrl_msg(class, CTRL_MSG_ACCEPT);
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_ACCEPT, false);
+}
+
+static inline int ufcs_send_ctrl_msg_accept_retry(struct ufcs_class *class)
+{
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_ACCEPT, true);
 }
 
 static inline int ufcs_send_ctrl_msg_soft_reset(struct ufcs_class *class)
 {
-	return ufcs_send_ctrl_msg(class, CTRL_MSG_SOFT_RESET);
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_SOFT_RESET, false);
 }
 
 static inline int ufcs_send_ctrl_msg_power_ready(struct ufcs_class *class)
@@ -181,14 +188,29 @@ static inline int ufcs_send_ctrl_msg_power_ready(struct ufcs_class *class)
 	return -ENOTSUPP;
 }
 
+static inline int ufcs_send_ctrl_msg_power_ready_retry(struct ufcs_class *class)
+{
+	return -ENOTSUPP;
+}
+
 static inline int ufcs_send_ctrl_msg_get_output_capabilities(struct ufcs_class *class)
 {
-	return ufcs_send_ctrl_msg(class, CTRL_MSG_GET_OUTPUT_CAPABILITIES);
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_GET_OUTPUT_CAPABILITIES, false);
+}
+
+static inline int ufcs_send_ctrl_msg_get_output_capabilities_retry(struct ufcs_class *class)
+{
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_GET_OUTPUT_CAPABILITIES, true);
 }
 
 static inline int ufcs_send_ctrl_msg_get_source_info(struct ufcs_class *class)
 {
-	return ufcs_send_ctrl_msg(class, CTRL_MSG_GET_SOURCE_INFO);
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_GET_SOURCE_INFO, false);
+}
+
+static inline int ufcs_send_ctrl_msg_get_source_info_retry(struct ufcs_class *class)
+{
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_GET_SOURCE_INFO, true);
 }
 
 static inline int ufcs_send_ctrl_msg_get_sink_info(struct ufcs_class *class)
@@ -196,39 +218,79 @@ static inline int ufcs_send_ctrl_msg_get_sink_info(struct ufcs_class *class)
 	return -ENOTSUPP;
 }
 
+static inline int ufcs_send_ctrl_msg_get_sink_info_retry(struct ufcs_class *class)
+{
+	return -ENOTSUPP;
+}
+
 static inline int ufcs_send_ctrl_msg_get_cable_info(struct ufcs_class *class)
 {
-	return ufcs_send_ctrl_msg(class, CTRL_MSG_GET_CABLE_INFO);
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_GET_CABLE_INFO, false);
+}
+
+static inline int ufcs_send_ctrl_msg_get_cable_info_retry(struct ufcs_class *class)
+{
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_GET_CABLE_INFO, true);
 }
 
 static inline int ufcs_send_ctrl_msg_get_device_info(struct ufcs_class *class)
 {
-	return ufcs_send_ctrl_msg(class, CTRL_MSG_GET_DEVICE_INFO);
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_GET_DEVICE_INFO, false);
+}
+
+static inline int ufcs_send_ctrl_msg_get_device_info_retry(struct ufcs_class *class)
+{
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_GET_DEVICE_INFO, true);
 }
 
 static inline int ufcs_send_ctrl_msg_get_error_info(struct ufcs_class *class)
 {
-	return ufcs_send_ctrl_msg(class, CTRL_MSG_GET_ERROR_INFO);
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_GET_ERROR_INFO, false);
+}
+
+static inline int ufcs_send_ctrl_msg_get_error_info_retry(struct ufcs_class *class)
+{
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_GET_ERROR_INFO, true);
 }
 
 static inline int ufcs_send_ctrl_msg_detect_cable_info(struct ufcs_class *class)
 {
-	return ufcs_send_ctrl_msg(class, CTRL_MSG_DETECT_CABLE_INFO);
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_DETECT_CABLE_INFO, false);
+}
+
+static inline int ufcs_send_ctrl_msg_detect_cable_info_retry(struct ufcs_class *class)
+{
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_DETECT_CABLE_INFO, true);
 }
 
 static inline int ufcs_send_ctrl_msg_start_cable_detect(struct ufcs_class *class)
 {
-	return ufcs_send_ctrl_msg(class, CTRL_MSG_START_CABLE_DETECT);
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_START_CABLE_DETECT, false);
+}
+
+static inline int ufcs_send_ctrl_msg_start_cable_detect_retry(struct ufcs_class *class)
+{
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_START_CABLE_DETECT, true);
 }
 
 static inline int ufcs_send_ctrl_msg_end_cable_detect(struct ufcs_class *class)
 {
-	return ufcs_send_ctrl_msg(class, CTRL_MSG_END_CABLE_DETECT);
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_END_CABLE_DETECT, false);
+}
+
+static inline int ufcs_send_ctrl_msg_end_cable_detect_retry(struct ufcs_class *class)
+{
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_END_CABLE_DETECT, true);
 }
 
 static inline int ufcs_send_ctrl_msg_exit_ufcs_mode(struct ufcs_class *class)
 {
-	return ufcs_send_ctrl_msg(class, CTRL_MSG_EXIT_UFCS_MODE);
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_EXIT_UFCS_MODE, false);
+}
+
+static inline int ufcs_send_ctrl_msg_exit_ufcs_mode_retry(struct ufcs_class *class)
+{
+	return ufcs_send_ctrl_msg(class, CTRL_MSG_EXIT_UFCS_MODE, true);
 }
 
 /* data msg api */
@@ -239,47 +301,84 @@ int ufcs_data_msg_init(struct ufcs_data_msg *msg);
 int ufcs_data_msg_pack(struct ufcs_data_msg *msg);
 int ufcs_send_data_msg_output_cap(struct ufcs_class *class,
 	struct ufcs_data_msg_output_capabilities *output_cap);
-	int __ufcs_send_data_msg_request(struct ufcs_class *class,
-	struct ufcs_data_msg_request *request);
-int ufcs_send_data_msg_request(struct ufcs_class *class, u8 index, u32 vol, u32 curr);
+int ufcs_send_data_msg_output_cap_retry(struct ufcs_class *class,
+	struct ufcs_data_msg_output_capabilities *output_cap);
+int ufcs_send_data_msg_request(struct ufcs_class *class, u8 index, u32 vol,
+	u32 curr);
+int ufcs_send_data_msg_request_retry(struct ufcs_class *class, u8 index,
+	u32 vol, u32 curr);
 int ufcs_send_data_msg_src_info(struct ufcs_class *class,
+	struct ufcs_data_msg_source_info *src_info);
+int ufcs_send_data_msg_src_info_retry(struct ufcs_class *class,
 	struct ufcs_data_msg_source_info *src_info);
 int ufcs_send_data_msg_sink_info(struct ufcs_class *class,
 	struct ufcs_data_msg_sink_info *sink_info);
+int ufcs_send_data_msg_sink_info_retry(struct ufcs_class *class,
+	struct ufcs_data_msg_sink_info *sink_info);
 int ufcs_send_data_msg_cable_info(struct ufcs_class *class,
+	struct ufcs_data_msg_cable_info *cable_info);
+int ufcs_send_data_msg_cable_info_retry(struct ufcs_class *class,
 	struct ufcs_data_msg_cable_info *cable_info);
 int ufcs_send_data_msg_dev_info(struct ufcs_class *class,
 	struct ufcs_data_msg_device_info *dev_info);
+int ufcs_send_data_msg_dev_info_retry(struct ufcs_class *class,
+	struct ufcs_data_msg_device_info *dev_info);
 int ufcs_send_data_msg_err_info(struct ufcs_class *class,
+	struct ufcs_data_msg_error_info *err_info);
+int ufcs_send_data_msg_err_info_retry(struct ufcs_class *class,
 	struct ufcs_data_msg_error_info *err_info);
 int ufcs_send_data_msg_config_wd(struct ufcs_class *class,
 	struct ufcs_data_msg_config_watchdog *config_wd);
+int ufcs_send_data_msg_config_wd_retry(struct ufcs_class *class,
+	struct ufcs_data_msg_config_watchdog *config_wd);
 int ufcs_send_data_msg_refuse(struct ufcs_class *class, struct ufcs_msg *msg,
 			      enum ufcs_refuse_reason reason);
+int ufcs_send_data_msg_refuse_retry(struct ufcs_class *class,
+				    struct ufcs_msg *msg,
+				    enum ufcs_refuse_reason reason);
 int ufcs_send_data_msg_verify_request(struct ufcs_class *class,
+	struct ufcs_data_msg_verify_request *verify_request);
+int ufcs_send_data_msg_verify_request_retry(struct ufcs_class *class,
 	struct ufcs_data_msg_verify_request *verify_request);
 int ufcs_send_data_msg_verify_response(struct ufcs_class *class,
 	struct ufcs_data_msg_verify_response *verify_response);
+int ufcs_send_data_msg_verify_response_retry(struct ufcs_class *class,
+	struct ufcs_data_msg_verify_response *verify_response);
 int ufcs_send_data_msg_power_change(struct ufcs_class *class,
 	struct ufcs_data_msg_power_change *power_change);
+int ufcs_send_data_msg_power_change_retry(struct ufcs_class *class,
+	struct ufcs_data_msg_power_change *power_change);
 int ufcs_send_data_msg_test_request(struct ufcs_class *class,
+	struct ufcs_data_msg_test_request *test_request);
+int ufcs_send_data_msg_test_request_retry(struct ufcs_class *class,
 	struct ufcs_data_msg_test_request *test_request);
 
 /* vendor msg */
 const char *ufcs_get_oplus_msg_name(enum ufcs_oplus_vnd_msg_type type);
 bool ufcs_is_supported_oplus_ctrl_msg(struct ufcs_vendor_msg *msg);
 bool ufcs_is_supported_oplus_data_msg(struct ufcs_vendor_msg *msg);
-int ufcs_oplus_send_ctrl_msg(struct ufcs_class *class, enum ufcs_oplus_vnd_msg_type type);
+int ufcs_oplus_send_ctrl_msg(struct ufcs_class *class,
+	enum ufcs_oplus_vnd_msg_type type, bool retry);
 int ufcs_oplus_data_msg_init(struct ufcs_vendor_msg *msg);
 
 static inline int ufcs_send_oplus_ctrl_msg_get_emark_info(struct ufcs_class *class)
 {
-	return ufcs_oplus_send_ctrl_msg(class, OPLUS_MSG_GET_EMARK_INFO);
+	return ufcs_oplus_send_ctrl_msg(class, OPLUS_MSG_GET_EMARK_INFO, false);
+}
+
+static inline int ufcs_send_oplus_ctrl_msg_get_emark_info_retry(struct ufcs_class *class)
+{
+	return ufcs_oplus_send_ctrl_msg(class, OPLUS_MSG_GET_EMARK_INFO, true);
 }
 
 static inline int ufcs_send_oplus_ctrl_msg_get_power_info_ext(struct ufcs_class *class)
 {
-	return ufcs_oplus_send_ctrl_msg(class, OPLUS_MSG_GET_POWER_INFO_EXT);
+	return ufcs_oplus_send_ctrl_msg(class, OPLUS_MSG_GET_POWER_INFO_EXT, false);
+}
+
+static inline int ufcs_send_oplus_ctrl_msg_get_power_info_ext_retry(struct ufcs_class *class)
+{
+	return ufcs_oplus_send_ctrl_msg(class, OPLUS_MSG_GET_POWER_INFO_EXT, true);
 }
 
 #endif /* __OPLUS_UFCS_EVENT_H__ */

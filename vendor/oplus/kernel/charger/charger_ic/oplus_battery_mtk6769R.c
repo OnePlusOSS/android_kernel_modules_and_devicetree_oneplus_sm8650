@@ -1141,8 +1141,15 @@ int usbtemp_channel_init(struct device *dev)
 static void set_usbswitch_to_rxtx(struct oplus_chg_chip *chip)
 {
 	int ret = 0;
+
+	if (!chip) {
+		chg_err("oplus_chip not ready!\n");
+		return;
+	}
+	mutex_lock(&chip->normalchg_gpio.pinctrl_mutex);
 	gpio_direction_output(chip->normalchg_gpio.chargerid_switch_gpio, 1);
 	ret = pinctrl_select_state(chip->normalchg_gpio.pinctrl, chip->normalchg_gpio.charger_gpio_as_output2);
+	mutex_unlock(&chip->normalchg_gpio.pinctrl_mutex);
 	if (ret < 0) {
 		chg_err("failed to set pinctrl int\n");
 		return ;
@@ -1152,8 +1159,15 @@ static void set_usbswitch_to_rxtx(struct oplus_chg_chip *chip)
 static void set_usbswitch_to_dpdm(struct oplus_chg_chip *chip)
 {
 	int ret = 0;
+
+	if (!chip) {
+		chg_err("oplus_chip not ready!\n");
+		return;
+	}
+	mutex_lock(&chip->normalchg_gpio.pinctrl_mutex);
 	gpio_direction_output(chip->normalchg_gpio.chargerid_switch_gpio, 0);
 	ret = pinctrl_select_state(chip->normalchg_gpio.pinctrl, chip->normalchg_gpio.charger_gpio_as_output1);
+	mutex_unlock(&chip->normalchg_gpio.pinctrl_mutex);
 	if (ret < 0) {
 		chg_err("failed to set pinctrl int\n");
 		return ;

@@ -179,6 +179,7 @@ _fixed_ipaths = [
     "components/coex/core/inc",
     "components/coex/dispatcher/inc",
     "components/cp_stats/dispatcher/inc",
+    "components/target_if/mlme/inc",
     "components/denylist_mgr/core/inc",
     "components/denylist_mgr/dispatcher/inc",
     "components/disa/core/inc",
@@ -699,6 +700,13 @@ _conditional_srcs = {
             "components/wmi/src/wmi_unified_mc_cp_stats_tlv.c",
             "os_if/cp_stats/src/wlan_cfg80211_mc_cp_stats.c",
         ],
+    },
+    "CONFIG_QCA_TARGET_IF_MLME": {
+	True: [
+	    "components/target_if/mlme/src/target_if_mlme.c",
+	    "components/wmi/src/wmi_unified_mlme_api.c",
+	    "components/wmi/src/wmi_unified_mlme_tlv.c",
+	],
     },
     "CONFIG_DCS": {
         True: [

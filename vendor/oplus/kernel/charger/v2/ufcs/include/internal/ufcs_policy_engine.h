@@ -54,7 +54,7 @@ void ufcs_exit_sm_work(struct ufcs_class *class);
 void ufcs_reset_sm_work(struct ufcs_class *class);
 int ufcs_pe_oplus_get_emark_info(struct ufcs_class *class);
 int ufcs_pe_oplus_get_power_info(struct ufcs_class *class);
-void ufcs_pe_test_handle_work(struct kthread_work *work);
+void ufcs_pe_test_handle_work(struct work_struct *work);
 void ufcs_pe_test_request_handle(struct ufcs_class *class, u16 request);
 
 #endif /* __OPLUS_UFCS_POLICY_ENGINE_H__ */

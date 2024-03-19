@@ -412,6 +412,7 @@ struct cam_ife_hw_mgr_ctx {
     uint64_t                                   rdi1_sof_timestamp;
     uint64_t                                   active_frame_duration;
     uint64_t                                   sof_to_sof;
+    uint32_t                                   error_cnt_after_recovery;
 #endif
 };
 

@@ -3289,26 +3289,6 @@ static int oplus_chg_wls_path_ctrl(struct oplus_chg_wls *wls_dev,
 #endif /* OPLUS_CHG_DEBUG */
 #endif /*MAYBE_DELETE*/
 
-static void oplus_chg_wls_set_bcc_current_iout(struct oplus_chg_wls *wls_dev)
-{
-	struct oplus_chg_wls_status *wls_status = &wls_dev->wls_status;
-	int bcc_icl = 0;
-
-	if (!wls_dev->support_wls_chg_bcc)
-		return;
-
-	bcc_icl = wls_status->bcc_current / wls_dev->wls_bcc_fcc_to_icl_factor;
-
-	if (bcc_icl > 0 &&
-	    (wls_status->wls_type == OPLUS_CHG_WLS_SVOOC ||
-	    wls_status->wls_type == OPLUS_CHG_WLS_PD_65W)) {
-		vote(wls_dev->nor_icl_votable, BCC_CURRENT_VOTER, true, bcc_icl, false);
-		vote(wls_dev->fcc_votable, BCC_CURRENT_VOTER, true, bcc_icl, false);
-	}
-
-	chg_info("set bcc_icl=%d, wls_status->bcc_current=%d\n", bcc_icl, wls_status->bcc_current);
-}
-
 static void oplus_chg_wls_set_cool_down_iout(struct oplus_chg_wls *wls_dev)
 {
 	struct oplus_chg_wls_dynamic_config *dynamic_cfg = &wls_dev->dynamic_config;
@@ -3767,8 +3747,7 @@ static void oplus_chg_wls_config(struct oplus_chg_wls *wls_dev)
 		return;
 	}
 	oplus_chg_wls_set_cool_down_iout(wls_dev);
-	if (wls_dev->support_wls_chg_bcc)
-		oplus_chg_wls_set_bcc_current_iout(wls_dev);
+
 	vote(wls_dev->nor_icl_votable, MAX_VOTER, true, icl_max_ma, true);
 	vote(wls_dev->nor_fcc_votable, MAX_VOTER, true, fcc_max_ma, false);
 	chg_info("chg_type=%d, temp_region=%d, fcc=%d, icl_max=%d\n",
@@ -4315,9 +4294,6 @@ static int oplus_chg_wls_get_prop(struct oplus_chg_mod *ocm,
 	case OPLUS_CHG_PROP_BCC_SUPPORT:
 		pval->intval = oplus_wls_check_bcc_support(wls_dev);
 		break;
-	case OPLUS_CHG_PROP_BCC_CURRENT:
-		pval->intval = wls_status->bcc_current / BCC_TO_ICL;
-		break;
 	case OPLUS_CHG_PROP_RX_VOUT_UVP:
 		pval->intval = 0;
 		break;
@@ -4452,13 +4428,6 @@ static int oplus_chg_wls_set_prop(struct oplus_chg_mod *ocm,
 		}
 		break;
 	case OPLUS_CHG_PROP_FW_UPGRADING:
-		break;
-	case OPLUS_CHG_PROP_BCC_CURRENT:
-		if (wls_dev->support_wls_chg_bcc && pval->intval > 0) {
-			wls_status->bcc_current = pval->intval * BCC_TO_ICL;
-			chg_info("set bcc current to %d\n", wls_status->bcc_current);
-			oplus_chg_wls_config(wls_dev);
-		}
 		break;
 	default:
 		chg_err("set prop %d is not supported\n", prop);
@@ -6763,6 +6732,18 @@ static int oplus_chg_wls_rx_enter_state_fast(struct oplus_chg_wls *wls_dev)
 	case OPLUS_CHG_WLS_FAST_SUB_STATE_WAIT_FAST:
 		if (wls_status->charge_type != WLS_CHARGE_TYPE_FAST)
 			return 500;
+		/* Offset exit fast charge and restore, packet F2 is not returned due to the encrypted packet */
+		if (wls_dev->static_config.fastchg_fod_enable) {
+			if (wls_status->fod_parm_for_fastchg)
+				(void)oplus_chg_wls_rx_set_fod_parm(wls_dev->wls_rx->rx_ic,
+					wls_dev->static_config.fastchg_fod_parm, wls_dev->static_config.fod_parm_len);
+			else if (wls_dev->static_config.fastchg_12v_fod_enable)
+				(void)oplus_chg_wls_rx_set_fod_parm(wls_dev->wls_rx->rx_ic,
+					wls_dev->static_config.fastchg_fod_parm_12v, wls_dev->static_config.fod_parm_len);
+		} else {
+			(void)oplus_chg_wls_rx_set_fod_parm(wls_dev->wls_rx->rx_ic,
+				wls_dev->static_config.disable_fod_parm, wls_dev->static_config.fod_parm_len);
+		}
 		(void)oplus_chg_wls_rx_set_vout(wls_dev->wls_rx, WLS_VOUT_FASTCHG_INIT_MV, -1);
 		oplus_chg_wls_nor_set_vindpm(wls_dev->wls_nor->nor_ic, WLS_VINDPM_AIRSVOOC);
 		vote(wls_dev->nor_icl_votable, USER_VOTER, true, WLS_CURR_WAIT_FAST_MA, false);
@@ -11267,6 +11248,26 @@ static int oplus_chg_wls_update_bcc_temp_range(struct oplus_mms *mms, union mms_
 
 	return 0;
 }
+static int oplus_chg_wls_mms_fcc_to_icl(struct oplus_mms *mms, union mms_msg_data *data)
+{
+	struct oplus_chg_wls *wls_dev;
+	int fcc_to_icl;
+
+	if (mms == NULL) {
+		chg_err("mms is NULL");
+		return -EINVAL;
+	}
+	if (data == NULL) {
+		chg_err("data is NULL");
+		return -EINVAL;
+	}
+	wls_dev = oplus_mms_get_drvdata(mms);
+
+	fcc_to_icl = wls_dev->wls_bcc_fcc_to_icl_factor;
+
+	data->intval = fcc_to_icl;
+	return 0;
+}
 
 static void oplus_chg_wls_mms_update(struct oplus_mms *mms, bool publish)
 {
@@ -11413,6 +11414,16 @@ static struct mms_item oplus_chg_wls_mms_item[] = {
 			.down_thr_enable = false,
 			.dead_thr_enable = false,
 			.update = oplus_chg_wls_update_bcc_temp_range,
+		}
+	},
+	{
+		.desc = {
+			.item_id = WLS_ITEM_FCC_TO_ICL,
+			.str_data = false,
+			.up_thr_enable = false,
+			.down_thr_enable = false,
+			.dead_thr_enable = false,
+			.update = oplus_chg_wls_mms_fcc_to_icl,
 		}
 	},
 };

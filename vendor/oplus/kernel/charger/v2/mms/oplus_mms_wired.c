@@ -395,8 +395,6 @@ int oplus_wired_get_charger_cycle(void)
 	if (rc < 0) {
 		if (rc != -ENOTSUPP)
 			chg_err("error: get charger cycle, rc=%d\n", rc);
-	} else {
-		chg_info("charger_cycle = %d\n", cycle);
 	}
 
 	return cycle;
@@ -3721,10 +3719,19 @@ oplus_mms_wired_chg_type_change_handler_work(struct work_struct *work)
 		kfree(msg);
 	}
 
-	if (chip->cpa_support && real_chg_type == OPLUS_CHG_USB_TYPE_PD && chip->cpa_topic) {
+	if (chip->cpa_support && chip->cpa_topic &&
+	    (real_chg_type == OPLUS_CHG_USB_TYPE_PD || real_chg_type == OPLUS_CHG_USB_TYPE_PD_PPS)) {
 		oplus_mms_get_item_data(chip->cpa_topic, CPA_ITEM_ALLOW, &data, true);
-		if (data.intval != CHG_PROTOCOL_PD)
+		if (data.intval != CHG_PROTOCOL_PD && real_chg_type == OPLUS_CHG_USB_TYPE_PD) {
 			oplus_cpa_request(chip->cpa_topic, CHG_PROTOCOL_PD);
+			chg_info("pd message came late. Retry arbitration.\n");
+		} else if (data.intval != CHG_PROTOCOL_PPS && real_chg_type == OPLUS_CHG_USB_TYPE_PD_PPS) {
+			oplus_cpa_request(chip->cpa_topic, CHG_PROTOCOL_PPS);
+			chg_info("pps message came late. Retry arbitration.\n");
+		} else {
+			chg_info("%s message came late. do nothing.\n",
+				 real_chg_type == OPLUS_CHG_USB_TYPE_PD ? "PD" : "PPS");
+		}
 	}
 }
 

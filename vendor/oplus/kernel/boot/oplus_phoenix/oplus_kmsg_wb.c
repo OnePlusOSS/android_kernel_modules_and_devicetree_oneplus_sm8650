@@ -518,7 +518,7 @@ static int reserve_log_main(void *arg)
 		oprkl_err_print("read uefi_log_thread_header failed\n");
 		goto EXIT;
 	}
-	//oprkl_info_print("Now kernel boot count %d and uefi boot count %llu, is_monitoring %d, log number:[%llu / 8]\n", kernel_head.bootcount, uefi_head.bootcount, kernel_head.is_monitoring, kernel_head.bootcount % MAX_LOG_NUM);
+	oprkl_info_print("Now kernel boot count %llu and uefi boot count %llu, is_monitoring %d, log number:[%llu / 8]\n", kernel_head.bootcount, uefi_head.bootcount, kernel_head.is_monitoring, kernel_head.bootcount % MAX_LOG_NUM);
 	wb_start_offset += (HEADER_BLOCK + (kernel_head.bootcount % MAX_LOG_NUM) * PER_LOG_BLOCKS) * WB_BLOCK_SIZE;
 	oprkl_info_print("Write back start offset %llu\n", wb_start_offset);
 

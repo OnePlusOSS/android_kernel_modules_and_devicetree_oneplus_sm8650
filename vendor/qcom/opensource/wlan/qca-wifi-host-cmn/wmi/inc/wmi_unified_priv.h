@@ -113,6 +113,10 @@
 #include "wlan_coap_public_structs.h"
 #endif
 
+#ifdef QCA_TARGET_IF_MLME
+#include "wmi_unified_mlme_api.h"
+#endif
+
 #define WMI_UNIFIED_MAX_EVENT 0x100
 
 #ifdef WMI_EXT_DBG
@@ -3427,6 +3431,12 @@ QDF_STATUS (*extract_aoa_caps_service_ready_ext2)
 		(struct wmi_unified *wmi_handle, uint8_t *buf,
 		 struct wlan_psoc_host_rcc_enh_aoa_caps_ext2 *aoa_cap);
 #endif /* WLAN_RCC_ENHANCED_AOA_SUPPORT */
+
+#ifdef QCA_TARGET_IF_MLME
+QDF_STATUS (*send_csa_event_status_ind)(
+		wmi_unified_t wmi_handle,
+		struct csa_event_status_ind params);
+#endif /* QCA_TARGET_IF_MLME */
 };
 
 /* Forward declaration for psoc*/
@@ -4008,6 +4018,14 @@ static inline void wmi_cp_stats_attach_tlv(struct wmi_unified *wmi_handle)
 {
 }
 #endif /* QCA_SUPPORT_CP_STATS */
+
+#ifdef QCA_TARGET_IF_MLME
+void wmi_mlme_attach_tlv(wmi_unified_t wmi_handle);
+#else
+static inline void wmi_mlme_attach_tlv(wmi_unified_t wmi_handle)
+{
+}
+#endif /* QCA_TARGET_IF_MLME */
 
 #ifdef QCA_SUPPORT_MC_CP_STATS
 void wmi_mc_cp_stats_attach_tlv(struct wmi_unified *wmi_handle);

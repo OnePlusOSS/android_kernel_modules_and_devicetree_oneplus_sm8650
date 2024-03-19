@@ -9,6 +9,7 @@
 #include <linux/mutex.h>
 #include <linux/rwsem.h>
 #include <linux/ww_mutex.h>
+#include <linux/percpu-rwsem.h>
 #include <linux/sched/signal.h>
 #include <linux/sched/rt.h>
 #include <linux/sched/wake_q.h>
@@ -354,6 +355,15 @@ static void record_lock_starttime_handler(void *unused,
 	update_locking_time(settime, true);
 }
 
+#ifdef CONFIG_PCPU_RWSEM_LOCKING_PROTECT
+static void percpu_rwsem_wq_add_handler(void *unused,
+			struct percpu_rw_semaphore *sem, bool reader)
+{
+	if(likely(reader))
+		update_locking_time(jiffies, false);
+}
+#endif
+
 static void check_preempt_tick_handler(void *unused, struct task_struct *p,
 			unsigned long *ideal_runtime, bool *skip_preempt,
 			unsigned long delta_exec, struct cfs_rq *cfs_rq,
@@ -412,6 +422,12 @@ static int register_dstate_opt_vendor_hooks(void)
 		pr_err("record_pcpu_rwsem_starttime failed! ret=%d\n", ret);
 		goto out3;
 	}
+	ret = register_trace_android_vh_percpu_rwsem_wq_add(
+					percpu_rwsem_wq_add_handler, NULL);
+	if (ret != 0) {
+		pr_err("percpu_rwsem_wq_add failed! ret=%d\n", ret);
+		goto out4;
+	}
 #endif
 	ret = register_trace_android_rvh_check_preempt_tick(check_preempt_tick_handler,
 								NULL);
@@ -424,23 +440,26 @@ static int register_dstate_opt_vendor_hooks(void)
 			android_vh_alter_rwsem_list_add_handler, NULL);
 	if (ret != 0) {
 		pr_err("register_trace_android_vh_alter_rwsem_list_add failed! ret=%d\n", ret);
-		goto out4;
+		goto out5;
 	}
 
 	ret = register_trace_android_vh_mutex_wait_start(android_vh_mutex_wait_start_handler, NULL);
 	if (ret != 0) {
 		pr_err("register_trace_android_vh_mutex_wait_start failed! ret=%d\n", ret);
-		goto out4;
+		goto out5;
 	}
 	ret = register_trace_android_vh_rtmutex_wait_start(android_vh_rtmutex_wait_start_handler, NULL);
 	if (ret != 0) {
 		pr_err("register_trace_android_vh_rtmutex_wait_start failed! ret=%d\n", ret);
-		goto out4;
+		goto out5;
 	}
 	return ret;
 
-out4:
+out5:
 #ifdef CONFIG_PCPU_RWSEM_LOCKING_PROTECT
+	unregister_trace_android_vh_percpu_rwsem_wq_add(
+					percpu_rwsem_wq_add_handler, NULL);
+out4:
 	unregister_trace_android_vh_record_pcpu_rwsem_starttime(
 				record_lock_starttime_handler, NULL);
 out3:
@@ -465,6 +484,8 @@ static void unregister_dstate_opt_vendor_hooks(void)
 	unregister_trace_android_vh_alter_rwsem_list_add(
 			android_vh_alter_rwsem_list_add_handler, NULL);
 #ifdef CONFIG_PCPU_RWSEM_LOCKING_PROTECT
+	unregister_trace_android_vh_percpu_rwsem_wq_add(
+					percpu_rwsem_wq_add_handler, NULL);
 	unregister_trace_android_vh_record_pcpu_rwsem_starttime(
 				record_lock_starttime_handler, NULL);
 #endif

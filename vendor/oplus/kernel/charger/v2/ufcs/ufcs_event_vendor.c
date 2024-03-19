@@ -87,7 +87,8 @@ const char *ufcs_get_oplus_power_info_type_str(enum ufcs_oplus_vnd_power_info_ty
 }
 EXPORT_SYMBOL(ufcs_get_oplus_power_info_type_str);
 
-int ufcs_oplus_send_ctrl_msg(struct ufcs_class *class, enum ufcs_oplus_vnd_msg_type type)
+int ufcs_oplus_send_ctrl_msg(struct ufcs_class *class,
+	enum ufcs_oplus_vnd_msg_type type, bool retry)
 {
 	struct ufcs_msg *msg;
 	int rc;
@@ -104,7 +105,7 @@ int ufcs_oplus_send_ctrl_msg(struct ufcs_class *class, enum ufcs_oplus_vnd_msg_t
 	msg->vendor_msg.length = 1;
 	msg->vendor_msg.vnd_msg.type = type;
 
-	rc = ufcs_send_msg(class, msg);
+	rc = ufcs_send_msg(class, msg, retry);
 	if (rc < 0)
 		ufcs_err("send oplus %s ctrl msg error, rc=%d\n",
 			 ufcs_get_oplus_msg_name(type), rc);

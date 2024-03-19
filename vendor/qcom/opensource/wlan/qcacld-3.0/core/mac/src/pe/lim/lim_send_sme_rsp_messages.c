@@ -2244,6 +2244,7 @@ void lim_handle_sta_csa_param(struct mac_context *mac_ctx,
 	    session_entry->ch_width == lim_ch_switch->ch_width &&
 	    lim_is_puncture_same(lim_ch_switch, session_entry)) {
 		pe_debug("Ignore CSA, no change in ch, bw and puncture");
+		wlan_mlme_send_csa_event_status_ind(session_entry->vdev, 0);
 		goto err;
 	}
 

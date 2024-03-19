@@ -11064,28 +11064,28 @@ void oplus_ccdetect_enable(void)
 
 	rc = smblib_read(chg, TYPE_C_MODE_CFG_REG, &stat);
 	if (rc < 0) {
-		printk(KERN_ERR "[OPLUS_CHG][%s]: 111 Couldn't read 0x1368 rc=%d\n", __func__, rc);
+		printk(KERN_ERR "[OPLUS_CHG][%s]: 111 Couldn't read 0x1544 rc=%d\n", __func__, rc);
 	} else {
-		printk(KERN_ERR "[OPLUS_CHG][%s]:111 reg0x1368[0x%x], bit[2:0]=0(DRP)\n", __func__, stat);
+		printk(KERN_ERR "[OPLUS_CHG][%s]:111 reg0x1544[0x%x], bit[2:0]=0(DRP)\n", __func__, stat);
 	}
 
-	/* set DRP mode */
+	/* set try sink mode */
 	rc = smblib_masked_write(chg, TYPE_C_MODE_CFG_REG,
-			TYPEC_POWER_ROLE_CMD_MASK, 0x0);//bit[2:0]=0
+			TYPEC_POWER_ROLE_CMD_MASK | TYPEC_TRY_MODE_MASK, EN_TRY_SNK_BIT);/*bit[4:0]= 0x10*/
 	if (rc < 0) {
-		printk(KERN_ERR "[OPLUS_CHG][%s]: Couldn't clear 0x1368[0] rc=%d\n", __func__, rc);
+		printk(KERN_ERR "[OPLUS_CHG][%s]: Couldn't clear 0x1544[0] rc=%d\n", __func__, rc);
 	}
 
 	rc = smblib_read(chg, TYPE_C_MODE_CFG_REG, &stat);
 	if (rc < 0) {
-		printk(KERN_ERR "[OPLUS_CHG][%s]: Couldn't read 0x1368 rc=%d\n", __func__, rc);
+		printk(KERN_ERR "[OPLUS_CHG][%s]: Couldn't read 0x1544 rc=%d\n", __func__, rc);
 	} else {
-		printk(KERN_ERR "[OPLUS_CHG][%s]: reg0x1368[0x%x], bit[2:0]=0(DRP)\n", __func__, stat);
+		printk(KERN_ERR "[OPLUS_CHG][%s]: reg0x1544[0x%x], bit[2:0]=0(DRP)\n", __func__, stat);
 	}
 }
 
 void oplus_ccdetect_disable(void)
-{    
+{
 	int rc;
 	u8 stat;
 	struct smb_charger *chg = NULL;
@@ -11107,14 +11107,14 @@ void oplus_ccdetect_disable(void)
 			TYPEC_POWER_ROLE_CMD_MASK | TYPEC_TRY_MODE_MASK, EN_SNK_ONLY_BIT);//bit[4:0]=0x02
 #endif
 	if (rc < 0) {
-		printk(KERN_ERR "[OPLUS_CHG][%s]: Couldn't set 0x1368[2] rc=%d\n", __func__, rc);
+		printk(KERN_ERR "[OPLUS_CHG][%s]: Couldn't set 0x1544[2] rc=%d\n", __func__, rc);
 	}
 
 	rc = smblib_read(chg, TYPE_C_MODE_CFG_REG, &stat);
 	if (rc < 0) {
-		printk(KERN_ERR "[OPLUS_CHG][%s]: Couldn't read 0x1368 rc=%d\n", __func__, rc);
+		printk(KERN_ERR "[OPLUS_CHG][%s]: Couldn't read 0x1544 rc=%d\n", __func__, rc);
 	} else {
-		printk(KERN_ERR "[OPLUS_CHG][%s]: reg0x1368[0x%x], bit[2:0]=4(UFP)\n", __func__, stat);
+		printk(KERN_ERR "[OPLUS_CHG][%s]: reg0x1544[0x%x], bit[2:0]=4(UFP)\n", __func__, stat);
 	}
 }
 

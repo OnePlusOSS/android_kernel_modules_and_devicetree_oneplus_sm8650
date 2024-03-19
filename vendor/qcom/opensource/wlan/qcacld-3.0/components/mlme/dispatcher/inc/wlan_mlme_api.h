@@ -4772,4 +4772,15 @@ wlan_mlme_set_ap_oper_ch_width(struct wlan_objmgr_vdev *vdev,
  */
 enum phy_ch_width
 wlan_mlme_get_ap_oper_ch_width(struct wlan_objmgr_vdev *vdev);
+
+/**
+ * wlan_mlme_send_csa_event_status_ind() - send csa event status ind
+ * @vdev: vdev obj
+ * @csa_status: csa status
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS
+wlan_mlme_send_csa_event_status_ind(struct wlan_objmgr_vdev *vdev,
+				    uint8_t csa_status);
 #endif /* _WLAN_MLME_API_H_ */

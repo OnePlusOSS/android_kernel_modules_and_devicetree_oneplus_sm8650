@@ -14842,8 +14842,10 @@ void sme_set_bss_max_idle_period(mac_handle_t mac_handle, uint16_t cfg_val)
 #ifdef WLAN_FEATURE_11BE
 static void sme_set_eht_mcs_info(struct mac_context *mac_ctx)
 {
-	mac_ctx->eht_cap_2g.bw_le_80_rx_max_nss_for_mcs_0_to_9 = 1;
-	mac_ctx->eht_cap_2g.bw_le_80_tx_max_nss_for_mcs_0_to_9 = 1;
+	if (mac_ctx->usr_eht_testbed_cfg) {
+		mac_ctx->eht_cap_2g.bw_le_80_rx_max_nss_for_mcs_0_to_9 = 1;
+		mac_ctx->eht_cap_2g.bw_le_80_tx_max_nss_for_mcs_0_to_9 = 1;
+	}
 }
 #else
 #ifdef WLAN_FEATURE_11AX

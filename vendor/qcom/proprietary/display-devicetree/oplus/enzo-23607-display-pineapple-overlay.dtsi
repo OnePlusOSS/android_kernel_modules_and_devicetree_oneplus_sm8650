@@ -5,6 +5,8 @@
 #include "panel/dsi-panel-enzo-boe-ili7838e-1264-2780-dvt-dsc-cmd.dtsi"
 #include "panel/dsi-panel-enzo-boe-ili7838e-1264-2780-dvt-low-dsc-cmd.dtsi"
 #include "panel/dsi-panel-enzo-boe-ili7838e-1264-2780-pvt-dsc-cmd.dtsi"
+#include "panel/dsi-panel-enzo-boe-ili7838e-1264-2780-pre-pvt-dsc-cmd.dtsi"
+#include "panel/dsi-panel-enzo-boe-ili7838e-1264-2780-pvt-bd-dsc-cmd.dtsi"
 &soc {
 	oplus_display_dev: oplus,dsi-display-dev {
 		oplus,dsi-panel-primary = <
@@ -15,6 +17,8 @@
 			&dsi_panel_enzo_boe_ili7838e_1264_2780_dvt_dsc_cmd
 			&dsi_panel_enzo_boe_ili7838e_1264_2780_dvt_low_dsc_cmd
 			&dsi_panel_enzo_boe_ili7838e_1264_2780_pvt_dsc_cmd
+                        &dsi_panel_enzo_boe_ili7838e_1264_2780_pre_pvt_dsc_cmd
+                        &dsi_panel_enzo_boe_ili7838e_1264_2780_pvt_bd_dsc_cmd
 		>;
 		oplus,dsi-panel-secondary = <
 		>;

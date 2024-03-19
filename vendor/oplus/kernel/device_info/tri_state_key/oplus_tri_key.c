@@ -42,7 +42,6 @@
 
 #include <linux/string.h>
 #include <linux/version.h>
-#include <soc/oplus/system/oplus_project.h>
 
 #include "oplus_tri_key.h"
 
@@ -655,7 +654,7 @@ static int judge_interference(struct extcon_dev_data *chip)
 			}
 			return 0;
 		}
-		if ((chip->project_id == 22825) &&
+		if (chip->updown_to_mid_support &&
 			(last_position == UP_STATE) &&
 			(delta < (calib_mdvaluemin - mid_down_tol))) {
 			TRI_KEY_LOG("calib_Min:%d, mid_down_tol:%d\n", calib_mdvaluemin, mid_down_tol);
@@ -669,7 +668,7 @@ static int judge_interference(struct extcon_dev_data *chip)
 			}
 			return 0;
 		}
-		if ((chip->project_id == 22825) &&
+		if (chip->updown_to_mid_support &&
 			(last_position == DOWN_STATE) &&
 			(delta > (calib_mdvaluemin + up_mid_tol))) {
 			TRI_KEY_LOG("calib_Min:%d, up_mid_tol:%d\n", calib_mdvaluemin, up_mid_tol);
@@ -1038,94 +1037,115 @@ static int threeaxis_get_position(struct extcon_dev_data *chip)
 static int reupdata_threshold(struct extcon_dev_data *chip)
 {
 	int res = 0;
-	int tolen = 22;
+	int tolen[3] = {22, 22, 22};
 
-	if (chip->project_id == 22825) {
-		tolen = 16;
+	if ((g_the_chip->tolen[0] > 0) && (g_the_chip->tolen[1] > 0) &&
+		(g_the_chip->tolen[2] > 0)) {
+		tolen[0] = g_the_chip->tolen[0];
+		tolen[1] = g_the_chip->tolen[1];
+		tolen[2] = g_the_chip->tolen[2];
 	}
+
 	switch (chip->position) {
 	case UP_STATE:
 			res = oplus_hall_update_threshold(DHALL_1, UP_STATE,
-			chip->dhall_data1-tolen, chip->dhall_data1+tolen);
+			chip->dhall_data1-tolen[0], chip->dhall_data1+tolen[0]);
 			if (res < 0) {
 				TRI_KEY_LOG("updata_threshold fail:%d\n", res);
 				goto fail;
 			}
-			if (chip->project_id == 22825) {
+			if (g_the_chip->new_threshold_support) {
 				res = oplus_hall_update_threshold(DHALL_0, UP_STATE,
-				chip->dhall_data0-tolen, chip->dhall_data0+tolen);
+					chip->dhall_data0 - tolen[0], chip->dhall_data0 + tolen[0]);
+				if (res < 0) {
+					TRI_KEY_LOG("updata_threshold fail:%d\n", res);
+					goto fail;
+				}
+				TRI_KEY_LOG("tri_key:updata_threshold up:low:%d,high: %d\n",
+				chip->dhall_data1 - tolen[0], chip->dhall_data1 + tolen[0]);
+				TRI_KEY_LOG("tri_key:updata_threshold down:low:%d,high: %d\n",
+				chip->dhall_data0 - tolen[0], chip->dhall_data0 + tolen[0]);
 			} else {
-				res = oplus_hall_update_threshold(DHALL_0, UP_STATE, -500, 500);
+				res = oplus_hall_update_threshold(DHALL_0, UP_STATE,
+					-500, 500);
+				if (res < 0) {
+					TRI_KEY_LOG("updata_threshold fail:%d\n", res);
+					goto fail;
+				}
+				TRI_KEY_LOG("tri_key:updata_threshold up:low:%d,high: %d\n",
+				chip->dhall_data1 - tolen[0], chip->dhall_data1 + tolen[0]);
 			}
-			if (res < 0) {
-				TRI_KEY_LOG("updata_threshold fail:%d\n", res);
-				goto fail;
-			}
-		TRI_KEY_LOG("tri_key:updata_threshold up:low:%d,high: %d\n",
-			chip->dhall_data1-tolen, chip->dhall_data1+tolen);
 		oplus_hall_clear_irq(DHALL_1);
 		oplus_hall_clear_irq(DHALL_0);
 		break;
 	case MID_STATE:
 		if (chip->dhall_data0 < 0 || chip->dhall_data1 < 0) {
 			res = oplus_hall_update_threshold(DHALL_1, MID_STATE,
-			chip->dhall_data1 - tolen, chip->dhall_data1 + tolen);
+			chip->dhall_data1 - tolen[1], chip->dhall_data1 + tolen[1]);
 			if (res < 0) {
 				TRI_KEY_LOG("updata_threshold fail:%d\n", res);
 				goto fail;
 			}
 		TRI_KEY_LOG("tri_key:updata_threshold up:low:%d,high:%d\n",
-			chip->dhall_data1 - tolen, chip->dhall_data1 + tolen);
+			chip->dhall_data1 - tolen[1], chip->dhall_data1 + tolen[1]);
 		} else {
 			res = oplus_hall_update_threshold(DHALL_1, MID_STATE,
-			chip->dhall_data1 - tolen, chip->dhall_data1 + tolen);
+			chip->dhall_data1 - tolen[1], chip->dhall_data1 + tolen[1]);
 			if (res < 0) {
 				TRI_KEY_LOG("updata_threshold fail:%d\n", res);
 				goto fail;
 			}
 		TRI_KEY_LOG("tri_key:updata_threshold up:low:%d,high:%d\n",
-			chip->dhall_data1 - tolen, chip->dhall_data1 + tolen);
+			chip->dhall_data1 - tolen[1], chip->dhall_data1 + tolen[1]);
 		}
 		oplus_hall_clear_irq(DHALL_1);
 		if (chip->dhall_data0 < 0 || chip->dhall_data1 < 0) {
 			res = oplus_hall_update_threshold(DHALL_0, MID_STATE,
-			chip->dhall_data0 - tolen, chip->dhall_data0 + tolen);
+			chip->dhall_data0 - tolen[1], chip->dhall_data0 + tolen[1]);
 			if (res < 0) {
 				TRI_KEY_LOG("updata_threshold fail:%d\n", res);
 				goto fail;
 			}
 		TRI_KEY_LOG("tri_key:updata_threshold down:low:%d,high:%d\n",
-		chip->dhall_data0 - tolen, chip->dhall_data0 + tolen);
+		chip->dhall_data0 - tolen[1], chip->dhall_data0 + tolen[1]);
 		} else {
 			res = oplus_hall_update_threshold(DHALL_0, MID_STATE,
-			chip->dhall_data0 - tolen, chip->dhall_data0 + tolen);
+			chip->dhall_data0 - tolen[1], chip->dhall_data0 + tolen[1]);
 			if (res < 0) {
 				TRI_KEY_LOG("updata_threshold fail:%d\n", res);
 				goto fail;
 			}
 		TRI_KEY_LOG("tri_key:updata_threshold down:low:%d,high:%d\n",
-			chip->dhall_data0 - tolen, chip->dhall_data0 + tolen);
+			chip->dhall_data0 - tolen[1], chip->dhall_data0 + tolen[1]);
 		}
 		oplus_hall_clear_irq(DHALL_0);
 		break;
 	case DOWN_STATE:
 		res = oplus_hall_update_threshold(DHALL_0, DOWN_STATE,
-			chip->dhall_data0 - tolen, chip->dhall_data0 + tolen);
+			chip->dhall_data0 - tolen[2], chip->dhall_data0 + tolen[2]);
 		if (res < 0) {
 			TRI_KEY_LOG("updata_threshold fail:%d\n", res);
 			goto fail;
 		}
 		TRI_KEY_LOG("tri_key:updata_threshold down:low:%d,high:%d\n",
-			chip->dhall_data0 - tolen, chip->dhall_data0 + tolen);
-		if (chip->project_id == 22825) {
+			chip->dhall_data0 - tolen[2], chip->dhall_data0 + tolen[2]);
+
+		if (g_the_chip->new_threshold_support) {
 			res = oplus_hall_update_threshold(DHALL_1, DOWN_STATE,
-			chip->dhall_data1 - tolen, chip->dhall_data1 + tolen);
+				chip->dhall_data1 - tolen[2], chip->dhall_data1 + tolen[2]);
+			if (res < 0) {
+				TRI_KEY_LOG("updata_threshold fail:%d\n", res);
+				goto fail;
+			}
+			TRI_KEY_LOG("tri_key:updata_threshold up:low:%d,high:%d\n",
+			chip->dhall_data1 - tolen[2], chip->dhall_data1 + tolen[2]);
 		} else {
-			res = oplus_hall_update_threshold(DHALL_1, DOWN_STATE, -500, 500);
-		}
-		if (res < 0) {
-			TRI_KEY_LOG("updata_threshold fail:%d\n", res);
-			goto fail;
+			res = oplus_hall_update_threshold(DHALL_1, DOWN_STATE,
+				-500, 500);
+			if (res < 0) {
+				TRI_KEY_LOG("updata_threshold fail:%d\n", res);
+				goto fail;
+			}
 		}
 
 		oplus_hall_clear_irq(DHALL_0);
@@ -1564,6 +1584,266 @@ static void tri_key_timeout_work_func(struct work_struct *work)
 		}
 }
 
+static void trikey_speedup_resume(struct work_struct *work)
+{
+	int err;
+
+	TRI_KEY_LOG("%s call\n", __func__);
+	if (g_the_chip->threeaxis_hall_support) {
+		disable_irq(g_the_chip->irq);
+		err = threeaxis_judge_calibration_data(g_the_chip);
+		if (err < 0) {
+			enable_irq(g_the_chip->irq);
+			return;
+		}
+		err = threeaxis_get_data(g_the_chip);
+		threeaxis_judge_interference(g_the_chip);
+		err = threeaxis_get_position(g_the_chip);
+		msleep(10);
+		enable_irq(g_the_chip->irq);
+	} else {
+		reupdata_threshold(g_the_chip);
+	}
+	TRI_KEY_LOG("%s exit\n", __func__);
+}
+
+#if IS_ENABLED(CONFIG_QCOM_PANEL_EVENT_NOTIFIER)
+static void trikey_panel_notifier_callback(enum panel_event_notifier_tag tag,
+		 struct panel_event_notification *notification, void *client_data)
+{
+	if (!notification) {
+		TRI_KEY_LOG("Invalid notification\n");
+		return;
+	}
+	if (notification->notif_type < DRM_PANEL_EVENT_FOR_TOUCH) {
+		TRI_KEY_LOG("Notification type:%d, early_trigger:%d",
+			notification->notif_type,
+			notification->notif_data.early_trigger);
+	}
+
+	if (g_hall_dev->bus_ready == false) {
+		TRI_KEY_LOG("bus_ready not ready, tp exit\n");
+		return;
+	}
+
+	if (notification->notif_type == DRM_PANEL_EVENT_UNBLANK && notification->notif_data.early_trigger && g_the_chip->is_suspended) {
+		g_the_chip->is_suspended = false;
+		queue_work(g_the_chip->speedup_resume_wq, &g_the_chip->speed_up_work);
+	} else if (notification->notif_type == DRM_PANEL_EVENT_BLANK) {
+		g_the_chip->is_suspended = true;
+	}
+}
+
+#elif IS_ENABLED(CONFIG_OPLUS_MTK_DRM_GKI_NOTIFY)
+static int trikey_mtk_drm_notifier_callback(struct notifier_block *nb,
+	unsigned long event, void *data)
+{
+	int *blank = (int *)data;
+
+	TRI_KEY_LOG("mtk gki notifier event:%lu, blank:%d",
+			event, *blank);
+
+	if (*blank == MTK_DISP_BLANK_UNBLANK && event == MTK_DISP_EARLY_EVENT_BLANK && g_the_chip->is_suspended) {
+		g_the_chip->is_suspended = false;
+		queue_work(g_the_chip->speedup_resume_wq, &g_the_chip->speed_up_work);
+	} else if (*blank == MTK_DISP_BLANK_POWERDOWN) {
+		g_the_chip->is_suspended = true;
+	}
+
+	return 0;
+}
+
+#else
+static int fb_notifier_callback(struct notifier_block *self, unsigned long event, void *data)
+{
+	int *blank;
+#if IS_ENABLED(CONFIG_DRM_MSM) || IS_ENABLED(CONFIG_DRM_OPLUS_NOTIFY)
+	struct msm_drm_notifier *evdata = data;
+#else
+	struct fb_event *evdata = data;
+#endif
+
+	/*to aviod some kernel bug (at fbmem.c some local veriable are not initialized)*/
+#if IS_ENABLED(CONFIG_DRM_MSM) || IS_ENABLED(CONFIG_DRM_OPLUS_NOTIFY)
+	if (event != MSM_DRM_EARLY_EVENT_BLANK && event != MSM_DRM_EVENT_BLANK)
+#else
+	if (event != FB_EARLY_EVENT_BLANK && event != FB_EVENT_BLANK)
+#endif
+		return 0;
+
+	if (evdata && evdata->data) {
+		blank = evdata->data;
+		TRI_KEY_LOG("%s: event = %ld, blank = %d\n", __func__, event, *blank);
+#if IS_ENABLED(CONFIG_DRM_MSM) || IS_ENABLED(CONFIG_DRM_OPLUS_NOTIFY)
+		if (*blank == MSM_DRM_BLANK_UNBLANK && event == MSM_DRM_EARLY_EVENT_BLANK && g_the_chip->is_suspended) { /*resume*/
+#else
+		if (*blank == FB_BLANK_UNBLANK && event == FB_EARLY_EVENT_BLANK && g_the_chip->is_suspended) {  /*resume*/
+#endif
+			g_the_chip->is_suspended = false;
+			queue_work(g_the_chip->speedup_resume_wq, &g_the_chip->speed_up_work);
+#if IS_ENABLED(CONFIG_DRM_MSM) || IS_ENABLED(CONFIG_DRM_OPLUS_NOTIFY)
+		} else if (*blank == MSM_DRM_BLANK_BLANK) { /*suspend*/
+#else
+		} else if (*blank == FB_BLANK_BLANK) {  /*suspend*/
+#endif
+			g_the_chip->is_suspended = true;
+		}
+	}
+
+	return 0;
+}
+#endif
+
+#if IS_ENABLED(CONFIG_DRM_OPLUS_PANEL_NOTIFY) || IS_ENABLED(CONFIG_QCOM_PANEL_EVENT_NOTIFIER)
+struct drm_panel *trikey_dev_get_panel(struct device_node *of_node)
+{
+	int i;
+	int count;
+	struct device_node *node;
+	struct drm_panel *panel;
+	struct device_node *np;
+	char disp_node[32] = {0};
+
+	np = of_find_node_by_name(NULL, "oplus,dsi-display-dev");
+	if (!np) {
+		TRI_KEY_LOG("[oplus,dsi-display-dev] is missing, try to find [panel] node \n");
+		np = of_node;
+		TRI_KEY_LOG("np full name = %s \n", np->full_name);
+		strncpy(disp_node, "panel", sizeof("panel"));
+	} else {
+		TRI_KEY_LOG("[oplus,dsi-display-dev] node found \n");
+		/* for primary panel */
+		strncpy(disp_node, "oplus,dsi-panel-primary", sizeof("oplus,dsi-panel-primary"));
+	}
+	TRI_KEY_LOG("disp_node = %s \n", disp_node);
+
+	count = of_count_phandle_with_args(np, disp_node, NULL);
+	if (count <= 0) {
+		TRI_KEY_LOG("can not find [%s] node in dts \n", disp_node);
+		return NULL;
+	}
+
+	for (i = 0; i < count; i++) {
+		node = of_parse_phandle(np, disp_node, i);
+		panel = of_drm_find_panel(node);
+		TRI_KEY_LOG("panel[%d] IS_ERR =%d \n", i, IS_ERR(panel));
+		of_node_put(node);
+		if (!IS_ERR(panel)) {
+			TRI_KEY_LOG("Find available panel\n");
+			return panel;
+		}
+	}
+
+	return NULL;
+}
+EXPORT_SYMBOL(trikey_dev_get_panel);
+#endif
+
+int oplus_hall_register_notifier(void)
+{
+	int ret = 0;
+#if IS_ENABLED(CONFIG_QCOM_PANEL_EVENT_NOTIFIER)
+	void *cookie = NULL;
+#endif
+#if IS_ENABLED(CONFIG_DRM_OPLUS_PANEL_NOTIFY)
+	g_the_chip->active_panel = g_hall_dev->active_panel;
+	g_the_chip->fb_notif.notifier_call = fb_notifier_callback;
+
+	if (g_the_chip->active_panel)
+		ret = drm_panel_notifier_register(g_the_chip->active_panel,
+				&g_the_chip->fb_notif);
+#elif IS_ENABLED(CONFIG_QCOM_PANEL_EVENT_NOTIFIER)
+	g_the_chip->active_panel = g_hall_dev->active_panel;
+	if (g_the_chip->active_panel) {
+		cookie = panel_event_notifier_register(PANEL_EVENT_NOTIFICATION_PRIMARY,
+				PANEL_EVENT_NOTIFIER_CLIENT_TRI_STATE_KEY, g_the_chip->active_panel,
+				&trikey_panel_notifier_callback, g_the_chip);
+
+		if (!cookie) {
+			TRI_KEY_LOG("Unable to register fb_notifier: %d\n", ret);
+		} else {
+			g_the_chip->notifier_cookie = cookie;
+		}
+	}
+
+#elif IS_ENABLED(CONFIG_OPLUS_MTK_DRM_GKI_NOTIFY)
+	g_the_chip->disp_notifier.notifier_call = trikey_mtk_drm_notifier_callback;
+	if (mtk_disp_notifier_register("Oplus_trikey", &g_the_chip->disp_notifier)) {
+		TRI_KEY_LOG("Failed to register disp notifier client!!\n");
+	}
+
+#elif IS_ENABLED(CONFIG_DRM_MSM) || IS_ENABLED(CONFIG_DRM_OPLUS_NOTIFY)
+	g_the_chip->fb_notif.notifier_call = fb_notifier_callback;
+	ret = msm_drm_register_client(&g_the_chip->fb_notif);
+
+	if (ret) {
+		TRI_KEY_LOG("Unable to register fb_notifier: %d\n", ret);
+	}
+
+#elif IS_ENABLED(CONFIG_FB)
+	g_the_chip->fb_notif.notifier_call = fb_notifier_callback;
+	ret = fb_register_client(&g_the_chip->fb_notif);
+
+	if (ret) {
+		TRI_KEY_LOG("Unable to register fb_notifier: %d\n", ret);
+	}
+#endif/*CONFIG_FB*/
+
+	INIT_WORK(&g_the_chip->speed_up_work, trikey_speedup_resume);
+	g_the_chip->speedup_resume_wq = create_singlethread_workqueue("trikey_sp_resume");
+
+	if (!g_the_chip->speedup_resume_wq) {
+		ret = -ENOMEM;
+	}
+
+	return ret;
+}
+EXPORT_SYMBOL(oplus_hall_register_notifier);
+
+int oplus_hall_unregister_notifier(void)
+{
+	int ret = 0;
+#if IS_ENABLED(CONFIG_DRM_OPLUS_PANEL_NOTIFY)
+	if (g_the_chip->active_panel && g_the_chip->fb_notif.notifier_call) {
+		ret = drm_panel_notifier_unregister(g_the_chip->active_panel,
+			&g_the_chip->fb_notif);
+		if (ret) {
+			TRI_KEY_LOG("Unable to unregister fb_notifier: %d\n", ret);
+		}
+	}
+#elif IS_ENABLED(CONFIG_QCOM_PANEL_EVENT_NOTIFIER)
+	if (g_the_chip->active_panel && g_the_chip->notifier_cookie) {
+		panel_event_notifier_unregister(g_the_chip->notifier_cookie);
+	}
+#elif IS_ENABLED(CONFIG_OPLUS_MTK_DRM_GKI_NOTIFY)
+	if (g_the_chip->disp_notifier.notifier_call) {
+		mtk_disp_notifier_unregister(&g_the_chip->disp_notifier);
+	}
+#elif IS_ENABLED(CONFIG_DRM_MSM) || IS_ENABLED(CONFIG_DRM_OPLUS_NOTIFY)
+	if (g_the_chip->fb_notif.notifier_call) {
+		ret = msm_drm_unregister_client(&g_the_chip->fb_notif);
+
+		if (ret) {
+			TRI_KEY_LOG("Unable to register fb_notifier: %d\n", ret);
+		}
+	}
+#elif IS_ENABLED(CONFIG_FB)
+	if (g_the_chip->fb_notif.notifier_call) {
+		ret = fb_unregister_client(&g_the_chip->fb_notif);
+
+		if (ret) {
+			TRI_KEY_LOG("Unable to unregister fb_notifier: %d\n", ret);
+		}
+	}
+#endif/*CONFIG_FB*/
+	if (g_the_chip->speedup_resume_wq) {
+		cancel_work_sync(&g_the_chip->speed_up_work);
+		flush_workqueue(g_the_chip->speedup_resume_wq);
+		destroy_workqueue(g_the_chip->speedup_resume_wq);
+	}
+	return ret;
+}
+EXPORT_SYMBOL(oplus_hall_unregister_notifier);
 
 static short Sum(short value0, short value1)
 {
@@ -1910,12 +2190,12 @@ static ssize_t proc_hall_data_offect_write(struct file *file, const char __user 
 			size_t count, loff_t *ppos)
 {
 	int tmp = 0;
-	char buf[MAX_LENGTH] = {0};
+	char buf[MAX_LEN] = {0};
 	int ret = -1;
 	char *token  = NULL;
 	char *tmp_str = NULL;
 
-	if (count >= MAX_LENGTH)
+	if (count >= MAX_LEN)
 		return count;
 
 	mutex_lock(&g_hall_dev->mtx);
@@ -1952,18 +2232,18 @@ static ssize_t proc_hall_data_offect_read(struct file *file, char __user *user_b
 			 size_t count, loff_t *ppos)
 {
 	int ret = -1;
-	char page[MAX_LENGTH] = {0};
+	char page[MAX_LEN] = {0};
 
 	mutex_lock(&g_hall_dev->mtx);
 
 	if (!g_the_chip) {
 		TRI_KEY_ERR("g_the_chip null\n");
-		snprintf(page, MAX_LENGTH, "%d\n", -1);
+		snprintf(page, MAX_LEN, "%d\n", -1);
 	} else {
 		if (!strcmp(g_hall_dev->data_offect_name, OFFECT_UP)) {
 			TRI_KEY_ERR("now get up offect data\n");
 			ret = g_the_chip->dhall_up_ops->offect_data_handle(READ_OFFECT);
-			snprintf(page, MAX_LENGTH, "up: offect:%d\n", ret);
+			snprintf(page, MAX_LEN, "up: offect:%d\n", ret);
 		}
 	}
 
@@ -2211,6 +2491,7 @@ static int init_parse_dts(struct device *dev, struct extcon_dev_data *g_the_chip
 	struct device_node *np = NULL;
 	int ret = 0;
 	int temp_array[8];
+	int tolen[3] = {0};
 	TRI_KEY_LOG(" %s call\n", __func__);
 	np = dev->of_node;
 	if (!np) {
@@ -2218,6 +2499,27 @@ static int init_parse_dts(struct device *dev, struct extcon_dev_data *g_the_chip
 		g_the_chip->threeaxis_hall_support = false;
 		return -1;
 	}
+
+	g_the_chip->new_threshold_support = of_property_read_bool(np, "new_threshold_support");
+	TRI_KEY_LOG("%s:new_up_threshold_support:%d\n", __func__, g_the_chip->new_threshold_support);
+
+	g_the_chip->updown_to_mid_support = of_property_read_bool(np, "updown-to-mid-support");
+	TRI_KEY_LOG("%s:updown_to_mid_support:%d\n", __func__, g_the_chip->updown_to_mid_support);
+
+	ret = of_property_read_u32_array(np, "tolen", tolen, 3);
+	if (ret) {
+		TRI_KEY_LOG("tolen use default\n");
+		tolen[0] = 0;
+		tolen[1] = 0;
+		tolen[2] = 0;
+		ret = 0;
+	} else {
+		TRI_KEY_LOG("get tolen:<0-2>{%d,%d,%d.}\n", tolen[0], tolen[1], tolen[2]);
+	}
+	g_the_chip->tolen[0] = tolen[0];
+	g_the_chip->tolen[1] = tolen[1];
+	g_the_chip->tolen[2] = tolen[2];
+
 	g_the_chip->threeaxis_hall_support = of_property_read_bool(np, "threeaxis_hall_support");
 
 	if (g_the_chip->threeaxis_hall_support) {
@@ -2418,8 +2720,6 @@ int oplus_register_hall(const char *name, struct dhall_operations *ops,
 		return -1;
 	}
 	if (hall_count > 1 || g_the_chip->threeaxis_hall_support) {
-		g_the_chip->project_id = get_project();
-		TRI_KEY_LOG("%s: project_id:%d.\n", __func__, g_the_chip->project_id);
 		INIT_WORK(&g_the_chip->register_work, register_tri_key_dev_work);
 		schedule_work(&g_the_chip->register_work);
 	}

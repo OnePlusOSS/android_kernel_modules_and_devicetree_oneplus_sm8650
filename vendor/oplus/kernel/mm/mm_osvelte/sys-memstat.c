@@ -13,8 +13,24 @@
 #include "memstat.h"
 #include "sys-memstat.h"
 
+#define DEFINE_PROC_SHOW_ATTRIBUTE_SIZE_BUF(__name, buf_sz)		\
+static int __name ## _open(struct inode *inode, struct file *file)	\
+{									\
+	return single_open_size(file, __name ## _show, pde_data(inode), \
+				buf_sz);				\
+}									\
+									\
+static const struct proc_ops __name ## _proc_ops = {			\
+	.proc_open	= __name ## _open,				\
+	.proc_read	= seq_read,					\
+	.proc_lseek	= seq_lseek,					\
+	.proc_release	= single_release,				\
+}
+
 static struct proc_dir_entry *mtrack_procs[MTRACK_MAX];
 static struct mtrack_debugger *mtrack_debugger[MTRACK_MAX];
+#define EXP_NAME_LEN (32)
+#define NAME_LEN (32)
 
 const char * const mtrack_text[MTRACK_MAX] = {
 	"dma_buf",
@@ -22,7 +38,27 @@ const char * const mtrack_text[MTRACK_MAX] = {
 	"hybridswap"
 };
 
+static const char *bg_kthread_comm[] = {
+	/* boost pool */
+	"bp_prefill_camera",
+	"bp_camera",
+	"bp_mtk_mm",
+	/* hybridswapd */
+	"hybridswapd",
+	/* chp kthread */
+	"khpage_poold",
+	/* uxmem refill kthread */
+	"ux_page_pool_",
+};
+
 struct dma_info {
+	char exp_name[EXP_NAME_LEN];
+	char name[NAME_LEN];
+	fmode_t f_mode;
+	unsigned int f_flags;
+	unsigned long size;
+	unsigned long i_ino;
+	unsigned long file_count;
 	struct dma_buf *dmabuf;
 	struct hlist_node head;
 };
@@ -99,6 +135,9 @@ static int dma_buf_bufinfo_show(struct seq_file *s, void *unused)
 	dma_buf_priv.size = 0;
 	dma_buf_priv.s = s;
 
+	osvelte_info("%s:%d read %s, seq_buf size:%zu\n",
+		     current->comm, current->tgid, __func__, s->size);
+
 	seq_puts(s, "\nDma-buf Objects:\n");
 	seq_printf(s, "%-8s\t%-8s\t%-8s\t%-8s\texp_name\t%-8s\n",
 		   "size", "flags", "mode", "count", "ino");
@@ -110,12 +149,13 @@ static int dma_buf_bufinfo_show(struct seq_file *s, void *unused)
 
 	return 0;
 }
-DEFINE_PROC_SHOW_ATTRIBUTE(dma_buf_bufinfo);
+DEFINE_PROC_SHOW_ATTRIBUTE_SIZE_BUF(dma_buf_bufinfo, SZ_512K);
 
 static int get_dma_buf_info(const void *data, struct file *file, unsigned int n)
 {
 	struct dma_proc *dma_proc;
 	struct dma_info *dma_info;
+	struct dma_buf *dmabuf;
 
 	if (!is_dma_buf_file(file))
 		return 0;
@@ -130,9 +170,20 @@ static int get_dma_buf_info(const void *data, struct file *file, unsigned int n)
 	if (!dma_info)
 		return -ENOMEM;
 
-	get_file(file);
-	dma_info->dmabuf = file->private_data;
-	dma_proc->size += dma_info->dmabuf->size;
+	dmabuf = file->private_data;
+
+	dma_info->dmabuf = dmabuf;
+	strncpy(dma_info->exp_name, dmabuf->exp_name, EXP_NAME_LEN - 1);
+	if (dmabuf->name)
+		strncpy(dma_info->name, dmabuf->name, NAME_LEN - 1);
+
+	dma_info->i_ino = file_inode(dmabuf->file)->i_ino;
+	dma_info->file_count = file_count(dmabuf->file);
+	dma_info->f_flags = dmabuf->file->f_flags;
+	dma_info->f_mode = dmabuf->file->f_mode;
+	dma_info->size = dmabuf->size;
+
+	dma_proc->size += dmabuf->size;
 	hash_add(dma_proc->dma_bufs, &dma_info->head,
 		 (unsigned long)dma_info->dmabuf);
 	return 0;
@@ -145,7 +196,6 @@ static void free_dma_proc(struct dma_proc *proc)
 	int i;
 
 	hash_for_each_safe(proc->dma_bufs, i, n, tmp, head) {
-		fput(tmp->dmabuf->file);
 		hash_del(&tmp->head);
 		kfree(tmp);
 	}
@@ -163,17 +213,13 @@ static void dma_proc_show(struct seq_file *s, struct dma_proc *proc)
 		   "ino", "size", "count", "flags", "mode", "exp_name");
 
 	hash_for_each(proc->dma_bufs, i, tmp, head) {
-		struct dma_buf *dmabuf = tmp->dmabuf;
-
-		spin_lock((spinlock_t *)&dmabuf->name_lock);
 		seq_printf(s, "%08lu\t%-8zu\t%-8ld\t0x%08x\t0x%08x\t%-s\t%-s\n",
-			   file_inode(dmabuf->file)->i_ino,
-			   dmabuf->size / SZ_1K,
-			   file_count(dmabuf->file),
-			   dmabuf->file->f_flags, dmabuf->file->f_mode,
-			   dmabuf->exp_name,
-			   dmabuf->name ?: "");
-		spin_unlock((spinlock_t *)&dmabuf->name_lock);
+			   tmp->i_ino,
+			   tmp->size / SZ_1K,
+			   tmp->file_count,
+			   tmp->f_flags, tmp->f_mode,
+			   tmp->exp_name,
+			   tmp->name);
 	}
 }
 
@@ -184,6 +230,9 @@ static int dma_buf_procinfo_show(struct seq_file *s, void *unused)
 	int ret = 0;
 	struct dma_proc *tmp, *n;
 	LIST_HEAD(plist);
+
+	osvelte_info("%s:%d read %s, seq_buf size:%zu\n",
+		     current->comm, current->tgid, __func__, s->size);
 
 	rcu_read_lock();
 	for_each_process(task) {
@@ -230,7 +279,30 @@ mem_err:
 	}
 	return ret;
 }
-DEFINE_PROC_SHOW_ATTRIBUTE(dma_buf_procinfo);
+DEFINE_PROC_SHOW_ATTRIBUTE_SIZE_BUF(dma_buf_procinfo, SZ_256K);
+
+static int bg_kthread_show(struct seq_file *s, void *unused)
+{
+	int i;
+	struct task_struct *p;
+
+	seq_printf(s, "%-16s\t%-8s\t%-8s\n", "comm", "pid", "cpus");
+
+	rcu_read_lock();
+	for_each_process(p) {
+		if (!(p->flags & PF_KTHREAD))
+			continue;
+
+		for (i = 0; i < ARRAY_SIZE(bg_kthread_comm); i++)
+			if (strstr(p->comm, bg_kthread_comm[i]))
+				seq_printf(s, "%-16s\t%-8d\t%*pbl\n",
+					   p->comm, p->tgid,
+					   cpumask_pr_args(p->cpus_ptr));
+	}
+	rcu_read_unlock();
+	return 0;
+}
+DEFINE_PROC_SHOW_ATTRIBUTE(bg_kthread);
 
 static int info_show(struct seq_file *m, void *unused)
 {
@@ -335,6 +407,8 @@ int sys_memstat_init(void)
 	struct proc_dir_entry *dir_entry;
 	int i;
 
+	OSVELTE_STATIC_ASSERT(sizeof(struct dma_info) <= 128);
+
 	if (register_trace_android_vh_meminfo_proc_show(extra_meminfo_proc_show, NULL)) {
 		pr_err("register extra meminfo proc failed.\n");
 		return -EINVAL;
@@ -346,6 +420,7 @@ int sys_memstat_init(void)
 		return -ENOMEM;
 	}
 	proc_create("info", 0444, root, &info_proc_ops);
+	proc_create("bg_kthread", 0444, root, &bg_kthread_proc_ops);
 	/* proc_create("hybridswap_info", 0444, root, &hybridswap_info_proc_ops); */
 
 	/* create mtrack dir here */

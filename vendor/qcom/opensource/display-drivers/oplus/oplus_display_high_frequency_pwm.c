@@ -297,8 +297,15 @@ int oplus_panel_pwm_switch_tx_cmd(struct dsi_panel *panel)
 	if (panel->pwm_params.oplus_pwm_switch_state == PWM_SWITCH_HIGH_STATE) {
 		pwm_switch_cmd = DSI_CMD_PWM_SWITCH_HIGH;
 		pwm_switch_cmd_restore = DSI_CMD_PWM_SWITCH_HIGH_RESTORE;
-		if (panel->pwm_params.pwm_power_on)
-			pwm_switch_cmd = DSI_CMD_TIMMING_PWM_SWITCH_HIGH;
+		if (panel->pwm_params.pwm_power_on) {
+			if ((!strcmp(panel->name, "enzo boe_ili7838e 1264 2780 evt dsc cmd mode panel")
+			 || !strcmp(panel->name, "enzo boe_ili7838e 1264 2780 pvt bd dsc cmd mode panel"))
+			  && oplus_panel_pwm_onepulse_is_enabled(panel)) {
+				pwm_switch_cmd = DSI_CMD_PWM_SWITCH_3TO1;
+			} else {
+				pwm_switch_cmd = DSI_CMD_TIMMING_PWM_SWITCH_HIGH;
+			}
+		}
 	} else {
 		pwm_switch_cmd = DSI_CMD_PWM_SWITCH_LOW;
 		pwm_switch_cmd_restore = DSI_CMD_PWM_SWITCH_LOW_RESTORE;
@@ -347,7 +354,8 @@ int oplus_panel_pwm_switch(struct dsi_panel *panel, u32 *backlight_level)
 		panel->pwm_params.oplus_pwm_switch_state_changed = true;
 	}
 
-	if (strcmp(panel->name, "enzo boe_ili7838e 1264 2780 evt dsc cmd mode panel")) {
+	if (strcmp(panel->name, "enzo boe_ili7838e 1264 2780 evt dsc cmd mode panel")
+	    && strcmp(panel->name, "enzo boe_ili7838e 1264 2780 pvt bd dsc cmd mode panel")) {
 		/* 3 pulse code == 1 pulse func open && backlight low state*/
 		if ((panel->pwm_params.oplus_pwm_switch_state_changed == true || oplus_last_backlight == 0)
 				&& oplus_panel_pwm_onepulse_is_enabled(panel)
@@ -598,7 +606,8 @@ int oplus_panel_update_pwm_pulse_lock(struct dsi_panel *panel, bool enabled)
 	mutex_lock(&panel->panel_lock);
 	panel->pwm_params.pwm_onepulse_enabled = enabled;
 
-	if (!strcmp(panel->name, "enzo boe_ili7838e 1264 2780 evt dsc cmd mode panel")) {
+	if (!strcmp(panel->name, "enzo boe_ili7838e 1264 2780 evt dsc cmd mode panel")
+	      || !strcmp(panel->name, "enzo boe_ili7838e 1264 2780 pvt bd dsc cmd mode panel")) {
 		if (panel->pwm_params.oplus_pwm_switch_state == PWM_SWITCH_HIGH_STATE) {
 			if (panel->pwm_params.pwm_onepulse_enabled) {
 				rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_PWM_SWITCH_3TO1);

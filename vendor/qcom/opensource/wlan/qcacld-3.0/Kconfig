@@ -131,6 +131,10 @@ config CP_STATS
 	bool "Enable CP_STATS"
 	default n
 
+config QCA_TARGET_IF_MLME
+	bool "Enable TARGET_IF MLME"
+	default n
+
 config DCS
 	bool "Enable DCS"
 	default n

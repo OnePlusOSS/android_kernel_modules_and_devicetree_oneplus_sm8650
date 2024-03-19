@@ -205,6 +205,9 @@ struct swr_mstr_ctrl {
 	struct dentry *debugfs_reg_dump;
 	unsigned int read_data;
 #endif
+#ifdef OPLUS_ARCH_EXTENDS
+	struct delayed_work adsp_ssr_work;
+#endif /* OPLUS_ARCH_EXTENDS */
 };
 
 #endif /* _SWR_WCD_CTRL_H */

@@ -154,14 +154,14 @@
 
 		end_stretch_value = <480 250 16 16>;
 		touchpanel,tp_ic_type = <2>;
-		panel_type = <7 7 3 7 3 3 3>;
+		panel_type = <7 7 3 7 3 3 3 3 3>;
 		// type of tp_dev ,TP-SAMSUNG = 8;
 		//firmware_name = "AA545";
 		platform_support_project = <23607>;
 		platform_support_project_dir = <23607>;
 		platform_support_project_commandline = "mdss_dsi_panel_enzo_boe_ili7838e_1264_2780_dsc_cmd","mdss_dsi_panel_enzo_boe_ili7838e_high_pre_dsc_cmd",
 		"mdss_dsi_panel_enzo_boe_ili7838e_evt_dsc_cmd","mdss_dsi_panel_enzo_boe_ili7838e_evt_old_dsc_cmd","mdss_dsi_panel_enzo_boe_ili7838e_dvt_dsc_cmd",
-		"mdss_dsi_panel_enzo_boe_ili7838e_dvt_low_dsc_cmd","mdss_dsi_panel_enzo_boe_ili7838e_pvt_dsc_cmd";
+		"mdss_dsi_panel_enzo_boe_ili7838e_dvt_low_dsc_cmd","mdss_dsi_panel_enzo_boe_ili7838e_pvt_dsc_cmd","mdss_dsi_panel_enzo_boe_ili7838e_pre_pvt_dsc_cmd","mdss_dsi_panel_enzo_boe_ili7838e_pvt_bd_dsc_cmd";
 
 		/* SW Support Feature Control */
 		black_gesture_support;

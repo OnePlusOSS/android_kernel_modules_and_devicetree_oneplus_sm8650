@@ -61,6 +61,10 @@ unsigned int oplus_ofp_display_id = OPLUS_OFP_PRIMARY_DISPLAY;
 EXPORT_SYMBOL(oplus_ofp_display_id);
 /* ofp global structure */
 static struct oplus_ofp_params g_oplus_ofp_params[2] = {0};
+struct LCM_setting_table {
+	unsigned int count;
+	u8 *para_list;
+};
 /* a mutex lock used to avoid multiple concurrent invocations */
 static DEFINE_MUTEX(oplus_ofp_lock);
 
@@ -222,6 +226,11 @@ int oplus_ofp_init(void *dsi_panel)
 		}
 	}
 
+	/*Indicates whether LHBM is supported*/
+	p_oplus_ofp_params->lhbm_enable = utils->read_bool(utils->data, "oplus,ofp-local-hbm-is-enabled");
+	p_oplus_ofp_params->lhbm_state = false;
+	p_oplus_ofp_params->lhbm_state_changed = false;
+
 	if (!strcmp(panel->type, "secondary")) {
 		/* set default display id to primary display */
 		oplus_ofp_set_display_id(OPLUS_OFP_PRIMARY_DISPLAY);
@@ -284,6 +293,11 @@ bool oplus_ofp_optical_new_solution_is_enabled(void)
 bool oplus_ofp_local_hbm_is_enabled(void)
 {
 	struct oplus_ofp_params *p_oplus_ofp_params = oplus_ofp_get_params(oplus_ofp_display_id);
+
+	if (p_oplus_ofp_params->lhbm_enable) {
+		OFP_DEBUG("lhbm_enable has already been enabled, there is no need to enable it again here\n");
+		return false;
+	}
 
 	if (!p_oplus_ofp_params) {
 		OFP_ERR("Invalid params\n");
@@ -1022,6 +1036,11 @@ static int oplus_ofp_set_panel_hbm(void *sde_connector, bool hbm_en)
 		return -EINVAL;
 	}
 
+	if (p_oplus_ofp_params->lhbm_enable) {
+		OFP_DEBUG("no need to set hbm in lhbm mode\n");
+		return 0;
+	}
+
 	if (c_conn->connector_type != DRM_MODE_CONNECTOR_DSI) {
 		OFP_DEBUG("not in dsi mode, should not set panel hbm\n");
 		return 0;
@@ -1074,6 +1093,224 @@ static int oplus_ofp_set_panel_hbm(void *sde_connector, bool hbm_en)
 
 	OPLUS_OFP_TRACE_END("oplus_ofp_set_panel_hbm");
 
+	OFP_DEBUG("end\n");
+
+	return rc;
+}
+
+/* local hbm ON Command set */
+static int oplus_ofp_lhbm_on_cmd_set(struct dsi_panel *panel)
+{
+	int rc = 0;
+	int i = 0;
+	int a_size = 0;
+	unsigned int bl_lvl;
+	struct dsi_display_mode *mode;
+	struct dsi_cmd_desc *cmds;
+	struct LCM_setting_table temp_lhbm_cmd[10];
+
+	OFP_DEBUG("start\n");
+
+	if (!panel) {
+		OFP_ERR("[%s:%d]Invalid params\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+
+	mode = panel->cur_mode;
+	bl_lvl = panel->bl_config.bl_level;
+
+	if (IS_ERR_OR_NULL(mode->priv_info)) {
+		OFP_ERR("[%s:%d]Invalid params\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+
+	if (IS_ERR_OR_NULL(&(mode->priv_info->cmd_sets[DSI_CMD_LHBM_ON]))) {
+		OFP_ERR("[%s:%d]Invalid params\n", __func__, __LINE__);
+		return -EINVAL;
+	}
+	cmds = mode->priv_info->cmd_sets[DSI_CMD_LHBM_ON].cmds;
+	a_size = mode->priv_info->cmd_sets[DSI_CMD_LHBM_ON].count;
+
+	OPLUS_OFP_TRACE_BEGIN("oplus_ofp_lhbm_on_cmd_set");
+
+	for(i = 0; i < a_size; i++) {
+		temp_lhbm_cmd[i].count = cmds[i].msg.tx_len;
+		temp_lhbm_cmd[i].para_list = (u8 *)cmds[i].msg.tx_buf;
+	}
+
+	if (bl_lvl < 3516) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0xFF;
+		}
+	} else if (bl_lvl <= 3540) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0xF0;
+		}
+	} else if (bl_lvl <= 3565) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0xE7;
+		}
+	} else if (bl_lvl <= 3590) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0xE0;
+		}
+	} else if (bl_lvl <= 3615) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0xDA;
+		}
+	} else if (bl_lvl <= 3640) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0xD2;
+		}
+	} else if (bl_lvl <= 3665) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0xCB;
+		}
+	} else if (bl_lvl <= 3690) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0xC3;
+		}
+	} else if (bl_lvl <= 3715) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0xBC;
+		}
+	} else if (bl_lvl <= 3740) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0xB5;
+		}
+	} else if (bl_lvl <= 3764) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0xAE;
+		}
+	} else if (bl_lvl <= 3797) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0xA9;
+		}
+	} else if (bl_lvl <= 3830) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0xA0;
+		}
+	} else if (bl_lvl <= 3863) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0x99;
+		}
+	} else if (bl_lvl <= 3896) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0x91;
+		}
+	} else if (bl_lvl <= 3929) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0x8A;
+		}
+	} else if (bl_lvl <= 3962) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0x83;
+		}
+	} else if (bl_lvl <= 3995) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0x7C;
+		}
+	} else if (bl_lvl <= 4028) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0x77;
+		}
+	} else if (bl_lvl <= 4061) {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0x70;
+		}
+	} else {
+		for(i = 1; i < 4; i++) {
+			temp_lhbm_cmd[3].para_list[i] = 0x6C;
+		}
+	}
+	rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_LHBM_ON);
+	if (rc) {
+		OFP_ERR("Failed to set DSI_CMD_LHBM_ON\n");
+	}
+
+	OPLUS_OFP_TRACE_END("oplus_ofp_lhbm_on_cmd_set");
+	OFP_DEBUG("end\n");
+
+	return rc;
+}
+
+int oplus_ofp_lhbm_mode_set(u32 lhbm_cmd) {
+	int rc = 0;
+	struct dsi_display *display = oplus_display_get_current_display();
+	struct dsi_panel *panel = NULL;
+	struct oplus_ofp_params *p_oplus_ofp_params = oplus_ofp_get_params(oplus_ofp_display_id);
+
+	OFP_DEBUG("start\n");
+
+	if (!display || !p_oplus_ofp_params) {
+		OFP_ERR("Invalid params\n");
+		return -EINVAL;
+	}
+
+	if (!p_oplus_ofp_params->lhbm_enable) {
+		OFP_DEBUG("no need to handle lhbm when lhbm mode not support\n");
+		return 0;
+	}
+
+	panel = display->panel;
+
+	OPLUS_OFP_TRACE_BEGIN("oplus_ofp_lhbm_mode_set");
+
+	/* doze disable handle */
+	OFP_DEBUG("lhbm mode set\n");
+
+	if (((lhbm_cmd == OPLUS_OFP_POWER_ON_LHBM_ON || lhbm_cmd == OPLUS_OFP_AOD_OFF_LHBM_ON) && p_oplus_ofp_params->lhbm_state == false)
+			|| (lhbm_cmd == OPLUS_OFP_LHBM_OFF && p_oplus_ofp_params->lhbm_state == true)) {
+		p_oplus_ofp_params->lhbm_state_changed = true;
+	}
+
+	mutex_lock(&panel->panel_lock);
+	if (!panel->panel_initialized)
+		goto exit;
+	switch (lhbm_cmd) {
+	case OPLUS_OFP_POWER_ON_LHBM_ON:
+		if (!p_oplus_ofp_params->lhbm_state) {
+			rc = oplus_ofp_lhbm_on_cmd_set(panel);
+		}
+		p_oplus_ofp_params->lhbm_state = true;
+		break;
+	case OPLUS_OFP_AOD_OFF_LHBM_ON:
+		if (!p_oplus_ofp_params->lhbm_state) {
+			rc = oplus_ofp_lhbm_on_cmd_set(panel);
+		}
+		p_oplus_ofp_params->lhbm_state = true;
+		break;
+	case OPLUS_OFP_LHBM_OFF:
+		if (p_oplus_ofp_params->lhbm_state) {
+			rc = dsi_panel_tx_cmd_set(panel, DSI_CMD_LHBM_OFF);
+			if (rc) {
+				goto exit;
+			}
+			p_oplus_ofp_params->lhbm_state = false;
+			oplus_wait_for_vsync(panel);
+			oplus_need_to_sync_te(panel);
+			/* recovery backlight level */
+			OPLUS_OFP_TRACE_BEGIN("dsi_panel_set_backlight");
+			rc = dsi_panel_set_backlight(panel, panel->bl_config.bl_level);
+			OPLUS_OFP_TRACE_END("dsi_panel_set_backlight");
+			if (rc) {
+				OFP_ERR("unable to set backlight\n");
+				goto error;
+			}
+		}
+		break;
+	default:
+		OFP_DEBUG("lhbm_cmd:%d\n", lhbm_cmd);
+	}
+
+exit:
+	if (rc) {
+		OFP_ERR("[%s] failed to send DSI_CMD_LHBM cmds, rc=%d\n", display->name, rc);
+	}
+
+error:
+	mutex_unlock(&panel->panel_lock);
+	OPLUS_OFP_TRACE_END("oplus_ofp_lhbm_mode_set");
 	OFP_DEBUG("end\n");
 
 	return rc;
@@ -1138,12 +1375,23 @@ int oplus_ofp_hbm_handle(void *sde_encoder_virt)
 		if (rc) {
 			OFP_ERR("failed to set panel hbm on\n");
 		}
+
+		rc = oplus_ofp_lhbm_mode_set(OPLUS_OFP_POWER_ON_LHBM_ON);
+		if (rc) {
+			OFP_ERR("failed to send lhbm on cmds\n");
+		}
 	} else if ((!(hbm_enable & OPLUS_OFP_PROPERTY_DIM_LAYER)
 					&& !(hbm_enable & OPLUS_OFP_PROPERTY_FINGERPRESS_LAYER))
 						|| !p_oplus_ofp_params->fp_press || !bl_level) {
 		rc = oplus_ofp_set_panel_hbm(c_conn, false);
 		if (rc) {
 			OFP_ERR("failed to set panel hbm off\n");
+		}
+		if (!(hbm_enable & OPLUS_OFP_PROPERTY_AOD_LAYER)) {
+			rc = oplus_ofp_lhbm_mode_set(OPLUS_OFP_LHBM_OFF);
+			if (rc) {
+				OFP_ERR("failed to send lhbm off cmds\n");
+			}
 		}
 	}
 
@@ -1445,6 +1693,16 @@ int oplus_ofp_notify_uiready(void *sde_encoder_phys)
 
 	OPLUS_OFP_TRACE_BEGIN("oplus_ofp_notify_uiready");
 
+	if (p_oplus_ofp_params->lhbm_enable) {
+		if (p_oplus_ofp_params->lhbm_state_changed && p_oplus_ofp_params->lhbm_state) {
+			p_oplus_ofp_params->notifier_chain_value = OPLUS_OFP_UI_READY;
+			p_oplus_ofp_params->lhbm_state_changed = false;
+			/* oplus_ofp_lhbm_mode_set(OPLUS_OFP_SHADE_OFF); */
+		} else if (p_oplus_ofp_params->lhbm_state_changed && !p_oplus_ofp_params->lhbm_state) {
+			p_oplus_ofp_params->notifier_chain_value = OPLUS_OFP_UI_DISAPPEAR;
+			p_oplus_ofp_params->lhbm_state_changed = false;
+		}
+	} else {
 	if (((p_oplus_ofp_params->pressed_icon_status == OPLUS_OFP_PRESSED_ICON_ON_WR_PTR)
 			|| (p_oplus_ofp_params->pressed_icon_status == OPLUS_OFP_PRESSED_ICON_ON))
 				&& p_oplus_ofp_params->panel_hbm_status) {
@@ -1456,7 +1714,7 @@ int oplus_ofp_notify_uiready(void *sde_encoder_phys)
 		/* the data scanning without pressed icon has started or hbm off cmds are taking effect */
 		p_oplus_ofp_params->notifier_chain_value = OPLUS_OFP_UI_DISAPPEAR;
 	}
-
+	}
 
 	if (last_notifier_chain_value != p_oplus_ofp_params->notifier_chain_value) {
 		OFP_INFO("queue uiready event work\n");
@@ -1613,7 +1871,7 @@ static bool oplus_ofp_need_to_bypass_pq(void *s_crtc)
 	/* need to bypass pq when aod/dim/fingerpress layer exist */
 	if ((hbm_enable & OPLUS_OFP_PROPERTY_AOD_LAYER)
 			|| (hbm_enable & OPLUS_OFP_PROPERTY_DIM_LAYER)
-				|| (hbm_enable & OPLUS_OFP_PROPERTY_FINGERPRESS_LAYER)) {
+				|| ((hbm_enable & OPLUS_OFP_PROPERTY_FINGERPRESS_LAYER) && !p_oplus_ofp_params->lhbm_enable)) {
 		need_to_bypass_pq = true;
 	}
 
@@ -1949,6 +2207,15 @@ int oplus_ofp_power_mode_handle(void *dsi_display, int power_mode)
 					rc = oplus_ofp_display_cmd_set(display, DSI_CMD_HBM_OFF);
 					if (rc) {
 						OFP_ERR("[%s] failed to send DSI_CMD_HBM_OFF cmds, rc=%d\n", display->name, rc);
+					}
+				}
+				if (p_oplus_ofp_params->lhbm_state) {
+					rc = oplus_ofp_display_cmd_set(display, DSI_CMD_LHBM_OFF);
+					if (rc) {
+						OFP_ERR("failed to send DSI_CMD_LHBM_OFF cmds, rc=%d\n", rc);
+					} else {
+						p_oplus_ofp_params->lhbm_state = false;
+						p_oplus_ofp_params->lhbm_state_changed = true;
 					}
 				}
 			}
@@ -2486,6 +2753,11 @@ int oplus_ofp_set_hbm(void *buf)
 		return -EINVAL;
 	}
 
+	if (p_oplus_ofp_params->lhbm_enable) {
+		OFP_DEBUG("no need to set hbm in lhbm mode\n");
+		return 0;
+	}
+
 	OFP_INFO("hbm mode:%u to %u\n", p_oplus_ofp_params->hbm_mode, *hbm_mode);
 
 	if (!dsi_panel_initialized(display->panel)) {
@@ -2572,14 +2844,28 @@ ssize_t oplus_ofp_set_hbm_attr(struct kobject *obj,
 	OPLUS_OFP_TRACE_INT("oplus_ofp_hbm_mode", p_oplus_ofp_params->hbm_mode);
 
 	if (p_oplus_ofp_params->hbm_mode) {
-		rc = oplus_ofp_display_cmd_set(display, DSI_CMD_HBM_ON);
-		if (rc) {
-			OFP_ERR("[%s] failed to send DSI_CMD_HBM_ON cmds, rc=%d\n", display->name, rc);
+		if (p_oplus_ofp_params->lhbm_enable) {
+			rc = oplus_ofp_lhbm_mode_set(OPLUS_OFP_POWER_ON_LHBM_ON);
+			if (rc) {
+				OFP_ERR("failed to send lhbm on cmds\n");
+			}
+		} else {
+			rc = oplus_ofp_display_cmd_set(display, DSI_CMD_HBM_ON);
+			if (rc) {
+				OFP_ERR("[%s] failed to send DSI_CMD_HBM_ON cmds, rc=%d\n", display->name, rc);
+			}
 		}
 	} else {
-		rc = oplus_ofp_display_cmd_set(display, DSI_CMD_HBM_OFF);
-		if (rc) {
-			OFP_ERR("[%s] failed to send DSI_CMD_HBM_OFF cmds, rc=%d\n", display->name, rc);
+		if (p_oplus_ofp_params->lhbm_enable) {
+			rc = oplus_ofp_lhbm_mode_set(OPLUS_OFP_LHBM_OFF);
+			if (rc) {
+				OFP_ERR("failed to send lhbm off cmds\n");
+			}
+		} else {
+			rc = oplus_ofp_display_cmd_set(display, DSI_CMD_HBM_OFF);
+			if (rc) {
+				OFP_ERR("[%s] failed to send DSI_CMD_HBM_OFF cmds, rc=%d\n", display->name, rc);
+			}
 		}
 	}
 
@@ -3203,4 +3489,62 @@ ssize_t oplus_ofp_get_ultra_low_power_aod_mode_attr(struct kobject *obj,
 	OFP_DEBUG("end\n");
 
 	return sprintf(buf, "%u\n", p_oplus_ofp_params->ultra_low_power_aod_mode);
+}
+
+ssize_t oplus_ofp_set_lhbm_enable_attr(struct kobject *obj,
+	struct kobj_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int lhbm_enable = 0;
+	struct dsi_display *display = oplus_display_get_current_display();
+	struct oplus_ofp_params *p_oplus_ofp_params = oplus_ofp_get_params(oplus_ofp_display_id);
+
+	OFP_DEBUG("start\n");
+
+	if (!buf || !display || !p_oplus_ofp_params) {
+		OFP_ERR("Invalid params\n");
+		return count;
+	}
+
+	sscanf(buf, "%u", &lhbm_enable);
+	OFP_INFO("hbm mode:%u to %u\n", p_oplus_ofp_params->lhbm_enable, lhbm_enable);
+
+	if (!dsi_panel_initialized(display->panel)) {
+		OFP_ERR("should not set hbm if panel is not initialized\n");
+		return count;
+	}
+
+	OPLUS_OFP_TRACE_BEGIN("oplus_ofp_set_lhbm_enable_attr");
+
+	p_oplus_ofp_params->lhbm_enable = lhbm_enable;
+	OFP_INFO("oplus_ofp_lhbm_enable:%u\n", p_oplus_ofp_params->lhbm_enable);
+	OPLUS_OFP_TRACE_INT("oplus_ofp_lhbm_enable", p_oplus_ofp_params->lhbm_enable);
+
+	OPLUS_OFP_TRACE_END("oplus_ofp_set_lhbm_enable_attr");
+
+	OFP_DEBUG("end\n");
+
+	return count;
+}
+
+ssize_t oplus_ofp_get_lhbm_enable_attr(struct kobject *obj,
+	struct kobj_attribute *attr, char *buf)
+{
+	struct oplus_ofp_params *p_oplus_ofp_params = oplus_ofp_get_params(oplus_ofp_display_id);
+
+	OFP_DEBUG("start\n");
+
+	if (!buf || !p_oplus_ofp_params) {
+		OFP_ERR("Invalid params\n");
+		return -EINVAL;
+	}
+
+	OPLUS_OFP_TRACE_BEGIN("oplus_ofp_get_lhbm_enable_attr");
+
+	OFP_INFO("lhbm_enable:%u\n", p_oplus_ofp_params->lhbm_enable);
+
+	OPLUS_OFP_TRACE_END("oplus_ofp_get_lhbm_enable_attr");
+
+	OFP_DEBUG("end\n");
+
+	return sprintf(buf, "%u\n", p_oplus_ofp_params->lhbm_enable);
 }

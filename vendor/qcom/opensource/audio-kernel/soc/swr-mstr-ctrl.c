@@ -139,6 +139,19 @@ static void swr_master_write(struct swr_mstr_ctrl *swrm, u16 reg_addr, u32 val);
 static int swrm_runtime_resume(struct device *dev);
 static void swrm_wait_for_fifo_avail(struct swr_mstr_ctrl *swrm, int swrm_rd_wr);
 
+#ifdef OPLUS_ARCH_EXTENDS
+extern bool oplus_daemon_adsp_ssr(void);
+#define SWRM_FIFO_FAILED_LIMIT_MS 300000
+#define SWR_ADSP_RETRY_COUNT 50
+static ktime_t ssr_time = 0;
+static int adsp_ssr_count = SWR_ADSP_RETRY_COUNT;
+
+static void oplus_daemon_adsp_ssr_work_fn(struct work_struct *work)
+{
+	oplus_daemon_adsp_ssr();
+}
+#endif /* OPLUS_ARCH_EXTENDS */
+
 static u8 swrm_get_clk_div(int mclk_freq, int bus_clk_freq)
 {
 	int clk_div = 0;
@@ -728,6 +741,16 @@ static bool swrm_check_link_status(struct swr_mstr_ctrl *swrm, bool active)
 		dev_err_ratelimited(swrm->dev, "%s: link status not %s\n", __func__,
 			active ? "connected" : "disconnected");
 
+#ifdef OPLUS_ARCH_EXTENDS
+	pr_debug("%s: retry %d swrm->state %d  ssr_time %lld\n", __func__,
+			retry, swrm->state, ssr_time);
+	if ((retry <= 0) && (swrm->state == SWR_MSTR_UP) &&
+		(ktime_after(ktime_get(), ktime_add_ms(ssr_time, SWRM_FIFO_FAILED_LIMIT_MS)))) {
+		ssr_time = ktime_get();
+		schedule_delayed_work(&swrm->adsp_ssr_work, msecs_to_jiffies(200));
+	}
+#endif /* OPLUS_ARCH_EXTENDS */
+
 	return ret;
 }
 
@@ -917,6 +940,27 @@ static void swrm_wait_for_fifo_avail(struct swr_mstr_ctrl *swrm, int swrm_rd_wr)
 					"%s err write overflow\n", __func__);
 #endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 	}
+
+#ifdef OPLUS_ARCH_EXTENDS
+	if ((swrm_rd_wr && (fifo_outstanding_cmd == 0)) ||
+		(!swrm_rd_wr && (fifo_outstanding_cmd == swrm->wr_fifo_depth))) {
+		if (adsp_ssr_count > 0) {
+			adsp_ssr_count--;
+		}
+	} else {
+		adsp_ssr_count = SWR_ADSP_RETRY_COUNT;
+	}
+
+	pr_debug("%s: fifo_retry_count %d adsp_ssr_count %d swrm->state %d  ssr_time %lld\n", __func__,
+			fifo_retry_count, adsp_ssr_count, swrm->state, ssr_time);
+
+	if ((adsp_ssr_count <= 0) && (swrm->state == SWR_MSTR_UP) &&
+		(ktime_after(ktime_get(), ktime_add_ms(ssr_time, SWRM_FIFO_FAILED_LIMIT_MS)))) {
+		ssr_time = ktime_get();
+		adsp_ssr_count = SWR_ADSP_RETRY_COUNT;
+		schedule_delayed_work(&swrm->adsp_ssr_work, msecs_to_jiffies(200));
+	}
+#endif /* OPLUS_ARCH_EXTENDS */
 }
 
 static int swrm_cmd_fifo_rd_cmd(struct swr_mstr_ctrl *swrm, int *cmd_data,
@@ -3166,6 +3210,10 @@ static int swrm_probe(struct platform_device *pdev)
 	swrm->event_notifier.notifier_call  = swrm_event_notify;
 	//msm_aud_evt_register_client(&swrm->event_notifier);
 
+#ifdef OPLUS_ARCH_EXTENDS
+	INIT_DELAYED_WORK(&swrm->adsp_ssr_work, oplus_daemon_adsp_ssr_work_fn);
+#endif /* OPLUS_ARCH_EXTENDS */
+
 	return 0;
 err_parse_num_dev:
 err_mstr_init_fail:
@@ -3226,6 +3274,9 @@ static int swrm_remove(struct platform_device *pdev)
 		free_irq(swrm->wake_irq, swrm);
 	}
 	cancel_work_sync(&swrm->wakeup_work);
+#ifdef OPLUS_ARCH_EXTENDS
+	cancel_delayed_work_sync(&swrm->adsp_ssr_work);
+#endif /* OPLUS_ARCH_EXTENDS */
 	pm_runtime_disable(&pdev->dev);
 	pm_runtime_set_suspended(&pdev->dev);
 	swr_unregister_master(&swrm->master);
@@ -3926,6 +3977,13 @@ done:
 			__func__, id);
 		break;
 	}
+
+#ifdef OPLUS_ARCH_EXTENDS
+	if (swrm->state == SWR_MSTR_SSR) {
+		adsp_ssr_count = SWR_ADSP_RETRY_COUNT;
+	}
+#endif /* OPLUS_ARCH_EXTENDS */
+
 	return ret;
 }
 EXPORT_SYMBOL(swrm_wcd_notify);

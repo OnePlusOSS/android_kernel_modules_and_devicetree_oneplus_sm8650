@@ -356,6 +356,10 @@
 #define WLAN_SUPPORT_INFRA_CTRL_PATH_STATS (1)
 #endif
 
+#ifdef CONFIG_QCA_TARGET_IF_MLME
+#define QCA_TARGET_IF_MLME
+#endif
+
 #ifdef CONFIG_CP_STATS
 #define QCA_SUPPORT_CP_STATS (1)
 #endif

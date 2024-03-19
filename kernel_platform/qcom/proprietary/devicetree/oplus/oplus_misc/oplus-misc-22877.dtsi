@@ -2,8 +2,8 @@
 	qcom,vmax-mv = <1720>;
 	qcom,cl-vmax-mv = <1720>;
 	qcom,lra-period-us = <7692>;
-	qcom,fifo-vmax-mv = <7900>;
-	qcom,old-steady-vmax-mv = <7900>;
+	qcom,fifo-vmax-mv = <7800>;
+	qcom,old-steady-vmax-mv = <7800>;
 	qcom,brake-mode = <BRAKE_OPEN_LOOP>;
 	qcom,cal-data-restore;
 	qcom,fifo-empty-threshold = <480>;

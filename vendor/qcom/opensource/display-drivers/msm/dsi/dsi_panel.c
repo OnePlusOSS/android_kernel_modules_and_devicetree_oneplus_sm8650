@@ -459,7 +459,8 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 #ifdef OPLUS_FEATURE_DISPLAY
 	oplus_panel_gpio_on(panel);
 	if (!strcmp(panel->oplus_priv.vendor_name, "A0005")
-		|| !strcmp(panel->oplus_priv.vendor_name, "BOE_ILI7838E")) {
+		|| !strcmp(panel->oplus_priv.vendor_name, "BOE_ILI7838E")
+		|| !strcmp(panel->oplus_priv.vendor_name, "BOE_7838E")) {
 		rc = 0;
 	} else {
 		rc = dsi_panel_reset(panel);
@@ -503,7 +504,8 @@ static int dsi_panel_power_off(struct dsi_panel *panel)
 	} else
 #endif
 	if (!strcmp(panel->oplus_priv.vendor_name , "A0005")
-		|| !strcmp(panel->oplus_priv.vendor_name, "BOE_ILI7838E"))
+		|| !strcmp(panel->oplus_priv.vendor_name, "BOE_ILI7838E")
+		|| !strcmp(panel->oplus_priv.vendor_name, "BOE_7838E"))
 		usleep_range(50*1000, (50*1000)+100);
 	else
 		usleep_range(2*1000, (2*1000)+100);
@@ -2143,6 +2145,8 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 #ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
 	"qcom,mdss-dsi-hbm-on-command",
 	"qcom,mdss-dsi-hbm-on-onepulse-command",
+	"qcom,mdss-dsi-lhbm-on-command",
+	"qcom,mdss-dsi-lhbm-off-command",
 	"qcom,mdss-dsi-hbm-off-command",
 	"qcom,mdss-dsi-aor-on-command",
 	"qcom,mdss-dsi-aor-off-command",
@@ -2205,6 +2209,7 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-panel-init-command",
 	"qcom,mdss-dsi-optimize-command",
 	"qcom,mdss-dsi-optimize-split-command",
+	"qcom,mdss-dsi-optimize-on-command",
 	"qcom,mdss-dsi-pwm-turbo-on-command",
 	"qcom,mdss-dsi-pwm-turbo-off-command",
 	"qcom,mdss-dsi-pwm-turbo-hbm-on-command",
@@ -2294,6 +2299,8 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 #ifdef OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT
 	"qcom,mdss-dsi-hbm-on-command-state",
 	"qcom,mdss-dsi-hbm-on-onepulse-command-state",
+	"qcom,mdss-dsi-lhbm-on-command-state",
+	"qcom,mdss-dsi-lhbm-off-command-state",
 	"qcom,mdss-dsi-hbm-off-command-state",
 	"qcom,mdss-dsi-aor-on-command-state",
 	"qcom,mdss-dsi-aor-off-command-state",
@@ -2356,6 +2363,7 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-panel-init-command-state",
 	"qcom,mdss-dsi-optimize-command-state",
 	"qcom,mdss-dsi-optimize-split-command-state",
+	"qcom,mdss-dsi-optimize-on-command-state",
 	"qcom,mdss-dsi-pwm-turbo-on-command-state",
 	"qcom,mdss-dsi-pwm-turbo-off-command-state",
 	"qcom,mdss-dsi-pwm-turbo-hbm-on-command-state",
@@ -5176,7 +5184,8 @@ int dsi_panel_prepare(struct dsi_panel *panel)
 	}
 #ifdef OPLUS_FEATURE_DISPLAY
 		if (!strcmp(panel->oplus_priv.vendor_name, "A0005")
-			|| !strcmp(panel->oplus_priv.vendor_name, "BOE_ILI7838E")) {
+			|| !strcmp(panel->oplus_priv.vendor_name, "BOE_ILI7838E")
+			|| !strcmp(panel->oplus_priv.vendor_name, "BOE_7838E")) {
 			usleep_range(2*1000, (2*1000)+100);
 			dsi_panel_reset(panel);
 		}

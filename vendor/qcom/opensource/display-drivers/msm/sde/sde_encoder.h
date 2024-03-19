@@ -227,6 +227,7 @@ enum sde_sim_qsync_event {
  * @ctl_done_supported          boolean flag to indicate the availability of
  *                              ctl done irq support for the hardware
  * @dynamic_irqs_config         bitmask config to enable encoder dynamic irqs
+ * @vsync_event_wq              Queue to wait for the vsync event complete
  */
 struct sde_encoder_virt {
 	struct drm_encoder base;
@@ -302,6 +303,7 @@ struct sde_encoder_virt {
 	bool ctl_done_supported;
 
     unsigned long dynamic_irqs_config;
+	wait_queue_head_t vsync_event_wq;
 };
 
 #ifdef OPLUS_FEATURE_DISPLAY

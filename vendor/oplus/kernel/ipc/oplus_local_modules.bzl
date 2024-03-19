@@ -9,6 +9,7 @@ def define_oplus_local_modules():
         srcs = native.glob([
             "binder_main.c",
             "binder_sched.c",
+            "binder_sysfs.c",
             "*.h",
         ]),
         includes = ["."],

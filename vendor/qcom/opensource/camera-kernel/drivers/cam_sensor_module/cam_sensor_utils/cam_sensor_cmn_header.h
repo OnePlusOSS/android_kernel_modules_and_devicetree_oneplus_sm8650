@@ -263,6 +263,7 @@ struct i2c_data_settings {
 	struct i2c_settings_array lsc_settings;
 	struct i2c_settings_array qsc_settings;
 	struct i2c_settings_array awbotp_settings;
+	struct i2c_settings_array pdc_settings;
 #endif
 };
 

@@ -390,6 +390,12 @@
 };
 
 &tlmm {
+
+	gpio_wakeup: gpio_wakeup {
+		compatible = "gpio_wakeup";
+		gpio_table = <3 8 11 15 56 57 59 63 66 67 68 69 77 84 87 137 155 171 172 174 176 177 195>;
+	};
+
 	pmx_led_default {
 		led_default: led_default {
 			mux {

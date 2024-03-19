@@ -79,7 +79,6 @@ static bool handle_param_setup(char *key, char *value)
 		int s_pid;
 		POWER_MONITOR_DEBUG_PRINTK("systemserver_pid changed\n");
 		if (sscanf(value, "%d", &s_pid) == 1)
-			POWER_MONITOR_DEBUG_PRINTK("systemserver_pid change to %d\n", s_pid);
 			systemserver_pid = s_pid;
 	} else if (!strcmp(key, "boot-completed")) {
 		int is_boot_completed;

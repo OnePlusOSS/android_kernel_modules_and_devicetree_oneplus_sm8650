@@ -2441,12 +2441,184 @@ static QDF_STATUS hdd_update_bss_rate_flags(struct hdd_adapter *adapter,
 					       vht_present, ht_present);
 }
 
+/**
+ * struct sme_config_msg_ctx - sme config update message ctx
+ * @vdev: vdev object
+ * @chwidth: channel width
+ * @is_restore: restore default or not
+ * @bonding_mode: bonding mode
+ */
+struct sme_config_msg_ctx {
+	struct wlan_objmgr_vdev *vdev;
+	enum eSirMacHTChannelWidth chwidth;
+	bool is_restore;
+	uint32_t bonding_mode;
+};
+
+/**
+ * hdd_restore_sme_config_cb() - restore bonding mode sme config cb
+ * @msg: msg data
+ *
+ * Return: QDF_STATUS
+ */
+static QDF_STATUS hdd_restore_sme_config_cb(struct scheduler_msg *msg)
+{
+	struct hdd_context *hdd_ctx;
+	mac_handle_t mac_handle;
+	struct sme_config_params *sme_config = NULL;
+	struct sme_config_msg_ctx *sme_config_msg_ctx = NULL;
+	struct wlan_objmgr_vdev *vdev = NULL;
+	uint8_t vdev_id;
+	QDF_STATUS status = QDF_STATUS_E_FAILURE;
+
+	if (!msg) {
+		hdd_debug("msg is null");
+		return QDF_STATUS_E_INVAL;
+	}
+
+	sme_config_msg_ctx = msg->bodyptr;
+	if (!sme_config_msg_ctx) {
+		hdd_debug("bodyptr is null");
+		return QDF_STATUS_E_INVAL;
+	}
+
+	vdev = sme_config_msg_ctx->vdev;
+	if (!vdev)
+		goto end;
+
+	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
+	if (wlan_hdd_validate_context(hdd_ctx))
+		goto end;
+
+	mac_handle = cds_get_context(QDF_MODULE_ID_SME);
+	if (!mac_handle)
+		goto end;
+
+	if (!hdd_ctx->psoc)
+		goto end;
+
+	sme_config = qdf_mem_malloc(sizeof(*sme_config));
+	if (!sme_config)
+		goto end;
+
+	vdev_id = wlan_vdev_get_id(vdev);
+	hdd_debug("vdev id %d is_restore %d bonding_mode %d chwdith %d",
+		  vdev_id,
+		  sme_config_msg_ctx->is_restore,
+		  sme_config_msg_ctx->bonding_mode,
+		  sme_config_msg_ctx->chwidth);
+	sme_get_config_param(mac_handle, sme_config);
+	if (sme_config_msg_ctx->is_restore) {
+		sme_config->csr_config.channelBondingMode5GHz =
+			cfg_get(hdd_ctx->psoc, CFG_CHANNEL_BONDING_MODE_5GHZ);
+		sme_config->csr_config.channelBondingMode24GHz =
+			cfg_get(hdd_ctx->psoc, CFG_CHANNEL_BONDING_MODE_24GHZ);
+	} else {
+		sme_config->csr_config.channelBondingMode5GHz =
+					sme_config_msg_ctx->bonding_mode;
+		sme_config->csr_config.channelBondingMode24GHz =
+					sme_config_msg_ctx->bonding_mode;
+	}
+	sme_update_config(mac_handle, sme_config);
+	sme_set_he_bw_cap(hdd_ctx->mac_handle, vdev_id,
+			  sme_config_msg_ctx->chwidth);
+	sme_set_eht_bw_cap(hdd_ctx->mac_handle, vdev_id,
+			   sme_config_msg_ctx->chwidth);
+
+	status = QDF_STATUS_SUCCESS;
+end:
+	qdf_mem_free(sme_config);
+	if (vdev)
+		hdd_objmgr_put_vdev_by_user(vdev, WLAN_HDD_ID_OBJ_MGR);
+	qdf_mem_free(sme_config_msg_ctx);
+
+	return status;
+}
+
+/**
+ * hdd_restore_sme_config_flush_cb() - bonding mode sme config flush cb
+ * @msg: msg data
+ *
+ * Return: QDF_STATUS
+ */
+static QDF_STATUS hdd_restore_sme_config_flush_cb(struct scheduler_msg *msg)
+{
+	struct sme_config_msg_ctx *sme_config_msg_ctx;
+
+	if (!msg) {
+		hdd_debug("msg is null");
+		return QDF_STATUS_E_INVAL;
+	}
+
+	sme_config_msg_ctx = msg->bodyptr;
+	if (!sme_config_msg_ctx) {
+		hdd_debug("bodyptr is null");
+		return QDF_STATUS_E_INVAL;
+	}
+
+	if (sme_config_msg_ctx->vdev)
+		hdd_objmgr_put_vdev_by_user(sme_config_msg_ctx->vdev,
+					    WLAN_HDD_ID_OBJ_MGR);
+	else
+		hdd_debug("vdev is null");
+
+	qdf_mem_free(sme_config_msg_ctx);
+
+	return QDF_STATUS_SUCCESS;
+}
+
+/**
+ * hdd_restore_sme_config() - restore bonding mode for sme config
+ * @link_info: link info
+ * @chwidth: channel width
+ * @is_restore: msg data
+ * @bonding_mode: bonding mode
+ *
+ * Return: void
+ */
+static void hdd_restore_sme_config(struct wlan_hdd_link_info *link_info,
+				   enum eSirMacHTChannelWidth chwidth,
+				   bool is_restore, uint32_t bonding_mode)
+{
+	struct scheduler_msg msg = {0};
+	QDF_STATUS status;
+	struct wlan_objmgr_vdev *vdev;
+	struct sme_config_msg_ctx *sme_config_msg_ctx;
+
+	sme_config_msg_ctx = qdf_mem_malloc(sizeof(*sme_config_msg_ctx));
+	if (!sme_config_msg_ctx)
+		return;
+
+	vdev = hdd_objmgr_get_vdev_by_user(link_info, WLAN_HDD_ID_OBJ_MGR);
+	if (!vdev) {
+		qdf_mem_free(sme_config_msg_ctx);
+		hdd_debug("no vdev from link info");
+		return;
+	}
+
+	sme_config_msg_ctx->vdev = vdev;
+	sme_config_msg_ctx->chwidth = chwidth;
+	sme_config_msg_ctx->is_restore = is_restore;
+	sme_config_msg_ctx->bonding_mode = bonding_mode;
+	msg.bodyptr = sme_config_msg_ctx;
+	msg.callback = hdd_restore_sme_config_cb;
+	msg.flush_callback = hdd_restore_sme_config_flush_cb;
+
+	status = scheduler_post_message(QDF_MODULE_ID_HDD,
+					QDF_MODULE_ID_OS_IF,
+					QDF_MODULE_ID_OS_IF, &msg);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		hdd_debug("status %d", status);
+		hdd_objmgr_put_vdev_by_user(vdev, WLAN_HDD_ID_OBJ_MGR);
+		qdf_mem_free(sme_config_msg_ctx);
+	}
+}
+
 int hdd_update_channel_width(struct hdd_adapter *adapter,
 			     enum eSirMacHTChannelWidth chwidth,
 			     uint32_t bonding_mode, uint8_t link_id)
 {
 	struct hdd_context *hdd_ctx;
-	struct sme_config_params *sme_config;
 	int ret;
 	enum phy_ch_width ch_width = CH_WIDTH_INVALID;
 	QDF_STATUS status;
@@ -2474,25 +2646,12 @@ int hdd_update_channel_width(struct hdd_adapter *adapter,
 			return -EIO;
 	}
 
-	sme_config = qdf_mem_malloc(sizeof(*sme_config));
-	if (!sme_config)
-		return -ENOMEM;
-
 	ret = wma_cli_set_command(adapter->deflink->vdev_id,
 				  wmi_vdev_param_chwidth, chwidth, VDEV_CMD);
 	if (ret)
-		goto free_config;
+		return ret;
 
-	sme_get_config_param(hdd_ctx->mac_handle, sme_config);
-	sme_config->csr_config.channelBondingMode5GHz = bonding_mode;
-	sme_config->csr_config.channelBondingMode24GHz = bonding_mode;
-	sme_update_config(hdd_ctx->mac_handle, sme_config);
-	sme_set_he_bw_cap(hdd_ctx->mac_handle,
-			  adapter->deflink->vdev_id, chwidth);
-	sme_set_eht_bw_cap(hdd_ctx->mac_handle,
-			   adapter->deflink->vdev_id, chwidth);
-free_config:
-	qdf_mem_free(sme_config);
-	return ret;
+	hdd_restore_sme_config(adapter->deflink, chwidth, false, bonding_mode);
 
+	return 0;
 }

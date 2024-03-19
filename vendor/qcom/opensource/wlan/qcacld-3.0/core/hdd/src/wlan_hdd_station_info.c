@@ -954,9 +954,11 @@ hdd_populate_station_info_skb(struct sk_buff *skb,
 		hdd_err("he operation info put fail");
 		return QDF_STATUS_E_FAILURE;
 	}
-	if (hdd_add_eht_oper_info(skb, hdd_sta_ctx)) {
-		hdd_err("eht operation info put fail");
-		return QDF_STATUS_E_FAILURE;
+	if (hdd_sta_ctx->cache_conn_info.conn_flag.eht_op_present) {
+		if (hdd_add_eht_oper_info(skb, hdd_sta_ctx)) {
+			hdd_err("eht operation info put fail");
+			return QDF_STATUS_E_FAILURE;
+		}
 	}
 
 	if (hdd_sta_ctx->cache_conn_info.conn_flag.hs20_present) {

@@ -358,6 +358,12 @@ static int32_t cam_sensor_pkt_parse(struct cam_sensor_ctrl_t *s_ctrl,
 		i2c_reg_settings->is_settings_valid = 1;
 		break;
 	}
+	case CAM_SENSOR_PACKET_OPCODE_SENSOR_PDC: {
+		i2c_reg_settings = &i2c_data->pdc_settings;
+		i2c_reg_settings->request_id = 0;
+		i2c_reg_settings->is_settings_valid = 1;
+		break;
+	}
 #endif
 	case CAM_SENSOR_PACKET_OPCODE_SENSOR_CONFIG: {
 		i2c_reg_settings = &i2c_data->config_settings;
@@ -1394,8 +1400,13 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 
 		if (s_ctrl->i2c_data.qsc_settings.is_settings_valid)
 		{
-			CAM_INFO(CAM_SENSOR, "release: delete lsc_settings");
+			CAM_INFO(CAM_SENSOR, "release: delete qsc_settings");
 			delete_request(&s_ctrl->i2c_data.qsc_settings);
+		}
+		if (s_ctrl->i2c_data.pdc_settings.is_settings_valid)
+		{
+			CAM_INFO(CAM_SENSOR, "release: delete pdc_settings");
+			delete_request(&s_ctrl->i2c_data.pdc_settings);
 		}
 
 		if (s_ctrl->i2c_data.resolution_settings.is_settings_valid)
@@ -1558,9 +1569,15 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 
 		if (s_ctrl->i2c_data.qsc_settings.is_settings_valid)
 		{
-			CAM_INFO(CAM_SENSOR, "release: delete lsc_settings");
+			CAM_INFO(CAM_SENSOR, "release: delete qsc_settings");
 			delete_request(&s_ctrl->i2c_data.qsc_settings);
 		}
+		if (s_ctrl->i2c_data.pdc_settings.is_settings_valid)
+		{
+			CAM_INFO(CAM_SENSOR, "release: delete pdc_settings");
+			delete_request(&s_ctrl->i2c_data.pdc_settings);
+		}
+
 
 		if (s_ctrl->i2c_data.resolution_settings.is_settings_valid)
 			delete_request(&s_ctrl->i2c_data.resolution_settings);
@@ -2052,6 +2069,11 @@ int cam_sensor_apply_settings(struct cam_sensor_ctrl_t *s_ctrl,
 			i2c_set = &s_ctrl->i2c_data.awbotp_settings;
 			break;
 		}
+		case CAM_SENSOR_PACKET_OPCODE_SENSOR_PDC: {
+			i2c_set = &s_ctrl->i2c_data.pdc_settings;
+			break;
+		}
+
 #endif
 		case CAM_SENSOR_PACKET_OPCODE_SENSOR_UPDATE:
 		case CAM_SENSOR_PACKET_OPCODE_SENSOR_FRAME_SKIP_UPDATE:

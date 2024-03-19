@@ -7903,3 +7903,10 @@ wlan_mlme_get_ap_oper_ch_width(struct wlan_objmgr_vdev *vdev)
 
 	return mlme_priv->mlme_ap.oper_ch_width;
 }
+
+QDF_STATUS
+wlan_mlme_send_csa_event_status_ind(struct wlan_objmgr_vdev *vdev,
+				    uint8_t csa_status)
+{
+	return wlan_mlme_send_csa_event_status_ind_cmd(vdev, csa_status);
+}

@@ -124,7 +124,6 @@ int ufcs_check_refuse_msg(struct ufcs_class *class, struct ufcs_msg *msg,
 static void ufcs_state_idel_handle(struct ufcs_class *class, struct ufcs_event *event)
 {
 	int rc;
-	bool soft_reset;
 
 	mutex_lock(&class->pe_lock);
 	class->state.err = 0;
@@ -197,24 +196,18 @@ static void ufcs_state_idel_handle(struct ufcs_class *class, struct ufcs_event *
 	default:
 		ufcs_err("not support %s event\n", ufcs_get_event_name(event));
 		if (event->msg) {
-			soft_reset = false;
-retry:
 			rc = ufcs_send_data_msg_refuse(class, event->msg, REFUSE_NOT_SUPPORT_CMD);
-			if (rc < 0) {
-				if (rc == -EAGAIN) {
-					if (soft_reset) {
-						ufcs_free_event(class, &event);
-						ufcs_source_hard_reset(class->ufcs);
-						return;
-					}
-					ufcs_send_ctrl_msg_soft_reset(class);
-					soft_reset = true;
-					goto retry;
-				}
+			/*
+			 * -EAGAIN indicates that the soft rest is sent successfully
+			 * and no hard reset is required at this time.
+			 */
+			if (rc < 0 && rc != -EAGAIN) {
 				ufcs_free_event(class, &event);
 				ufcs_err("send refuse msg error, rc=%d\n", rc);
 				goto err;
 			}
+			if (rc == -EAGAIN)
+				ufcs_err("send refuse msg error, buf soft reset send success\n");
 		}
 		ufcs_free_event(class, &event);
 		break;
@@ -240,22 +233,11 @@ static void ufcs_state_hw_reset_handle(struct ufcs_class *class, struct ufcs_eve
 
 static void ufcs_state_send_exit_handle(struct ufcs_class *class, struct ufcs_event *event)
 {
-	bool soft_reset = false;
 	int rc;
 
 	ufcs_free_event(class, &event);
-retry:
-	rc = ufcs_send_ctrl_msg_exit_ufcs_mode(class);
+	rc = ufcs_send_ctrl_msg_exit_ufcs_mode_retry(class);
 	if (rc < 0) {
-		if (rc == -EAGAIN) {
-			if (soft_reset) {
-				rc = -EIO;
-				goto err;
-			}
-			ufcs_send_ctrl_msg_soft_reset(class);
-			soft_reset = true;
-			goto retry;
-		}
 		ufcs_err("send exit ufcs mode msg error, rc=%d\n", rc);
 		goto err;
 	}
@@ -361,15 +343,8 @@ static void ufcs_state_output_cap_handle(struct ufcs_class *class, struct ufcs_e
 
 	ufcs_free_event(class, &event);
 retry:
-	rc = ufcs_send_ctrl_msg_get_output_capabilities(class);
+	rc = ufcs_send_ctrl_msg_get_output_capabilities_retry(class);
 	if (rc < 0) {
-		if (rc == -EAGAIN) {
-			if (soft_reset)
-				goto err;
-			ufcs_send_ctrl_msg_soft_reset(class);
-			soft_reset = true;
-			goto retry;
-		}
 		ufcs_err("send get_output_capabilities msg error, rc=%d\n", rc);
 		goto err;
 	}
@@ -481,15 +456,8 @@ static void ufcs_state_request_handle(struct ufcs_class *class, struct ufcs_even
 	ufcs_free_event(class, &event);
 
 retry:
-	rc = ufcs_send_data_msg_request(class, pdo_index, pdo_vol, pdo_curr);
+	rc = ufcs_send_data_msg_request_retry(class, pdo_index, pdo_vol, pdo_curr);
 	if (rc < 0) {
-		if (rc == -EAGAIN) {
-			if (soft_reset)
-				goto err;
-			ufcs_send_ctrl_msg_soft_reset(class);
-			soft_reset = true;
-			goto retry;
-		}
 		ufcs_err("send request msg error, rc=%d\n", rc);
 		goto err;
 	}
@@ -583,15 +551,8 @@ static void ufcs_state_get_src_info_handle(struct ufcs_class *class, struct ufcs
 
 	ufcs_free_event(class, &event);
 retry:
-	rc = ufcs_send_ctrl_msg_get_source_info(class);
+	rc = ufcs_send_ctrl_msg_get_source_info_retry(class);
 	if (rc < 0) {
-		if (rc == -EAGAIN) {
-			if (soft_reset)
-				goto err;
-			ufcs_send_ctrl_msg_soft_reset(class);
-			soft_reset = true;
-			goto retry;
-		}
 		ufcs_err("send get source info msg error, rc=%d\n", rc);
 		goto err;
 	}
@@ -790,15 +751,8 @@ static void ufcs_state_get_dev_info_handle(struct ufcs_class *class, struct ufcs
 
 	ufcs_free_event(class, &event);
 retry:
-	rc = ufcs_send_ctrl_msg_get_device_info(class);
+	rc = ufcs_send_ctrl_msg_get_device_info_retry(class);
 	if (rc < 0) {
-		if (rc == -EAGAIN) {
-			if (soft_reset)
-				goto err;
-			ufcs_send_ctrl_msg_soft_reset(class);
-			soft_reset = true;
-			goto retry;
-		}
 		ufcs_err("send get device info msg error, rc=%d\n", rc);
 		goto err;
 	}
@@ -891,15 +845,8 @@ static void ufcs_state_get_error_info_handle(struct ufcs_class *class, struct uf
 
 	ufcs_free_event(class, &event);
 retry:
-	rc = ufcs_send_ctrl_msg_get_error_info(class);
+	rc = ufcs_send_ctrl_msg_get_error_info_retry(class);
 	if (rc < 0) {
-		if (rc == -EAGAIN) {
-			if (soft_reset)
-				goto err;
-			ufcs_send_ctrl_msg_soft_reset(class);
-			soft_reset = true;
-			goto retry;
-		}
 		ufcs_err("send get error info msg error, rc=%d\n", rc);
 		goto err;
 	}
@@ -1033,15 +980,8 @@ static void ufcs_state_config_wd_handle(struct ufcs_class *class, struct ufcs_ev
 	ufcs_free_event(class, &event);
 
 retry:
-	rc = ufcs_send_data_msg_config_wd(class, &config_wd);
+	rc = ufcs_send_data_msg_config_wd_retry(class, &config_wd);
 	if (rc < 0) {
-		if (rc == -EAGAIN) {
-			if (soft_reset)
-				goto err;
-			ufcs_send_ctrl_msg_soft_reset(class);
-			soft_reset = true;
-			goto retry;
-		}
 		ufcs_err("send config watchdog msg error, rc=%d\n", rc);
 		goto err;
 	}
@@ -1168,15 +1108,8 @@ static void ufcs_state_verify_request_handle(struct ufcs_class *class, struct uf
 	ufcs_free_event(class, &event);
 
 retry:
-	rc = ufcs_send_data_msg_verify_request(class, &verify_request);
+	rc = ufcs_send_data_msg_verify_request_retry(class, &verify_request);
 	if (rc < 0) {
-		if (rc == -EAGAIN) {
-			if (soft_reset)
-				goto err;
-			ufcs_send_ctrl_msg_soft_reset(class);
-			soft_reset = true;
-			goto retry;
-		}
 		ufcs_err("send verify request msg error, rc=%d\n", rc);
 		goto err;
 	}
@@ -1452,7 +1385,7 @@ int ufcs_policy_engine_init(struct ufcs_class *class)
 		return -EINVAL;
 	}
 
-	kthread_init_work(&class->test_handle_work, ufcs_pe_test_handle_work);
+	INIT_WORK(&class->test_handle_work, ufcs_pe_test_handle_work);
 	class->sm_task_wakeup = false;
 	class->sm_task = kthread_create(ufcs_sm_task, class, "ufcs_sm");
 	if (IS_ERR(class->sm_task)) {

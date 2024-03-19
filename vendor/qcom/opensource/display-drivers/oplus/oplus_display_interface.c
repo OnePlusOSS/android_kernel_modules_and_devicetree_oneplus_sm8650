@@ -147,6 +147,10 @@ int oplus_panel_cmd_switch(struct dsi_panel *panel, enum dsi_cmd_set_type *type)
 		}
 	}
 
+	if (*type == DSI_CMD_SET_ON && oplus_panel_id_compatibility(panel)) {
+		*type = DSI_CMD_SET_COMPATIBILITY_ON;
+	}
+
 	count = panel->cur_mode->priv_info->cmd_sets[*type].count;
 	if (count == 0) {
 		LCD_DEBUG("[%s] %s is undefined, restore to %s\n",
@@ -156,7 +160,8 @@ int oplus_panel_cmd_switch(struct dsi_panel *panel, enum dsi_cmd_set_type *type)
 		*type = type_store;
 	}
 
-	if (!strcmp(panel->name, "enzo boe_ili7838e 1264 2780 evt dsc cmd mode panel")) {
+	if (!strcmp(panel->name, "enzo boe_ili7838e 1264 2780 evt dsc cmd mode panel")
+		|| !strcmp(panel->name, "enzo boe_ili7838e 1264 2780 pvt bd dsc cmd mode panel")) {
 		if (*type == DSI_CMD_SET_TIMING_SWITCH || *type == DSI_CMD_TIMMING_PWM_SWITCH_ONEPULSE) {
 			if ((refresh_rate == 144 && last_refresh_rate != 144) || (refresh_rate != 144 && last_refresh_rate == 144)) {
 				oplus_sde_early_wakeup(panel);
@@ -258,6 +263,8 @@ int oplus_panel_id_compatibility_init(struct dsi_display *display)
 			return rc;
 		}
 		else {
+			/* printf first read panel id */
+			LCD_INFO("kernel first read panel id DA = 0x%02X, DB = 0x%02X, DC = 0x%02X\n", panel_id.DA, panel_id.DB, panel_id.DC);
 			already_readid = true;
 		}
 	}
@@ -275,8 +282,6 @@ int oplus_panel_id_compatibility_init(struct dsi_display *display)
 		/* ID1 not is 3E && ID2 not is 93/94 return */
 		return rc;
 	}
-	/* ID2 93、94 TODO */
-	LCD_INFO("Send panel id compatibility init dcs panel id DA = 0x%02X, DB = 0x%02X\n", panel_id.DA, panel_id.DB);
 	mutex_lock(&panel->panel_lock);
 	rc = dsi_panel_tx_cmd_set(panel, compatibility_cmd);
 	mutex_unlock(&panel->panel_lock);
@@ -284,6 +289,18 @@ int oplus_panel_id_compatibility_init(struct dsi_display *display)
 		LCD_ERR("Send panel id compatibility init code failed! \n");
 	}
 	return rc;
+}
+
+/*add for panel id compatibility by qcom,mdss-dsi-on-command*/
+bool oplus_panel_id_compatibility(struct dsi_panel *panel)
+{
+	/* power on printf panel id */
+	LCD_INFO("panel id DA = 0x%02X, DB = 0x%02X, DC = 0x%02X\n", panel_id.DA, panel_id.DB, panel_id.DC);
+	if (already_readid && panel_id.DA == 0x3E && panel_id.DB >= 0x97) {
+		return true;
+	}
+
+	return false;
 }
 
 int oplus_panel_gpio_request(struct dsi_panel *panel)
@@ -371,7 +388,8 @@ int oplus_panel_gpio_on(struct dsi_panel *panel)
 	}
 
 	if (!strcmp(panel->oplus_priv.vendor_name , "A0005")
-		|| !strcmp(panel->oplus_priv.vendor_name , "BOE_ILI7838E"))
+		|| !strcmp(panel->oplus_priv.vendor_name , "BOE_ILI7838E")
+		|| !strcmp(panel->oplus_priv.vendor_name , "BOE_7838E"))
 		return 0;
 
 	r_config = &panel->reset_config;
@@ -401,7 +419,8 @@ int oplus_panel_gpio_off(struct dsi_panel *panel)
 		return -ENODEV;
 	}
 	if (!strcmp(panel->oplus_priv.vendor_name , "A0005")
-		|| !strcmp(panel->oplus_priv.vendor_name , "BOE_ILI7838E"))
+		|| !strcmp(panel->oplus_priv.vendor_name , "BOE_ILI7838E")
+		|| !strcmp(panel->oplus_priv.vendor_name , "BOE_7838E"))
 		return 0;
 
 	r_config = &panel->reset_config;
@@ -423,7 +442,8 @@ int oplus_panel_vddr_on(struct dsi_display *display, const char *vreg_name)
 		return -ENODEV;
 	}
 	if ((!strcmp(display->panel->oplus_priv.vendor_name , "A0005")
-		|| !strcmp(display->panel->oplus_priv.vendor_name , "BOE_ILI7838E"))
+		|| !strcmp(display->panel->oplus_priv.vendor_name , "BOE_ILI7838E")
+		|| !strcmp(display->panel->oplus_priv.vendor_name , "BOE_7838E"))
 		&& !strcmp(vreg_name, "vddio")) {
 		if (gpio_is_valid(display->panel->reset_config.panel_vout_gpio)) {
 			rc = gpio_direction_output(display->panel->reset_config.panel_vout_gpio, 1);
@@ -446,7 +466,8 @@ int oplus_panel_vddr_off(struct dsi_display *display, const char *vreg_name)
 	}
 
 	if ((!strcmp(display->panel->oplus_priv.vendor_name , "A0005")
-		|| !strcmp(display->panel->oplus_priv.vendor_name , "BOE_ILI7838E"))
+		|| !strcmp(display->panel->oplus_priv.vendor_name , "BOE_ILI7838E")
+		|| !strcmp(display->panel->oplus_priv.vendor_name , "BOE_7838E"))
 		&& !strcmp(vreg_name, "vci")) {
 		if (gpio_is_valid(display->panel->reset_config.panel_vout_gpio)) {
 			gpio_set_value(display->panel->reset_config.panel_vout_gpio, 0);

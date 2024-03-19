@@ -57,7 +57,7 @@
 #define CAM_IFE_CSID_MAX_IRQ_ERROR_COUNT               100
 
 /* Max sensor switch out of sync threshold */
-#define CAM_IFE_CSID_MAX_OUT_OF_SYNC_ERR_COUNT         3
+#define CAM_IFE_CSID_MAX_OUT_OF_SYNC_ERR_COUNT         6
 
 #define CAM_CSID_IRQ_CTRL_NAME_LEN                     10
 
@@ -2152,9 +2152,15 @@ static int cam_ife_csid_ver2_ipp_bottom_half(
 		err_mask, irq_status_ipp, payload);
 
 	if (err_type || out_of_sync_fatal) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		if (out_of_sync_fatal){
+			err_type = CAM_ISP_HW_ERROR_CSID_SENSOR_FRAME_DROP;
+			atomic_set(&path_cfg->switch_out_of_sync_cnt, 0);
+		}
+#else
 		if (out_of_sync_fatal)
 			err_type = CAM_ISP_HW_ERROR_CSID_SENSOR_FRAME_DROP;
-
+#endif
 		cam_ife_csid_ver2_handle_event_err(csid_hw,
 			irq_status_ipp, err_type, false, res);
 	}

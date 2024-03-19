@@ -3682,6 +3682,31 @@ void sde_encoder_virt_reset(struct drm_encoder *drm_enc)
 	sde_rm_release(&sde_kms->rm, drm_enc, false);
 }
 
+static void sde_encoder_wait_for_vsync_event_complete(struct sde_encoder_virt *sde_enc)
+{
+	u32 timeout_ms = DEFAULT_KICKOFF_TIMEOUT_MS;
+	int i, ret;
+
+	if (sde_enc->cur_master)
+		timeout_ms = sde_enc->cur_master->kickoff_timeout_ms;
+
+	ret = wait_event_timeout(sde_enc->vsync_event_wq,
+			!sde_enc->vblank_enabled,
+			msecs_to_jiffies(timeout_ms));
+	SDE_EVT32(timeout_ms, ret);
+
+	if (!ret) {
+		SDE_ERROR("vsync event complete timed out %d\n", ret);
+		SDE_EVT32(ret, SDE_EVTLOG_ERROR);
+		for (i = 0; i < sde_enc->num_phys_encs; i++) {
+			struct sde_encoder_phys *phys = sde_enc->phys_encs[i];
+
+			if (phys && phys->ops.control_vblank_irq)
+				phys->ops.control_vblank_irq(phys, false);
+		}
+	}
+}
+
 static void sde_encoder_virt_disable(struct drm_encoder *drm_enc)
 {
 	struct sde_encoder_virt *sde_enc = NULL;
@@ -3768,6 +3793,13 @@ static void sde_encoder_virt_disable(struct drm_encoder *drm_enc)
 		sde_encoder_resource_control(drm_enc,
 				SDE_ENC_RC_EVENT_PRE_STOP);
 	}
+
+	/*
+	 * wait for any pending vsync timestamp event to sf
+	 * to ensure vbalnk irq is disabled.
+	 */
+	if (sde_enc->vblank_enabled)
+		sde_encoder_wait_for_vsync_event_complete(sde_enc);
 
 	/*
 	 * disable dce after the transfer is complete (for command mode)
@@ -4116,6 +4148,9 @@ void sde_encoder_register_vblank_callback(struct drm_encoder *drm_enc,
 			phys->ops.control_vblank_irq(phys, enable);
 	}
 	sde_enc->vblank_enabled = enable;
+
+	if (!enable)
+		wake_up_all(&sde_enc->vsync_event_wq);
 }
 
 void sde_encoder_register_frame_event_callback(struct drm_encoder *drm_enc,
@@ -6718,6 +6753,7 @@ struct drm_encoder *sde_encoder_init(struct drm_device *dev, struct msm_display_
 		sde_enc->frame_trigger_mode = FRAME_DONE_WAIT_POSTED_START;
 
 	mutex_init(&sde_enc->rc_lock);
+	init_waitqueue_head(&sde_enc->vsync_event_wq);
 	kthread_init_delayed_work(&sde_enc->delayed_off_work,
 			sde_encoder_off_work);
 	sde_enc->vblank_enabled = false;

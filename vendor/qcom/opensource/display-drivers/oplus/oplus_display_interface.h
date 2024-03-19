@@ -189,6 +189,10 @@ int oplus_display_send_dcs_lock(struct dsi_display *display,
 int oplus_panel_id_compatibility_init(struct dsi_display *display);
 
 /**
+ * oplus_panel_id_compatibility() - oplus panel determine whether compatibility is required
+ */
+bool oplus_panel_id_compatibility(struct dsi_panel *panel);
+/**
  * oplus_panel_cmd_reg_replace() - replace cmd regs
  */
 int oplus_panel_cmd_reg_replace(struct dsi_panel *panel, enum dsi_cmd_set_type type,

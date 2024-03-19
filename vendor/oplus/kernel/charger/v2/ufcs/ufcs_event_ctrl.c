@@ -50,7 +50,7 @@ const char *ufcs_get_ctrl_msg_name(enum ufcs_ctrl_msg_type type)
 	return ctrl_msg_name[type];
 }
 
-int ufcs_send_ctrl_msg(struct ufcs_class *class, enum ufcs_ctrl_msg_type type)
+int ufcs_send_ctrl_msg(struct ufcs_class *class, enum ufcs_ctrl_msg_type type, bool retry)
 {
 	struct ufcs_msg *msg;
 	int rc;
@@ -65,7 +65,7 @@ int ufcs_send_ctrl_msg(struct ufcs_class *class, enum ufcs_ctrl_msg_type type)
 	INIT_CTRL_MSG_HEAD(&msg->head, class->sender.msg_number_counter);
 	msg->ctrl_msg.command = type;
 
-	rc = ufcs_send_msg(class, msg);
+	rc = ufcs_send_msg(class, msg, retry);
 	if (rc < 0)
 		ufcs_err("send %s ctrl msg error, rc=%d\n",
 			 ufcs_get_ctrl_msg_name(type), rc);
@@ -88,7 +88,10 @@ bool ufcs_is_supported_ctrl_msg(struct ufcs_ctrl_msg *msg)
 	case CTRL_MSG_ACCEPT:
 	case CTRL_MSG_SOFT_RESET:
 	case CTRL_MSG_POWER_READY:
+	case CTRL_MSG_GET_OUTPUT_CAPABILITIES:
+	case CTRL_MSG_GET_SOURCE_INFO:
 	case CTRL_MSG_GET_SINK_INFO:
+	case CTRL_MSG_GET_CABLE_INFO:
 	case CTRL_MSG_GET_DEVICE_INFO:
 	case CTRL_MSG_GET_ERROR_INFO:
 	case CTRL_MSG_DETECT_CABLE_INFO:
@@ -106,6 +109,20 @@ bool ufcs_is_supported_ctrl_msg(struct ufcs_ctrl_msg *msg)
 bool ufcs_is_ack_nck_msg(struct ufcs_ctrl_msg *msg)
 {
 	if (msg->command == CTRL_MSG_ACK || msg->command == CTRL_MSG_NCK)
+		return true;
+	return false;
+}
+
+bool ufcs_is_soft_reset_msg(struct ufcs_ctrl_msg *msg)
+{
+	if (msg->command == CTRL_MSG_SOFT_RESET)
+		return true;
+	return false;
+}
+
+bool ufcs_is_ping_msg(struct ufcs_ctrl_msg *msg)
+{
+	if (msg->command == CTRL_MSG_PING)
 		return true;
 	return false;
 }

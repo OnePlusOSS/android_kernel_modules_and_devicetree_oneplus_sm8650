@@ -29,17 +29,8 @@ int ufcs_pe_start_cable_detect(struct ufcs_class *class)
 
 	class->start_cable_detect = true;
 retry:
-	rc = ufcs_send_ctrl_msg_start_cable_detect(class);
+	rc = ufcs_send_ctrl_msg_start_cable_detect_retry(class);
 	if (rc < 0) {
-		if (rc == -EAGAIN) {
-			if (soft_reset) {
-				rc = -EIO;
-				goto out;
-			}
-			ufcs_send_ctrl_msg_soft_reset(class);
-			soft_reset = true;
-			goto retry;
-		}
 		ufcs_err("send start cable detect msg error, rc=%d\n", rc);
 		goto out;
 	}
@@ -115,17 +106,8 @@ int ufcs_pe_get_cable_info(struct ufcs_class *class)
 	int rc;
 
 retry:
-	rc = ufcs_send_ctrl_msg_get_cable_info(class);
+	rc = ufcs_send_ctrl_msg_get_cable_info_retry(class);
 	if (rc < 0) {
-		if (rc == -EAGAIN) {
-			if (soft_reset) {
-				rc = -EIO;
-				goto out;
-			}
-			ufcs_send_ctrl_msg_soft_reset(class);
-			soft_reset = true;
-			goto retry;
-		}
 		ufcs_err("send get cable info msg error, rc=%d\n", rc);
 		goto out;
 	}
@@ -203,19 +185,10 @@ out:
 
 int ufcs_pe_end_cable_detect(struct ufcs_class *class)
 {
-	bool soft_reset = false;
 	int rc;
 
-retry:
-	rc = ufcs_send_ctrl_msg_end_cable_detect(class);
+	rc = ufcs_send_ctrl_msg_end_cable_detect_retry(class);
 	if (rc < 0) {
-		if (rc == -EAGAIN) {
-			if (soft_reset)
-				return -EIO;
-			ufcs_send_ctrl_msg_soft_reset(class);
-			soft_reset = true;
-			goto retry;
-		}
 		ufcs_err("send end cable detect msg error, rc=%d\n", rc);
 		class->start_cable_detect = false;
 		return rc;
@@ -236,17 +209,8 @@ int ufcs_pe_detect_cable_info(struct ufcs_class *class)
 	int rc;
 
 retry:
-	rc = ufcs_send_ctrl_msg_detect_cable_info(class);
+	rc = ufcs_send_ctrl_msg_detect_cable_info_retry(class);
 	if (rc < 0) {
-		if (rc == -EAGAIN) {
-			if (soft_reset) {
-				rc = -EIO;
-				goto out;
-			}
-			ufcs_send_ctrl_msg_soft_reset(class);
-			soft_reset = true;
-			goto retry;
-		}
 		ufcs_err("send detect cable info msg error, rc=%d\n", rc);
 		goto out;
 	}

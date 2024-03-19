@@ -304,6 +304,7 @@ static int cam_sensor_i2c_component_bind(struct device *dev,
 	INIT_LIST_HEAD(&(s_ctrl->i2c_data.lsc_settings.list_head));
 	INIT_LIST_HEAD(&(s_ctrl->i2c_data.qsc_settings.list_head));
 	INIT_LIST_HEAD(&(s_ctrl->i2c_data.awbotp_settings.list_head));
+	INIT_LIST_HEAD(&(s_ctrl->i2c_data.pdc_settings.list_head));
 	mutex_init(&(s_ctrl->sensor_power_state_mutex));
 	mutex_init(&(s_ctrl->sensor_initsetting_mutex));
 	s_ctrl->sensor_power_state = CAM_SENSOR_POWER_OFF;
@@ -507,6 +508,7 @@ static int cam_sensor_component_bind(struct device *dev,
 	INIT_LIST_HEAD(&(s_ctrl->i2c_data.lsc_settings.list_head));
 	INIT_LIST_HEAD(&(s_ctrl->i2c_data.qsc_settings.list_head));
 	INIT_LIST_HEAD(&(s_ctrl->i2c_data.awbotp_settings.list_head));
+	INIT_LIST_HEAD(&(s_ctrl->i2c_data.pdc_settings.list_head));
 	mutex_init(&(s_ctrl->sensor_power_state_mutex));
 	mutex_init(&(s_ctrl->sensor_initsetting_mutex));
 	s_ctrl->sensor_power_state = CAM_SENSOR_POWER_OFF;

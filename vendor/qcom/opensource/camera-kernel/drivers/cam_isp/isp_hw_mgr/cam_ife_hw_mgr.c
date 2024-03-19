@@ -43,6 +43,9 @@
 	(CAM_ISP_GENERIC_BLOB_TYPE_CSID_QCFA_CONFIG + 1)
 
 #define MAX_INTERNAL_RECOVERY_ATTEMPTS    1
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#define MAX_ERROR_CNT_AFTER_RECOVERY      3
+#endif
 
 #define MAX_PARAMS_FOR_IRQ_INJECT     5
 #define IRQ_INJECT_DISPLAY_BUF_LEN    4096
@@ -5835,6 +5838,9 @@ static int cam_ife_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 	ife_ctx->common.sec_pf_evt_cb = acquire_args->sec_pf_evt_cb;
 	ife_ctx->try_recovery_cnt = 0;
 	ife_ctx->recovery_req_id = 0;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	ife_ctx->error_cnt_after_recovery = 0;
+#endif
 	ife_ctx->drv_path_idle_en = 0;
 	ife_ctx->res_list_ife_out = NULL;
 	ife_ctx->res_list_sfe_out = NULL;
@@ -15052,16 +15058,53 @@ static int  cam_ife_hw_mgr_find_affected_ctx(
 		if (!cam_ife_hw_mgr_is_ctx_affected(ife_hwr_mgr_ctx,
 			affected_core, CAM_IFE_HW_NUM_MAX))
 			continue;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		notify_err_cb = ife_hwr_mgr_ctx->common.event_cb;
+#endif
 
 		if (atomic_read(&ife_hwr_mgr_ctx->overflow_pending)) {
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			CAM_DBG(CAM_ISP, "CTX:%u already error reported",
+				ife_hwr_mgr_ctx->ctx_index);
+			if (error_event_data->try_internal_recovery)
+				ife_hwr_mgr_ctx->error_cnt_after_recovery++;
+
+			if (ife_hwr_mgr_ctx->error_cnt_after_recovery <=MAX_ERROR_CNT_AFTER_RECOVERY) {
+				CAM_INFO(CAM_ISP, "CTX:%u already error reported",
+					ife_hwr_mgr_ctx->ctx_index);
+					continue;
+			} else {
+				error_event_data->try_internal_recovery = false;
+				CAM_INFO(CAM_ISP, "CTX:%u already %u error reported",
+				ife_hwr_mgr_ctx->ctx_index,
+				ife_hwr_mgr_ctx->error_cnt_after_recovery);
+				/*
+				* In the call back function corresponding ISP context
+				* will update CRM about fatal Error
+				*/
+				if (notify_err_cb){
+					notify_err_cb(ife_hwr_mgr_ctx->common.cb_priv,
+						CAM_ISP_HW_EVENT_ERROR,
+						(void *)error_event_data);
+				} else {
+						CAM_WARN(CAM_ISP, "Error call back is not set, ctx_idx: %u",
+						ife_hwr_mgr_ctx->ctx_index);
+						goto end;
+				}
+			}
+#else
 			CAM_INFO(CAM_ISP, "CTX:%u already error reported",
 				ife_hwr_mgr_ctx->ctx_index);
+#endif
 			continue;
 		}
 
 		atomic_set(&ife_hwr_mgr_ctx->overflow_pending, 1);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		//notify_err_cb = ife_hwr_mgr_ctx->common.event_cb;
+#else
 		notify_err_cb = ife_hwr_mgr_ctx->common.event_cb;
-
+#endif
 		/* Add affected_context in list of recovery data */
 		CAM_DBG(CAM_ISP, "Add affected ctx %u to list",
 			ife_hwr_mgr_ctx->ctx_index);
@@ -16022,6 +16065,10 @@ static int cam_ife_hw_mgr_handle_hw_buf_done(
 	buf_done_event_data.last_consumed_addr = bufdone_evt_info->last_consumed_addr;
 	buf_done_event_data.comp_group_id = bufdone_evt_info->comp_grp_id;
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if (ife_hw_mgr_ctx->error_cnt_after_recovery)
+		ife_hw_mgr_ctx->error_cnt_after_recovery = 0;
+#endif
 	if (atomic_read(&ife_hw_mgr_ctx->overflow_pending))
 		return 0;
 

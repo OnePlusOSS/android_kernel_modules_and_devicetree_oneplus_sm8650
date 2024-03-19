@@ -26,7 +26,10 @@
 		dhall,irq-gpio = <&tlmm 112 0x2008>;
 		pinctrl-names = "uphall_tri_state_key_active";
 		pinctrl-0 = <&uphall_tri_state_key_active>;
+		tolen = <16 16 16>;
+		updown-to-mid-support;
 		esd-check-support;
+		new_threshold_support;
 	};
 
 	magnachip@0C {
@@ -42,7 +45,10 @@
 		dhall,irq-gpio = <&tlmm 99 0x2008>;
 		pinctrl-names = "downhall_tri_state_key_active";
 		pinctrl-0 = <&downhall_tri_state_key_active>;
+		tolen = <16 16 16>;
+		updown-to-mid-support;
 		esd-check-support;
+		new_threshold_support;
 	};
 };
 
@@ -344,6 +350,12 @@
 };
 
 &tlmm {
+
+	gpio_wakeup: gpio_wakeup {
+		compatible = "gpio_wakeup";
+		gpio_table = <8 11 15 20 23 56 57 59 63 65 66 77 81 84 153 155 171 172 177 188 195>;
+	};
+
 	pmx_ts_int_active {
 		ts_int_active: ts_int_active {
 			mux {

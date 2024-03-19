@@ -498,6 +498,8 @@ struct battery_chg_dev {
 	int				last_charger_type;
 	int				adsp_crash;
 	atomic_t			state;
+	int				g_icl_ma;
+	int				rerun_max;
 	struct work_struct		subsys_up_work;
 	struct work_struct		usb_type_work;
 #ifdef OPLUS_FEATURE_CHG_BASIC
@@ -531,6 +533,7 @@ struct battery_chg_dev {
 	unsigned long long 	hvdcp_detach_time;
 	bool 				hvdcp_detect_ok;
 	bool					hvdcp_disable;
+	bool				bc12_completed;
 	bool				ufcs_test_mode;
 	bool				ufcs_power_ready;
 	bool				ufcs_handshake_ok;
@@ -541,6 +544,7 @@ struct battery_chg_dev {
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	int vchg_trig_irq;
 	struct delayed_work vchg_trig_work;
+	struct delayed_work vbus_collapse_rerun_icl_work;
 	struct delayed_work wait_wired_charge_on;
 	struct delayed_work wait_wired_charge_off;
 	bool wls_fw_update;

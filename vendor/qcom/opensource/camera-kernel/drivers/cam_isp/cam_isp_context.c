@@ -2238,8 +2238,8 @@ static int __cam_isp_ctx_handle_buf_done_for_request_verify_addr(
 			uint32_t deferred_indx = req_isp->num_deferred_acks;
 			duplicate_defer_buf_done = false;
 
-			CAM_INFO(CAM_ISP,
-				"[J debug] ctx[%u] link[0x%x]:Deferred info:num_acks=%d,fence_map_index=%d,resource_handle=0x%x,sync_id=%d,num_fence_map_out=%d,req=%lld",
+			CAM_DBG(CAM_ISP,
+				"ctx[%u] link[0x%x]:Deferred info:num_acks=%d,fence_map_index=%d,resource_handle=0x%x,sync_id=%d,num_fence_map_out=%d,req=%lld",
 				ctx->ctx_id, ctx->link_hdl, req_isp->num_deferred_acks, j,
 				req_isp->fence_map_out[j].resource_handle,
 				req_isp->fence_map_out[j].sync_id,
@@ -2248,7 +2248,7 @@ static int __cam_isp_ctx_handle_buf_done_for_request_verify_addr(
 
 			if( req_isp->num_deferred_acks >= CAM_ISP_CTX_RES_MAX)
 			{
-				CAM_INFO(CAM_ISP, "number of defferred acks exceeds the max hw resource ctx[%u] link[0x%x] req %lld :num_acks %d sync_id %d",
+				CAM_DBG(CAM_ISP, "number of defferred acks exceeds the max hw resource ctx[%u] link[0x%x] req %lld :num_acks %d sync_id %d",
 					ctx->ctx_id, ctx->link_hdl, req->request_id,
 					req_isp->num_deferred_acks, req_isp->fence_map_out[j].sync_id);
 				rc = -EINVAL;

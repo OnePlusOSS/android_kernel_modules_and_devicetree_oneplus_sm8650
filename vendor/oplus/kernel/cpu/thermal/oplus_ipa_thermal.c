@@ -111,12 +111,11 @@ static void reset_ipa_trips(struct oplus_thermal_data *data)
 {
 	struct thermal_zone_device *tz = data->tzd;
 	struct oplus_ipa_param *params = data->ipa_param;
-	int i, last_active, last_passive;
-	bool found_first_passive;
+	int i;
+	bool found_first_passive = false;
 
-	found_first_passive = false;
-	last_active = INVALID_TRIP;
-	last_passive = INVALID_TRIP;
+	params->trip_switch_on = INVALID_TRIP;
+	params->trip_control_temp = INVALID_TRIP;
 
 	for (i = 0; i < tz->num_trips; i++) {
 		enum thermal_trip_type type;
@@ -124,35 +123,24 @@ static void reset_ipa_trips(struct oplus_thermal_data *data)
 
 		ret = tz->ops->get_trip_type(tz, i, &type);
 		if (ret) {
-			dev_warn(&tz->device,
-				 "Failed to get trip point %d type: %d\n", i,
-				 ret);
+			dev_warn(&tz->device, "Failed to get trip point %d type: %d\n", i, ret);
 			continue;
 		}
 
-		if (type == THERMAL_TRIP_PASSIVE) {
-			if (!found_first_passive) {
-				params->trip_switch_on = i;
-				found_first_passive = true;
-				break;
-			}
-
-			last_passive = i;
+		if (type == THERMAL_TRIP_PASSIVE && !found_first_passive) {
+			params->trip_switch_on = i;
+			found_first_passive = true;
 		} else if (type == THERMAL_TRIP_ACTIVE) {
-			last_active = i;
+			params->trip_control_temp = i;
 		} else {
 			break;
 		}
 	}
 
-	if (last_passive != INVALID_TRIP) {
-		params->trip_control_temp = last_passive;
-	} else if (found_first_passive) {
+	if (found_first_passive) {
+		int temp = params->trip_control_temp;
 		params->trip_control_temp = params->trip_switch_on;
-		params->trip_switch_on = last_active;
-	} else {
-		params->trip_switch_on = INVALID_TRIP;
-		params->trip_control_temp = last_active;
+		params->trip_switch_on = temp;
 	}
 }
 
@@ -510,6 +498,9 @@ static int oplus_ipa_controller(struct oplus_thermal_data *data, int control_tem
 			pr_debug("thermal: type: %s granted_power[%d]: %u params->cdev_min_power[%d]=%u\n", instance->cdev->type, i, granted_power[i], i, params->cdev_min_power[i]);
 		}
 		ncpus = cpumask_weight(policy->related_cpus);
+		if(ncpus == 0) {
+			continue;
+		}
 		last_load = cpufreq_cdev->last_load;
 		if(last_load == 0) {
 			last_load = 1;
