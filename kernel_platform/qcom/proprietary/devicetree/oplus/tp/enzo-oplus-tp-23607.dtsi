@@ -194,6 +194,7 @@
 		skip_reinit_device_support;
 		tp_data_record_support;
 		edge_pull_out_support;
+		diaphragm_touch_support;
 
 		/*
 		 *Virtual Key Config:

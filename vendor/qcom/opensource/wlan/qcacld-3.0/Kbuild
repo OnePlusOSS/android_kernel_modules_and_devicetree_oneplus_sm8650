@@ -5015,6 +5015,10 @@ endif
 ccflags-y +=   -DOPLUS_BUG_STABILITY
 #endif
 
+#ifdef OPLUS_FEATURE_SOFTAP_DCS_SWITCH
+KBUILD_CPPFLAGS += -DOPLUS_FEATURE_SOFTAP_DCS_SWITCH
+#endif /* OPLUS_FEATURE_SOFTAP_DCS_SWITCH */
+
 # Module information used by KBuild framework
 obj-$(CONFIG_QCA_CLD_WLAN) += $(MODNAME).o
 ifeq ($(CONFIG_WLAN_RESIDENT_DRIVER), y)

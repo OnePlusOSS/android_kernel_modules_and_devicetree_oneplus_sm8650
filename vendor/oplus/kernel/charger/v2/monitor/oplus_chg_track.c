@@ -19,6 +19,7 @@
 #include <linux/kthread.h>
 #include <linux/sched/clock.h>
 #include <linux/string.h>
+#include <linux/kfifo.h>
 #ifndef CONFIG_DISABLE_OPLUS_FUNCTION
 #include <soc/oplus/system/boot_mode.h>
 #endif
@@ -52,7 +53,7 @@
 #define OPLUS_CHG_TRACK_DWORK_RETRY_CNT			3
 
 #define OPLUS_CHG_TRACK_UI_SOC_LOAD_JUMP_THD		5
-#define OPLUS_CHG_TRACK_SOC_JUMP_THD			3
+#define OPLUS_CHG_TRACK_SOC_JUMP_THD			5
 #define OPLUS_CHG_TRACK_UI_SOC_JUMP_THD			5
 #define OPLUS_CHG_TRACK_UI_SOC_TO_SOC_JUMP_THD		3
 #define OPLUS_CHG_TRACK_DEBUG_UISOC_SOC_INVALID		0XFF
@@ -178,6 +179,16 @@
 #define TRACK_APP_TOP_INDEX_DEFAULT		255
 #define TRACK_APP_REAL_NAME_DEFAULT		"com.android.launcher"
 
+#define GAUGE_INFO_TRACK_FIFO_NUMS		4
+#define GAUGE_INFO_TRACK_FIFO_ONE_SIZE		512
+#define TRACK_GAUGE_UPLOAD_PERIOD		(24 * 3600)
+#define TRACK_GAUGE_UPLOAD_COUNT_MAX		10
+#define OPLUS_CHG_TRACK_SOC_THD(x)		(x)
+#define OPLUS_CHG_TRACK_SCENE_GAGUE_DEFAULT	"default"
+#define OPLUS_CHG_TRACK_SCENE_GAGUE_SOC_1_PCT	"soc_smooth_to_1"
+#define OPLUS_CHG_TRACK_DEVICE_ERR_NAME_LEN	32
+#define TRACK_GAUGE_NAME_LEN			12
+
 enum oplus_chg_track_voocphy_type {
 	TRACK_NO_VOOCPHY = 0,
 	TRACK_ADSP_VOOCPHY,
@@ -297,6 +308,8 @@ struct oplus_chg_track_cfg {
 	int wls_max_power;
 	int wired_max_power;
 	struct exception_data exception_data;
+	bool track_gauge_ctrl;
+	int external_gauge_num;
 };
 
 struct oplus_chg_track_fastchg_break {
@@ -354,6 +367,43 @@ struct oplus_chg_track_hidl_ttf_info {
 	oplus_chg_track_trigger *load_trigger_info;
 	struct delayed_work load_trigger_work;
 	struct oplus_chg_track_hidl_ttf_info_cmd ttf_info;
+};
+
+struct oplus_chg_track_gague_err_reason {
+	int err_type;
+	char err_name[OPLUS_CHG_TRACK_DEVICE_ERR_NAME_LEN];
+};
+
+struct oplus_chg_track_gauge_params {
+	struct oplus_mms *gauge_topic;
+	int batt_volt;
+	int batt_curr;
+	int batt_temp;
+	int qmax;
+	int soc;
+	int pre_soc;
+	int pre_record_soc;
+	int soh;
+	int fcc;
+	int cc;
+};
+
+struct oplus_chg_track_gauge_info {
+	u32 debug_soc_record_thd;
+	u32 debug_err_type;
+	u32 debug_upload_period_t;
+	struct kfifo fifo;
+	struct mutex track_lock;
+	u32 debug_force_trigger;
+	unsigned long trigger_type_flag;
+	oplus_chg_track_trigger *load_trigger;
+	struct delayed_work load_trigger_work;
+	int upload_count;
+	int pre_upload_time;
+	struct oplus_chg_track_gauge_params params;
+	int pre_check_time;
+	int pre_time;
+	char device_name[TRACK_GAUGE_NAME_LEN];
 };
 
 struct oplus_chg_track_status {
@@ -585,22 +635,29 @@ struct oplus_chg_track {
 	oplus_chg_track_trigger *chg_cycle_info_trigger;
 	oplus_chg_track_trigger *wls_info_trigger;
 	oplus_chg_track_trigger *ufcs_info_trigger;
+	oplus_chg_track_trigger *deep_dischg_info_trigger;
+
 	struct delayed_work mmi_chg_info_trigger_work;
 	struct delayed_work slow_chg_info_trigger_work;
 	struct delayed_work chg_cycle_info_trigger_work;
 	struct delayed_work wls_info_trigger_work;
 	struct delayed_work ufcs_info_trigger_work;
+	struct delayed_work deep_dischg_info_trigger_work;
+
 	struct mutex mmi_chg_info_lock;
 	struct mutex slow_chg_info_lock;
 	struct mutex chg_cycle_info_lock;
 	struct mutex wls_info_lock;
 	struct mutex ufcs_info_lock;
+	struct mutex deep_dischg_info_lock;
 
 	char voocphy_name[OPLUS_CHG_TRACK_VOOCPHY_NAME_LEN];
 
 	struct mutex access_lock;
 
 	bool oplus_liquid_intake_enable;
+	struct oplus_chg_track_gauge_info gauge_info;
+	struct oplus_chg_track_gauge_info sub_gauge_info;
 };
 
 struct type_reason_table {
@@ -617,6 +674,7 @@ static struct oplus_chg_track *g_track_chip;
 static struct dentry *track_debugfs_root;
 static struct oplus_chg_track_status *temp_track_status;
 static DEFINE_MUTEX(debugfs_root_mutex);
+static DEFINE_SPINLOCK(gauge_fifo_lock);
 
 #if defined(CONFIG_OPLUS_FEATURE_FEEDBACK) || \
 	defined(CONFIG_OPLUS_FEATURE_FEEDBACK_MODULE) || \
@@ -668,6 +726,8 @@ static struct flag_reason_table track_flag_reason_table[] = {
 	{ TRACK_NOTIFY_FLAG_CHG_CYCLE_INFO, "ChgCycleInfo" },
 	{ TRACK_NOTIFY_FLAG_TTF_INFO, "TtfInfo" },
 	{ TRACK_NOTIFY_FLAG_UISOH_INFO, "UiSohInfo" },
+	{ TRACK_NOTIFY_FLAG_GAUGE_INFO, "GaugeInfo" },
+	{ TRACK_NOTIFY_FLAG_BYPASS_BOOST_INFO, "DeepDischgInfo" },
 
 	{ TRACK_NOTIFY_FLAG_NO_CHARGING, "NoCharging" },
 	{ TRACK_NOTIFY_FLAG_NO_CHARGING_OTG_ONLINE, "OtgOnline" },
@@ -689,6 +749,7 @@ static struct flag_reason_table track_flag_reason_table[] = {
 
 	{ TRACK_NOTIFY_FLAG_WLS_ABNORMAL, "WlsAbnormal" },
 	{ TRACK_NOTIFY_FLAG_GPIO_ABNORMAL, "GpioAbnormal" },
+
 	{ TRACK_NOTIFY_FLAG_CP_ABNORMAL, "CpAbnormal" },
 	{ TRACK_NOTIFY_FLAG_PLAT_PMIC_ABNORMAL, "PlatPmicAbnormal" },
 	{ TRACK_NOTIFY_FLAG_EXTERN_PMIC_ABNORMAL, "ExternPmicAbnormal" },
@@ -699,6 +760,10 @@ static struct flag_reason_table track_flag_reason_table[] = {
 	{ TRACK_NOTIFY_FLAG_HK_ABNORMAL, "HouseKeepingAbnormal" },
 	{ TRACK_NOTIFY_FLAG_UFCS_IC_ABNORMAL, "UFCSICAbnormal" },
 	{ TRACK_NOTIFY_FLAG_ADAPTER_ABNORMAL, "AdapterAbnormal" },
+	{ TRACK_NOTIFY_FLAG_NTC_ABNORMAL, "NTCAbnormal" },
+	{ TRACK_NOTIFY_FLAG_BATT_ID_INFO, "Batt_Id_Info" },
+	{ TRACK_NOTIFY_FLAG_I2C_ABNORMAL, "I2cAbnormal" },
+	{ TRACK_NOTIFY_FLAG_BOOST_BUCK_ERR, "BoostICAbnormal" },
 
 	{ TRACK_NOTIFY_FLAG_UFCS_ABNORMAL, "UfcsAbnormal" },
 	{ TRACK_NOTIFY_FLAG_COOLDOWN_ABNORMAL, "CoolDownAbnormal" },
@@ -937,6 +1002,20 @@ static struct oplus_chg_track_voocphy_info voocphy_info_table[] = {
 	{ TRACK_AP_SINGLE_CP_VOOCPHY, "ap" },
 	{ TRACK_AP_DUAL_CP_VOOCPHY, "ap" },
 	{ TRACK_MCU_VOOCPHY, "mcu" },
+};
+
+static struct oplus_chg_track_gague_err_reason gague_err_reason_table[] = {
+	{ TRACK_GAGUE_ERR_SEAL, "seal_fail" },
+	{ TRACK_GAGUE_ERR_UNSEAL, "unseal_fail" },
+	{ TRACK_GAGUE_GENERAL_INFO, "general_info" },
+	{ TRACK_GAGUE_ERR_RSOC_JUMP, "rsoc_jump" },
+	{ TRACK_GAGUE_ERR_VOLT_SOC_NOT_MATCH, "volt_soc_not_match" },
+	{ TRACK_GAGUE_ERR_QMAX, "qmax_err" },
+	{ TRACK_GAGUE_ERR_FCC, "fcc_err" },
+	{ TRACK_GAGUE_ERR_RSOC_SMOOTH, "rsoc_smooth_err" },
+	{ TRACK_GAGUE_ERR_TEMP, "temp_err" },
+	{ TRACK_GAGUE_ERR_SOH_JUMP, "soh_jump" },
+	{ TRACK_GAGUE_ERR_CC_JUMP, "cc_jump" },
 };
 
 static struct oplus_chg_track_speed_ref wired_series_double_cell_125w_150w[] = {
@@ -1949,6 +2028,28 @@ static int oplus_chg_track_get_chg_abnormal_reason_info(
 	return charge_index;
 }
 
+int oplus_chg_track_get_gague_err_reason(int err_type, char *err_reason, int len)
+{
+	int i;
+	int charge_index = -EINVAL;
+
+	if (!err_reason || !len)
+		return charge_index;
+
+	for (i = 0; i < ARRAY_SIZE(gague_err_reason_table); i++) {
+		if (gague_err_reason_table[i].err_type == err_type) {
+			strncpy(err_reason, gague_err_reason_table[i].err_name, len);
+			charge_index = i;
+			break;
+		}
+	}
+
+	if (i == ARRAY_SIZE(gague_err_reason_table))
+		strncpy(err_reason, "unknow_err", len);
+
+	return charge_index;
+}
+
 static int oplus_chg_track_parse_dt(struct oplus_chg_track *track_dev)
 {
 	int rc = 0;
@@ -2039,6 +2140,13 @@ static int oplus_chg_track_parse_dt(struct oplus_chg_track *track_dev)
 	if (rc < 0) {
 		chg_err("track,track_ver reading failed, rc=%d\n", rc);
 		track_dev->track_cfg.track_ver = 3;
+	}
+
+	track_dev->track_cfg.track_gauge_ctrl = of_property_read_bool(node, "track,gauge_status_ctrl");
+	rc = of_property_read_u32(node, "track,external_gauge_num", &(track_dev->track_cfg.external_gauge_num));
+	if (rc < 0) {
+		pr_err("track,external_gauge_num reading failed, rc=%d\n", rc);
+		track_dev->track_cfg.external_gauge_num = 0;
 	}
 
 	memset(&track_dev->track_cfg.exception_data, 0, sizeof(struct exception_data));
@@ -2760,6 +2868,19 @@ static void oplus_chg_track_ufcs_info_trigger_work(struct work_struct *work)
 	mutex_unlock(&chip->ufcs_info_lock);
 }
 
+static void oplus_chg_track_deep_dischg_info_trigger_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct oplus_chg_track *chip = container_of(dwork, struct oplus_chg_track, deep_dischg_info_trigger_work);
+
+	if (chip->deep_dischg_info_trigger) {
+		oplus_chg_track_upload_trigger_data(*(chip->deep_dischg_info_trigger));
+		kfree(chip->deep_dischg_info_trigger);
+		chip->deep_dischg_info_trigger = NULL;
+	}
+	mutex_unlock(&chip->deep_dischg_info_lock);
+}
+
 static int oplus_chg_track_speed_ref_init(struct oplus_chg_track *chip)
 {
 	if (!chip)
@@ -2795,6 +2916,33 @@ static int oplus_chg_track_speed_ref_init(struct oplus_chg_track *chip)
 	return 0;
 }
 
+static int oplus_chg_track_gague_fifo_init(struct oplus_chg_track *track_dev)
+{
+	int rc = 0;
+
+	if (track_dev->track_cfg.external_gauge_num) {
+		rc = kfifo_alloc(&(track_dev->gauge_info.fifo),
+			(GAUGE_INFO_TRACK_FIFO_NUMS * GAUGE_INFO_TRACK_FIFO_ONE_SIZE), GFP_KERNEL);
+		if (rc) {
+			pr_err("gauge kfifo_alloc error\n");
+			rc = -ENOMEM;
+			return rc;
+		}
+		if (track_dev->track_cfg.external_gauge_num == 2) {
+			rc = kfifo_alloc(&(track_dev->sub_gauge_info.fifo),
+				(GAUGE_INFO_TRACK_FIFO_NUMS * GAUGE_INFO_TRACK_FIFO_ONE_SIZE), GFP_KERNEL);
+			if (rc) {
+				kfifo_free(&(track_dev->gauge_info.fifo));
+				pr_err("sub gauge kfifo_alloc error\n");
+				rc = -ENOMEM;
+				return rc;
+			}
+		}
+	}
+
+	return rc;
+}
+
 static int oplus_chg_track_init(struct oplus_chg_track *track_dev)
 {
 	int ret = 0;
@@ -2814,6 +2962,16 @@ static int oplus_chg_track_init(struct oplus_chg_track *track_dev)
 	mutex_init(&chip->chg_cycle_info_lock);
 	mutex_init(&chip->wls_info_lock);
 	mutex_init(&chip->ufcs_info_lock);
+	mutex_init(&chip->deep_dischg_info_lock);
+	mutex_init(&chip->gauge_info.track_lock);
+	mutex_init(&chip->sub_gauge_info.track_lock);
+
+	chip->gauge_info.debug_err_type = TRACK_GAGUE_ERR_DEFAULT;
+	chip->gauge_info.debug_upload_period_t = 0;
+	chip->gauge_info.debug_soc_record_thd= 0;
+	chip->sub_gauge_info.debug_err_type = TRACK_GAGUE_ERR_DEFAULT;
+	chip->sub_gauge_info.debug_upload_period_t = 0;
+	chip->sub_gauge_info.debug_soc_record_thd= 0;
 
 	chip->track_status.curr_soc = -EINVAL;
 	chip->track_status.curr_smooth_soc = -EINVAL;
@@ -3008,6 +3166,8 @@ static int oplus_chg_track_init(struct oplus_chg_track *track_dev)
 	INIT_DELAYED_WORK(&chip->chg_cycle_info_trigger_work, oplus_chg_track_chg_cycle_info_trigger_work);
 	INIT_DELAYED_WORK(&chip->wls_info_trigger_work, oplus_chg_track_wls_info_trigger_work);
 	INIT_DELAYED_WORK(&chip->ufcs_info_trigger_work, oplus_chg_track_ufcs_info_trigger_work);
+	INIT_DELAYED_WORK(&chip->deep_dischg_info_trigger_work, oplus_chg_track_deep_dischg_info_trigger_work);
+
 	return ret;
 }
 
@@ -4269,7 +4429,7 @@ int oplus_chg_track_check_wls_charging_break(int wls_connect)
 	static struct oplus_chg_track_power power_info;
 	static bool break_recording = 0;
 	static bool pre_wls_connect = false;
-	unsigned long long detal_time_ms;
+	unsigned long long delta_time_ms;
 
 	if (!g_track_chip)
 		return -1;
@@ -4284,8 +4444,8 @@ int oplus_chg_track_check_wls_charging_break(int wls_connect)
 	if (wls_connect) {
 		track_status->wls_status_keep = oplus_chg_track_wls_is_status_keep(track_chip);
 		track_status->wls_attach_time_ms = local_clock() / TRACK_LOCAL_T_NS_TO_MS_THD;
-		detal_time_ms = track_status->wls_attach_time_ms - track_status->wls_detach_time_ms;
-		if (detal_time_ms < track_chip->track_cfg.wls_chg_break_t_thd && track_status->wls_status_keep) {
+		delta_time_ms = track_status->wls_attach_time_ms - track_status->wls_detach_time_ms;
+		if (delta_time_ms < track_chip->track_cfg.wls_chg_break_t_thd && track_status->wls_status_keep) {
 			if (!break_recording) {
 				break_recording = true;
 				track_chip->wls_charging_break_trigger.flag_reason =
@@ -4306,7 +4466,7 @@ int oplus_chg_track_check_wls_charging_break(int wls_connect)
 		chg_info("pre_wls_connect[%d], wls_connect[%d], break_recording[%d], status_keep[%d], "
 			"detal_t:%llu, wls_attach_time:%llu\n",
 			pre_wls_connect, wls_connect, break_recording, track_status->wls_status_keep,
-			detal_time_ms, track_status->wls_attach_time_ms);
+			delta_time_ms, track_status->wls_attach_time_ms);
 	} else {
 		track_status->wls_detach_time_ms = local_clock() / TRACK_LOCAL_T_NS_TO_MS_THD;
 		oplus_chg_track_handle_wls_type_info(track_status);
@@ -5372,6 +5532,10 @@ static int oplus_chg_track_upload_ic_err_info(struct oplus_chg_track *track)
 		track->ic_err_msg_load_trigger.flag_reason =
 			TRACK_NOTIFY_FLAG_GPIO_ABNORMAL;
 		break;
+	case OPLUS_IC_ERR_BATT_ID:
+		track->ic_err_msg_load_trigger.flag_reason =
+			TRACK_NOTIFY_FLAG_BATT_ID_INFO;
+		break;
 	case OPLUS_IC_ERR_PLAT_PMIC:
 		track->ic_err_msg_load_trigger.flag_reason =
 			TRACK_NOTIFY_FLAG_PLAT_PMIC_ABNORMAL;
@@ -5380,7 +5544,7 @@ static int oplus_chg_track_upload_ic_err_info(struct oplus_chg_track *track)
 		break;
 	case OPLUS_IC_ERR_BUCK_BOOST:
 		track->ic_err_msg_load_trigger.flag_reason =
-			TRACK_NOTIFY_FLAG_EXTERN_PMIC_ABNORMAL;
+			TRACK_NOTIFY_FLAG_BOOST_BUCK_ERR;
 		break;
 	case OPLUS_IC_ERR_GAUGE:
 		track->ic_err_msg_load_trigger.flag_reason =
@@ -5418,7 +5582,13 @@ static int oplus_chg_track_upload_ic_err_info(struct oplus_chg_track *track)
 		track->ic_err_msg_load_trigger.flag_reason =
 			TRACK_NOTIFY_FLAG_DCHG_ABNORMAL;
 		break;
+	case OPLUS_IC_ERR_NTC:
+		track->ic_err_msg_load_trigger.flag_reason = TRACK_NOTIFY_FLAG_NTC_ABNORMAL;
+		break;
 	case OPLUS_IC_ERR_I2C:
+		track->ic_err_msg_load_trigger.flag_reason =
+			TRACK_NOTIFY_FLAG_I2C_ABNORMAL;
+		break;
 	case OPLUS_IC_ERR_UNKNOWN:
 	default:
 		chg_err("unsupported error type(%d)\n", err_type);
@@ -5801,6 +5971,45 @@ static int oplus_chg_track_upload_ufcs_info(struct oplus_chg_track *chip)
 					  OPLUS_CHG_TRACK_CURX_INFO_LEN - index);
 
 	schedule_delayed_work(&chip->ufcs_info_trigger_work, 0);
+	chg_info("success\n");
+	return 0;
+}
+
+static int oplus_chg_track_upload_deep_dischg_info(struct oplus_chg_track *chip)
+{
+	int index = 0;
+	union mms_msg_data data = { 0 };
+	int rc = 0;
+
+	if (!chip)
+		return -EINVAL;
+
+	mutex_lock(&chip->deep_dischg_info_lock);
+	if (chip->deep_dischg_info_trigger)
+		kfree(chip->deep_dischg_info_trigger);
+
+	chip->deep_dischg_info_trigger = kzalloc(sizeof(oplus_chg_track_trigger), GFP_KERNEL);
+	if (!chip->deep_dischg_info_trigger) {
+		chg_err("deep_dischg_info_trigger memery alloc fail\n");
+		mutex_unlock(&chip->deep_dischg_info_lock);
+		return -ENOMEM;
+	}
+
+	chip->deep_dischg_info_trigger->type_reason = TRACK_NOTIFY_TYPE_GENERAL_RECORD;
+	chip->deep_dischg_info_trigger->flag_reason = TRACK_NOTIFY_FLAG_BYPASS_BOOST_INFO;
+
+	rc = oplus_mms_get_item_data(chip->monitor->err_topic, ERR_ITEM_DEEP_DISCHG_INFO, &data, false);
+	if (rc < 0) {
+		chg_err("get msg data error, rc=%d\n", rc);
+		kfree(chip->deep_dischg_info_trigger);
+		chip->deep_dischg_info_trigger = NULL;
+		mutex_unlock(&chip->deep_dischg_info_lock);
+		return rc;
+	}
+	index += snprintf(&(chip->deep_dischg_info_trigger->crux_info[index]), OPLUS_CHG_TRACK_CURX_INFO_LEN - index, "%s",
+			  data.strval);
+
+	schedule_delayed_work(&chip->deep_dischg_info_trigger_work, 0);
 	chg_info("success\n");
 	return 0;
 }
@@ -6223,7 +6432,7 @@ static int oplus_chg_track_uisoc_soc_jump_check(struct oplus_monitor *monitor)
 			      (curr_time_utc - track_status->pre_time_utc);
 
 	if (!track_status->soc_jumped &&
-	    abs(track_status->curr_soc - track_status->pre_soc) > OPLUS_CHG_TRACK_SOC_JUMP_THD) {
+	    abs(track_status->curr_soc - track_status->pre_soc) >= OPLUS_CHG_TRACK_SOC_JUMP_THD) {
 		track_status->soc_jumped = true;
 		chg_info("The gap between curr_soc and pre_soc is too large\n");
 		memset(g_track_chip->soc_trigger.crux_info, 0, sizeof(g_track_chip->soc_trigger.crux_info));
@@ -6312,6 +6521,321 @@ static int oplus_chg_track_uisoc_soc_jump_check(struct oplus_monitor *monitor)
 	return ret;
 }
 
+static bool oplus_chg_track_rsoc_smooth_to_1_pct(struct oplus_chg_track_gauge_params *batt_params)
+{
+	bool ret = false;
+
+	if (!batt_params)
+		return ret;
+
+	if (batt_params->soc <= 1 && batt_params->pre_soc > batt_params->soc)
+		ret = true;
+	chg_debug("ret=%d, pre_soc=%d, soc=%d\n", ret, batt_params->pre_soc, batt_params->soc);
+
+	return ret;
+}
+
+static int oplus_chg_track_pack_gauge_info(struct kfifo *kfifo, u8 *crux_info)
+{
+	int count;
+	u8 *gauge_data;
+	int index = 0;
+
+	if (!kfifo)
+		return -EINVAL;
+
+	gauge_data = kmalloc(GAUGE_INFO_TRACK_FIFO_ONE_SIZE, GFP_KERNEL);
+	if (!gauge_data) {
+		chg_err("gauge_buf error\n");
+		return -ENOMEM;
+	}
+
+	while (!kfifo_is_empty(kfifo)) {
+		count = kfifo_out_spinlocked(kfifo, gauge_data, GAUGE_INFO_TRACK_FIFO_ONE_SIZE, &gauge_fifo_lock);
+		if (count != GAUGE_INFO_TRACK_FIFO_ONE_SIZE) {
+			chg_err("gauge_data size is error, count=%d\n", count);
+			kfree(gauge_data);
+			return -EINVAL;
+		}
+		chg_debug("len:%zu, reg_info:%s\n", strlen(gauge_data), gauge_data);
+		index += snprintf(crux_info + index, OPLUS_CHG_TRACK_CURX_INFO_LEN - index,"%s", gauge_data);
+		if (!kfifo_is_empty(kfifo))
+			index += snprintf(crux_info + index, OPLUS_CHG_TRACK_CURX_INFO_LEN - index, "||");
+	}
+
+	kfree(gauge_data);
+	return 0;
+}
+
+static int oplus_chg_track_gauge_info_record(
+	struct oplus_chg_track_gauge_info *p_gauge_info, int err_type, int delta_time)
+{
+	int rc;
+	int index = 0;
+	int curr_time;
+	struct rtc_time tm;
+	char err_reason[OPLUS_CHG_TRACK_DEVICE_ERR_NAME_LEN] = {0};
+	union mms_msg_data data = { 0 };
+
+	if (!p_gauge_info)
+		return -EINVAL;
+
+	if (err_type <= TRACK_GAGUE_ERR_DEFAULT || err_type >= TRACK_GAGUE_ERR_MAX) {
+		chg_info("err_type not match\n");
+		return -EINVAL;
+	}
+
+	if (err_type == TRACK_GAGUE_GENERAL_INFO)
+		oplus_mms_get_item_data(p_gauge_info->params.gauge_topic, GAUGE_ITEM_CALIB_TIME, &data, true);
+
+	mutex_lock(&p_gauge_info->track_lock);
+	curr_time = oplus_chg_track_get_current_time_s(&tm);
+	if (curr_time - p_gauge_info->pre_upload_time > TRACK_GAUGE_UPLOAD_PERIOD) {
+		p_gauge_info->trigger_type_flag = 0;
+		p_gauge_info->upload_count = 0;
+	}
+
+	if (p_gauge_info->upload_count > TRACK_GAUGE_UPLOAD_COUNT_MAX) {
+		chg_debug("uploading count arrive max\n");
+		mutex_unlock(&p_gauge_info->track_lock);
+		return 0;
+	}
+
+	if (p_gauge_info->load_trigger)
+		kfree(p_gauge_info->load_trigger);
+	p_gauge_info->load_trigger = kzalloc(sizeof(oplus_chg_track_trigger), GFP_KERNEL);
+	if (!p_gauge_info->load_trigger) {
+		chg_err("gauge load_trigger memery alloc fail\n");
+		mutex_unlock(&p_gauge_info->track_lock);
+		return -ENOMEM;
+	}
+
+	if (err_type != TRACK_GAGUE_GENERAL_INFO && err_type != TRACK_GAGUE_SOC_1_PCT_INFO) {
+		p_gauge_info->load_trigger->type_reason = TRACK_NOTIFY_TYPE_DEVICE_ABNORMAL;
+		p_gauge_info->load_trigger->flag_reason = TRACK_NOTIFY_FLAG_GAGUE_ABNORMAL;
+	} else {
+		p_gauge_info->load_trigger->type_reason = TRACK_NOTIFY_TYPE_GENERAL_RECORD;
+		p_gauge_info->load_trigger->flag_reason = TRACK_NOTIFY_FLAG_GAUGE_INFO;
+	}
+	p_gauge_info->upload_count++;
+	p_gauge_info->pre_upload_time = curr_time;
+
+	index += snprintf(&(p_gauge_info->load_trigger->crux_info[index]), OPLUS_CHG_TRACK_CURX_INFO_LEN - index,
+			  "$$device_id@@%s", p_gauge_info->device_name);
+	if (err_type != TRACK_GAGUE_SOC_1_PCT_INFO)
+		index += snprintf(&(p_gauge_info->load_trigger->crux_info[index]), OPLUS_CHG_TRACK_CURX_INFO_LEN - index,
+			  "$$err_scene@@%s", OPLUS_CHG_TRACK_SCENE_GAGUE_DEFAULT);
+	else
+		index += snprintf(&(p_gauge_info->load_trigger->crux_info[index]), OPLUS_CHG_TRACK_CURX_INFO_LEN - index,
+			  "$$err_scene@@%s", OPLUS_CHG_TRACK_SCENE_GAGUE_SOC_1_PCT);
+
+	oplus_chg_track_get_gague_err_reason(err_type, err_reason, sizeof(err_reason));
+	index += snprintf(&(p_gauge_info->load_trigger->crux_info[index]), OPLUS_CHG_TRACK_CURX_INFO_LEN - index,
+			  "$$err_reason@@%s", err_reason);
+
+	if (err_type == TRACK_GAGUE_GENERAL_INFO)
+		index += snprintf(&(p_gauge_info->load_trigger->crux_info[index]), OPLUS_CHG_TRACK_CURX_INFO_LEN - index,
+			  "$$calib_t@@%s", data.strval);
+	index += snprintf(&(p_gauge_info->load_trigger->crux_info[index]), OPLUS_CHG_TRACK_CURX_INFO_LEN - index,
+			  "$$delta_time@@%d", delta_time);
+	index += snprintf(&(p_gauge_info->load_trigger->crux_info[index]), OPLUS_CHG_TRACK_CURX_INFO_LEN - index,
+			"$$reg_info@@");
+	rc = oplus_chg_track_pack_gauge_info(&p_gauge_info->fifo, &(p_gauge_info->load_trigger->crux_info[index]));
+	if (!rc) {
+		schedule_delayed_work(&p_gauge_info->load_trigger_work, 0);
+		pr_debug("success\n");
+
+	}
+
+	return 0;
+}
+
+static void oplus_chg_track_gauge_info_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct oplus_chg_track *chip =
+		container_of(dwork, struct oplus_chg_track, gauge_info.load_trigger_work);
+
+	if (chip->gauge_info.load_trigger) {
+		oplus_chg_track_upload_trigger_data(*(chip->gauge_info.load_trigger));
+		kfree(chip->gauge_info.load_trigger);
+		chip->gauge_info.load_trigger = NULL;
+	}
+	mutex_unlock(&chip->gauge_info.track_lock);
+}
+
+static void oplus_chg_track_sub_gauge_info_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct oplus_chg_track *chip =
+		container_of(dwork, struct oplus_chg_track, sub_gauge_info.load_trigger_work);
+
+	if (chip->sub_gauge_info.load_trigger) {
+		oplus_chg_track_upload_trigger_data(*(chip->sub_gauge_info.load_trigger));
+		kfree(chip->sub_gauge_info.load_trigger);
+		chip->sub_gauge_info.load_trigger = NULL;
+	}
+	mutex_unlock(&chip->sub_gauge_info.track_lock);
+}
+
+static int oplus_chg_track_gauge_fifo_push(struct kfifo *kfifo, struct oplus_mms *gauge_topic)
+{
+	int ret = 0;
+	int count;
+	u8 *gauge_data;
+	struct rtc_time tm;
+	union mms_msg_data data = { 0 };
+
+	if (!kfifo)
+		return ret;
+
+	oplus_chg_track_get_current_time(&tm);
+	gauge_data = kzalloc(GAUGE_INFO_TRACK_FIFO_ONE_SIZE, GFP_KERNEL);
+	if (!gauge_data) {
+		chg_err("gauge_buf error\n");
+		return -ENOMEM;
+	}
+
+	if (kfifo_is_full(kfifo)) {
+		count = kfifo_out_spinlocked(kfifo, gauge_data, GAUGE_INFO_TRACK_FIFO_ONE_SIZE, &gauge_fifo_lock);
+		if (count != GAUGE_INFO_TRACK_FIFO_ONE_SIZE) {
+			chg_err("gauge_data size is error\n");
+			kfree(gauge_data);
+			return -EINVAL;
+		}
+	}
+
+	memset(gauge_data, 0, GAUGE_INFO_TRACK_FIFO_ONE_SIZE);
+	ret = oplus_mms_get_item_data(gauge_topic, GAUGE_ITEM_REG_INFO, &data, true);
+	if (ret == 0 && data.strval && strlen(data.strval)) {
+		ret += snprintf(&gauge_data[ret], GAUGE_INFO_TRACK_FIFO_ONE_SIZE - ret,
+			"time[%04d-%02d-%02d %02d:%02d:%02d]-%s",
+			tm.tm_year, tm.tm_mon, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, data.strval);
+	} else {
+		kfree(gauge_data);
+		return -EINVAL;
+	}
+
+	count = kfifo_in_spinlocked(kfifo, gauge_data, GAUGE_INFO_TRACK_FIFO_ONE_SIZE, &gauge_fifo_lock);
+	if (count != GAUGE_INFO_TRACK_FIFO_ONE_SIZE) {
+		chg_err("gauge kfifo in error\n");
+		kfree(gauge_data);
+		return -EINVAL;
+	}
+
+	kfree(gauge_data);
+	return 0;
+}
+
+static int oplus_chg_track_get_gauge_status(struct oplus_chg_track *track_chip,
+					    struct oplus_chg_track_gauge_info *batt_info,
+					    struct oplus_chg_track_gauge_params *batt_params)
+{
+	int ret = 0;
+	int delta_time;
+	struct rtc_time tm;
+	bool record_reg_info = false;
+	int err_type = TRACK_GAGUE_ERR_DEFAULT;
+	int curr_time = oplus_chg_track_get_current_time_s(&tm);
+
+	if (abs(batt_params->pre_soc - batt_params->soc) >= OPLUS_CHG_TRACK_SOC_JUMP_THD)
+		err_type = TRACK_GAGUE_ERR_RSOC_JUMP;
+	else if (oplus_chg_track_rsoc_smooth_to_1_pct(batt_params))
+		err_type = TRACK_GAGUE_SOC_1_PCT_INFO;
+
+	if (batt_info->pre_time == 0) {
+		batt_info->pre_time = curr_time;
+		batt_info->pre_check_time = curr_time;
+	}
+
+	if (batt_info->debug_err_type && !test_bit(batt_info->debug_err_type, &batt_info->trigger_type_flag))
+		err_type = batt_info->debug_err_type;
+
+	if (err_type != TRACK_GAGUE_ERR_DEFAULT)
+		record_reg_info = true;
+
+	if (abs(batt_params->soc - batt_params->pre_record_soc) >= OPLUS_CHG_TRACK_SOC_THD(25) ||
+	    (batt_params->soc == OPLUS_CHG_TRACK_SOC_THD(100) && (batt_params->soc != batt_params->pre_record_soc)) ||
+	    (batt_info->debug_soc_record_thd &&
+	     abs(batt_params->soc - batt_params->pre_record_soc) >= batt_info->debug_soc_record_thd)) {
+		record_reg_info = true;
+		batt_params->pre_record_soc = batt_params->soc;
+	}
+
+	if (curr_time - batt_info->pre_check_time > TRACK_GAUGE_UPLOAD_PERIOD ||
+	    (batt_info->debug_upload_period_t &&
+	     curr_time - batt_info->pre_check_time > batt_info->debug_upload_period_t)) {
+		batt_info->pre_check_time = curr_time;
+		record_reg_info = true;
+		batt_info->trigger_type_flag = 0;
+		if (!err_type)
+			err_type = TRACK_GAGUE_GENERAL_INFO;
+	}
+
+	if (err_type)
+		set_bit(err_type, &batt_info->trigger_type_flag);
+
+	delta_time = curr_time - batt_info->pre_time;
+
+	if (record_reg_info)
+		oplus_chg_track_gauge_fifo_push(&batt_info->fifo, batt_params->gauge_topic);
+
+	if (err_type)
+		oplus_chg_track_gauge_info_record(batt_info, err_type, delta_time);
+
+	batt_params->pre_soc = batt_params->soc;
+	batt_info->pre_time = curr_time;
+
+	return ret;
+}
+
+static int oplus_chg_track_gauge_status_check(struct oplus_monitor *monitor)
+{
+	struct oplus_chg_track *track_chip = g_track_chip;
+	union mms_msg_data data = { 0 };
+	static bool enter = false;
+
+	if (!track_chip || !track_chip->track_cfg.track_gauge_ctrl || track_chip->track_cfg.external_gauge_num <= 0)
+		return -ENOTSUPP;
+
+	if (track_chip->track_cfg.external_gauge_num == 1) {
+		track_chip->gauge_info.params.gauge_topic = monitor->gauge_topic;
+		track_chip->gauge_info.params.soc = monitor->batt_soc;
+		if (!enter) {
+			track_chip->gauge_info.params.pre_soc = track_chip->gauge_info.params.soc;
+			track_chip->gauge_info.params.pre_record_soc = track_chip->gauge_info.params.soc;
+			strncpy(track_chip->gauge_info.device_name, "main_gauge", TRACK_GAUGE_NAME_LEN);
+			enter = true;
+		}
+		oplus_chg_track_get_gauge_status(track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
+	} else if (track_chip->track_cfg.external_gauge_num == 2) {
+		track_chip->gauge_info.params.gauge_topic = oplus_mms_get_by_name("gauge:0");
+		track_chip->sub_gauge_info.params.gauge_topic = oplus_mms_get_by_name("gauge:1");
+		if (!track_chip->gauge_info.params.gauge_topic || !track_chip->sub_gauge_info.params.gauge_topic) {
+			chg_err("external_gauge_num=2 not match\n");
+			return -EINVAL;
+		}
+		oplus_mms_get_item_data(track_chip->gauge_info.params.gauge_topic, GAUGE_ITEM_SOC, &data, false);
+		track_chip->gauge_info.params.soc = data.intval;
+		oplus_mms_get_item_data(track_chip->sub_gauge_info.params.gauge_topic, GAUGE_ITEM_SOC, &data, false);
+		track_chip->sub_gauge_info.params.soc = data.intval;
+		if (!enter) {
+			track_chip->gauge_info.params.pre_soc = track_chip->gauge_info.params.soc;
+			track_chip->gauge_info.params.pre_record_soc = track_chip->gauge_info.params.soc;
+			track_chip->sub_gauge_info.params.pre_soc = track_chip->sub_gauge_info.params.soc;
+			track_chip->sub_gauge_info.params.pre_record_soc = track_chip->sub_gauge_info.params.soc;
+			strncpy(track_chip->gauge_info.device_name, "main_gauge", TRACK_GAUGE_NAME_LEN);
+			strncpy(track_chip->sub_gauge_info.device_name, "sub_gauge", TRACK_GAUGE_NAME_LEN);
+			enter = true;
+		}
+		oplus_chg_track_get_gauge_status(track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
+		oplus_chg_track_get_gauge_status(track_chip, &track_chip->sub_gauge_info,
+						 &track_chip->sub_gauge_info.params);
+	}
+
+	return 0;
+}
+
 int oplus_chg_track_comm_monitor(struct oplus_monitor *monitor)
 {
 	int ret = 0;
@@ -6322,6 +6846,7 @@ int oplus_chg_track_comm_monitor(struct oplus_monitor *monitor)
 	if (likely(monitor->ui_soc_ready))
 		ret = oplus_chg_track_uisoc_soc_jump_check(monitor);
 	ret |= oplus_chg_track_speed_check(monitor);
+	ret |= oplus_chg_track_gauge_status_check(monitor);
 
 	return ret;
 }
@@ -6368,6 +6893,9 @@ static void oplus_chg_track_err_subs_callback(struct mms_subscribe *subs,
 		case ERR_ITEM_UFCS:
 			oplus_chg_track_upload_ufcs_info(track);
 			break;
+		case ERR_ITEM_DEEP_DISCHG_INFO:
+			oplus_chg_track_upload_deep_dischg_info(track);
+			break;
 		default:
 			break;
 		}
@@ -6397,6 +6925,7 @@ static int oplus_chg_track_debugfs_init(struct oplus_chg_track *track_dev)
 	struct dentry *debugfs_root;
 	struct dentry *debugfs_general;
 	struct dentry *debugfs_chg_slow;
+	struct dentry *debugfs_gauge;
 
 	debugfs_root = oplus_chg_track_get_debugfs_root();
 	if (!debugfs_root) {
@@ -6412,6 +6941,12 @@ static int oplus_chg_track_debugfs_init(struct oplus_chg_track *track_dev)
 
 	debugfs_chg_slow = debugfs_create_dir("chg_slow", debugfs_general);
 	if (!debugfs_chg_slow) {
+		ret = -ENOENT;
+		return ret;
+	}
+
+	debugfs_gauge = debugfs_create_dir("gauge", debugfs_root);
+	if (!debugfs_gauge) {
 		ret = -ENOENT;
 		return ret;
 	}
@@ -6453,6 +6988,19 @@ static int oplus_chg_track_debugfs_init(struct oplus_chg_track *track_dev)
 			  &(track_dev->track_status.debug_plugout_state));
 	debugfs_create_u8("debug_break_code", 0644, debugfs_general,
 			  &(track_dev->track_status.debug_break_code));
+
+	debugfs_create_u32("debug_gauge_err_type", 0644, debugfs_gauge,
+			  &(track_dev->gauge_info.debug_err_type));
+	debugfs_create_u32("debug_gauge_upload_period_t", 0644, debugfs_gauge,
+			  &(track_dev->gauge_info.debug_upload_period_t));
+	debugfs_create_u32("debug_gauge_soc_record_thd", 0644, debugfs_gauge,
+			  &(track_dev->gauge_info.debug_soc_record_thd));
+	debugfs_create_u32("debug_sub_gauge_err_type", 0644, debugfs_gauge,
+			  &(track_dev->sub_gauge_info.debug_err_type));
+	debugfs_create_u32("debug_sub_gauge_upload_period_t", 0644, debugfs_gauge,
+			  &(track_dev->sub_gauge_info.debug_upload_period_t));
+	debugfs_create_u32("debug_sub_gauge_soc_record_thd", 0644, debugfs_gauge,
+			  &(track_dev->sub_gauge_info.debug_soc_record_thd));
 	return ret;
 }
 
@@ -6509,6 +7057,10 @@ int oplus_chg_track_driver_init(struct oplus_monitor *monitor)
 		goto parse_dt_err;
 	}
 
+	rc = oplus_chg_track_gague_fifo_init(track_dev);
+	if (rc < 0)
+		goto gauge_kfifo_err;
+
 	oplus_chg_track_init(track_dev);
 	rc = oplus_chg_track_thread_init(track_dev);
 	if (rc < 0) {
@@ -6526,6 +7078,8 @@ int oplus_chg_track_driver_init(struct oplus_monitor *monitor)
 
 	INIT_DELAYED_WORK(&track_dev->upload_info_dwork,
 			  oplus_chg_track_upload_info_dwork);
+	INIT_DELAYED_WORK(&track_dev->gauge_info.load_trigger_work, oplus_chg_track_gauge_info_work);
+	INIT_DELAYED_WORK(&track_dev->sub_gauge_info.load_trigger_work, oplus_chg_track_sub_gauge_info_work);
 	oplus_parallelchg_track_foldmode_init(track_dev);
 	oplus_chg_track_ttf_info_init(track_dev);
 	g_track_chip = track_dev;
@@ -6535,6 +7089,9 @@ int oplus_chg_track_driver_init(struct oplus_monitor *monitor)
 
 subscribe_err_topic_err:
 track_kthread_init_err:
+	kfifo_free(&(track_dev->gauge_info.fifo));
+	kfifo_free(&(track_dev->sub_gauge_info.fifo));
+gauge_kfifo_err:
 parse_dt_err:
 	if (track_debugfs_root)
 		debugfs_remove_recursive(track_debugfs_root);

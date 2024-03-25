@@ -128,7 +128,9 @@ static void update_or_create_entry_locked(uid_t uid, struct task_struct *p, u64 
 		rcu_read_lock();
 		task = find_task_by_vpid(midas_mmap_buf.entrys[i].id[ID_TGID]);
 		rcu_read_unlock();
-		strncpy(midas_mmap_buf.entrys[i].tgid_name, task->comm, TASK_COMM_LEN);
+		if (task != NULL) {
+			strncpy(midas_mmap_buf.entrys[i].tgid_name, task->comm, TASK_COMM_LEN);
+		}
 	}
 
 	/* the unit of time_in_state is ms */

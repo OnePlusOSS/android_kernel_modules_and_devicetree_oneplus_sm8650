@@ -4994,6 +4994,49 @@ static int oplus_chg_vb_wls_aicl_rerun(struct oplus_chg_ic_dev *ic_dev)
 	return rc;
 }
 
+static int oplus_chg_vb_get_byb_id_info(struct oplus_chg_ic_dev *ic_dev, int *count)
+{
+	struct oplus_virtual_buck_ic *vb;
+	int i;
+	int rc = 0;
+#ifdef CONFIG_OPLUS_CHG_IC_DEBUG
+	struct oplus_chg_ic_overwrite_data *data;
+	const void *buf;
+#endif
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+#ifdef CONFIG_OPLUS_CHG_IC_DEBUG
+	data = oplus_chg_ic_get_overwrite_data(ic_dev, OPLUS_IC_FUNC_BUCK_GET_BYBID_INFO);
+	if (unlikely(data != NULL)) {
+		buf = (const void *)data->buf;
+		if (!oplus_chg_ic_debug_data_check(buf, data->size))
+			return -EINVAL;
+		*count = oplus_chg_ic_get_item_data(buf, 0);
+		return 0;
+	}
+#endif
+
+	*count = 0;
+	vb = oplus_chg_ic_get_drvdata(ic_dev);
+	for (i = 0; i < vb->child_num; i++) {
+		if (!func_is_support(&vb->child_list[i], OPLUS_IC_FUNC_BUCK_GET_BYBID_INFO)) {
+			rc = -ENOTSUPP;
+			continue;
+		}
+		rc = oplus_chg_ic_func(vb->child_list[i].ic_dev, OPLUS_IC_FUNC_BUCK_GET_BYBID_INFO, count);
+		if (rc < 0)
+			chg_err("child ic[%d] get bybid info error, rc=%d\n", i, rc);
+		else
+			return 0;
+	}
+
+	return rc;
+}
+
 static void *oplus_chg_vb_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_chg_ic_func func_id)
 {
 	void *func = NULL;
@@ -5249,6 +5292,9 @@ static void *oplus_chg_vb_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_c
 		break;
 	case OPLUS_IC_FUNC_BUCK_DIS_INSERT_DETECT:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_BUCK_DIS_INSERT_DETECT, oplus_chg_vb_set_usb_drv);
+		break;
+	case OPLUS_IC_FUNC_BUCK_GET_BYBID_INFO:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_BUCK_GET_BYBID_INFO, oplus_chg_vb_get_byb_id_info);
 		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);
@@ -5853,6 +5899,7 @@ enum oplus_chg_ic_func oplus_vb_overwrite_funcs[] = {
 	OPLUS_IC_FUNC_BUCK_GET_BATT_BTB_TEMP,
 	OPLUS_IC_FUNC_BUCK_GET_FV,
 	OPLUS_IC_FUNC_GET_TYPEC_ROLE,
+	OPLUS_IC_FUNC_BUCK_GET_BYBID_INFO,
 };
 
 #endif /* CONFIG_OPLUS_CHG_IC_DEBUG */

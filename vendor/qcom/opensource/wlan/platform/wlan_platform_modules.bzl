@@ -70,6 +70,7 @@ def _define_modules_for_target_variant(target, variant):
                         "OPLUS_FEATURE_WIFI_FTM",
                         "OPLUS_FEATURE_WIFI_DCS_SWITCH",
                         "OPLUS_BUG_STABILITY",
+                        "OPLUS_FEATURE_SOFTAP_DCS_SWITCH",
             ],
             #endif
             conditional_srcs =  {
@@ -113,6 +114,11 @@ def _define_modules_for_target_variant(target, variant):
             includes = ["icnss2", "cnss_utils"],
             kconfig = "icnss2/Kconfig",
             defconfig = "icnss2/{}_defconfig".format(tv),
+            #add oplus feature with bazel compile config
+            local_defines = [
+                        "OPLUS_FEATURE_SOFTAP_DCS_SWITCH",
+            ],
+            #endif
             conditional_srcs = {
                 "CONFIG_ICNSS2_QMI": {
                     True: [

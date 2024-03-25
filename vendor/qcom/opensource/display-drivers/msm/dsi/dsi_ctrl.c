@@ -2816,6 +2816,7 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 	struct dsi_event_cb_info cb_info;
 	struct dsi_display *display;
 	bool skip_irq_enable = false;
+	bool is_spurious_interrupt = false;
 
 	cb_info = dsi_ctrl->irq_info.irq_err_cb;
 
@@ -2827,6 +2828,10 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 	if (dsi_ctrl->hw.ops.clear_error_status)
 		dsi_ctrl->hw.ops.clear_error_status(&dsi_ctrl->hw,
 					error);
+
+	/* check for spurious interrupts */
+	if (dsi_ctrl_check_for_spurious_error_interrupts(dsi_ctrl))
+		is_spurious_interrupt = true;
 
 	/* DTLN PHY error */
 	if (error & 0x3000E00)
@@ -2861,12 +2866,12 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 		/* no need to report FIFO overflow if already masked */
 		if (cb_info.event_cb && !(mask & 0xf0000)) {
 			cb_info.event_idx = DSI_FIFO_OVERFLOW;
+			display = cb_info.event_usr_ptr;
+			display->is_spurious_interrupt = is_spurious_interrupt;
 			(void)cb_info.event_cb(cb_info.event_usr_ptr,
 						cb_info.event_idx,
 						dsi_ctrl->cell_index,
 						0, 0, 0, 0);
-			display = cb_info.event_usr_ptr;
-			dsi_display_report_dead(display);
 			skip_irq_enable = true;
 		}
 	}
@@ -2875,12 +2880,12 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 	if (error & 0xF00000) {
 		if (cb_info.event_cb) {
 			cb_info.event_idx = DSI_FIFO_UNDERFLOW;
+			display = cb_info.event_usr_ptr;
+			display->is_spurious_interrupt = is_spurious_interrupt;
 			(void)cb_info.event_cb(cb_info.event_usr_ptr,
 						cb_info.event_idx,
 						dsi_ctrl->cell_index,
 						0, 0, 0, 0);
-			display = cb_info.event_usr_ptr;
-			dsi_display_report_dead(display);
 			skip_irq_enable = true;
 		}
 	}
@@ -2900,8 +2905,7 @@ static void dsi_ctrl_handle_error_status(struct dsi_ctrl *dsi_ctrl,
 	 * case and prevent us from re enabling interrupts until a full ESD
 	 * recovery is completed.
 	 */
-	if (dsi_ctrl_check_for_spurious_error_interrupts(dsi_ctrl) &&
-				dsi_ctrl->esd_check_underway) {
+	if (is_spurious_interrupt && dsi_ctrl->esd_check_underway) {
 		dsi_ctrl->hw.ops.soft_reset(&dsi_ctrl->hw);
 		return;
 	}

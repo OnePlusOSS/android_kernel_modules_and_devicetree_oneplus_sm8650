@@ -101,6 +101,10 @@ MODULE_PARM_DESC(usbtemp_dbg_curr_status, "debug usbtemp current status");
 static int plugin_cnt_test = 0;
 module_param(plugin_cnt_test, int, 0644);
 MODULE_PARM_DESC(plugin_cnt_test, "add for test plugin/out ap cnt(rev) and adsp cnt(snd) consistency");
+
+static int usbin_status_test = 0;
+module_param(usbin_status_test, int, 0644);
+MODULE_PARM_DESC(usbin_status_test, "usbin status test");
 #if IS_MODULE(CONFIG_OPLUS_FEATURE_OPLUSBOOT)
 #define MAX_CMDLINE_PARAM_LEN 1024
 extern char bootmode[];
@@ -9628,6 +9632,10 @@ int oplus_chg_wired_get_break_sub_crux_info(char *crux_info)
 	return bcdev->real_chg_type;
 }
 
+#define MAX_VBUS_CHECK_COUNTS			4
+#define VOLTAGE_800MV				800
+#define GET_INFO_FROMADS_MAXIMIT		3
+
 static void oplus_plugin_irq_work(struct work_struct *work)
 {
 	int rc = 0;
@@ -9661,6 +9669,15 @@ static void oplus_plugin_irq_work(struct work_struct *work)
 		bcdev->pd_svooc = false;
 	}
 	usb_plugin_status = pst->prop[USB_IN_STATUS] & 0xff;
+
+	if (chip->support_check_usbin_status &&
+	    usbin_status_test > 0) {
+		status_usb_in = true;
+		bcdev->usb_in_status = 1;
+		usb_plugin_status = 1;
+		chg_err("usbin_status_test %d\n", usbin_status_test);
+	}
+
 	cid_status = oplus_get_otg_online_status_with_cid_scheme();
 
 	chg_err("!!!prop[%d], usb_online[%d] abnormal_adapter_info [%d %d] cid_status[%d]\n",
@@ -10594,6 +10611,60 @@ static int oplus_get_usb_icl(void)
 	return usb_icl;
 }
 
+static void oplus_check_abnormal_usbin_status_work(struct work_struct *work)
+{
+	struct battery_chg_dev *bcdev = NULL;
+	struct oplus_chg_chip *chip = g_oplus_chip;
+	if (!chip) {
+		chg_err("chip is NULL!\n");
+		return;
+	}
+	bcdev = chip->pmic_spmi.bcdev_chip;
+
+	if (bcdev->usb_in_status)
+		chip->charger_volt = chip->chg_ops->get_charger_volt();
+	if (bcdev->usb_in_status &&
+	    oplus_vooc_get_fastchg_started() == false &&
+	    !chip->usbin_abnormal_status &&
+	    chip->charger_volt <= VOLTAGE_800MV &&
+	    chip->usb_present_vbus0_count <= MAX_VBUS_CHECK_COUNTS) {
+		chip->usb_present_vbus0_count++;
+
+		if (chip->usb_present_vbus0_count == MAX_VBUS_CHECK_COUNTS ||
+		    !bcdev->cid_status) {
+			chip->usbin_abnormal_status = true;
+			chip->check_usbin_from_adsp_cnt = 0;
+			chip->batt_full = false;
+			oplus_adsp_voocphy_clear_status();
+			chg_err("abnormal abnormal_status %d present_vbus0_count %d\n",
+				chip->usbin_abnormal_status,
+				chip->usb_present_vbus0_count);
+		}
+	}
+
+	if ((!bcdev->usb_in_status) ||
+	    (bcdev->usb_in_status && chip->charger_volt > VOLTAGE_800MV)) {
+		chip->usbin_abnormal_status = false;
+		chip->usb_present_vbus0_count = 0;
+		chip->check_usbin_from_adsp_cnt = 0;
+	}
+
+	if (bcdev->usb_in_status && chip->usbin_abnormal_status &&
+	    chip->charger_volt <= VOLTAGE_800MV &&
+	    chip->check_usbin_from_adsp_cnt <= GET_INFO_FROMADS_MAXIMIT) {
+		usbin_status_test = 0;
+		chip->check_usbin_from_adsp_cnt++;
+		schedule_delayed_work(&bcdev->plugin_irq_work, msecs_to_jiffies(3000));
+		chg_err("from_adsp_cnt %d\n",
+			chip->check_usbin_from_adsp_cnt);
+	}
+
+	chg_err("[%d  %d  %d  %d  %d]\n",
+		chip->usbin_abnormal_status, chip->usb_present_vbus0_count,
+		chip->check_usbin_from_adsp_cnt, bcdev->usb_in_status,
+		chip->charger_volt);
+}
+
 bool oplus_chg_is_usb_present(void)
 {
 	bool vbus_rising = false;
@@ -10623,6 +10694,9 @@ bool oplus_chg_is_usb_present(void)
 		vbus_rising = true;
 	}
 
+	if (chip->support_check_usbin_status) {
+		schedule_delayed_work(&bcdev->check_abnormal_usbin_status, 0);
+	}
 	return vbus_rising;
 }
 
@@ -13410,6 +13484,7 @@ static int battery_chg_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&bcdev->status_keep_delay_unlock_work, oplus_chg_wls_status_keep_delay_unlock_work);
 	INIT_DELAYED_WORK(&bcdev->mcu_en_init_work, oplus_chg_mcu_en_init_work);
 	INIT_DELAYED_WORK(&bcdev->adspvoocphy_plugin_cnt_check_work, oplus_chg_plugin_cnt_check_work);
+	INIT_DELAYED_WORK(&bcdev->check_abnormal_usbin_status, oplus_check_abnormal_usbin_status_work);
 	bcdev->status_wake_lock = wakeup_source_register(bcdev->dev, "status_wake_lock");
 	bcdev->status_wake_lock_on = false;
 #endif

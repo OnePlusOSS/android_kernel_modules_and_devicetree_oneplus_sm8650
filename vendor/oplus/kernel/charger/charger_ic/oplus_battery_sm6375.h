@@ -17,8 +17,24 @@
 #include <linux/extcon-provider.h>
 #include <linux/usb/typec.h>
 #include <linux/qti_power_supply.h>
+#include <linux/version.h>
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+#include "../../../supply/qcom/storm-watch.h"
+#include "../../../supply/qcom/battery.h"
+#include "../../../usb/typec/tcpc/inc/tcpci.h"
+#include "../../../usb/typec/tcpc/inc/tcpm.h"
+#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+#include "../../../../../kernel_platform/msm-kernel/drivers/power/supply/qcom/storm-watch.h"
+#include "../../../../../kernel_platform/msm-kernel/drivers/power/supply/qcom/battery.h"
+#include "../../../../../kernel_platform/msm-kernel/drivers/usb/typec/pd/inc/tcpci.h"
+#include "../../../../../kernel_platform/msm-kernel/drivers/usb/typec/pd/inc/tcpm.h"
+#include "../../../../../kernel_platform/msm-kernel/drivers/usb/typec/pd/inc/tcpm_pd.h"
+#else
 #include "../../../../kernel/msm-5.4/drivers/power/supply/qcom/storm-watch.h"
 #include "../../../../kernel/msm-5.4/drivers/power/supply/qcom/battery.h"
+#include "../../../../kernel/msm-5.4/drivers/usb/typec/tcpc/inc/tcpci.h"
+#include "../../../../kernel/msm-5.4/drivers/usb/typec/tcpc/inc/tcpm.h"
+#endif
 #include <linux/iio/iio.h>
 #include <dt-bindings/iio/qti_power_supply_iio.h>
 #include <linux/nvmem-consumer.h>
@@ -716,6 +732,11 @@ struct smb_charger {
 	bool			first_hardreset;
 	bool			keep_vbus_5v;
 	struct nvmem_cell	*soc_backup_nvmem;
+
+	int pps_min_mv[PDO_MAX_NR];
+	int pps_max_mv[PDO_MAX_NR];
+	int pps_ma[PDO_MAX_NR];
+	int pps_nr;
 #endif
 };
 
@@ -1122,5 +1143,7 @@ int smblib_get_prop_dc_voltage_now(struct smb_charger *chg,
 				union power_supply_propval *val);
 
 void smblib_moisture_detection_enable(struct smb_charger *chg, int pval);
-
+#ifdef OPLUS_FEATURE_CHG_BASIC
+void oplus_chg_pps_get_source_cap(void);
+#endif
 #endif /* __OPLUS_BATTERY_SM6375_H */

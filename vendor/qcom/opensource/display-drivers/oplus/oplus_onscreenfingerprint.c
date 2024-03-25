@@ -2318,6 +2318,11 @@ void oplus_ofp_aod_off_set_work_handler(struct work_struct *work_item)
 		return;
 	}
 
+	if (display->panel->power_mode == SDE_MODE_DPMS_OFF) {
+		OFP_INFO("Break aod off handle when panel already power off");
+		return;
+	}
+
 	OPLUS_OFP_TRACE_BEGIN("oplus_ofp_aod_off_set_work_handler");
 
 	OFP_INFO("send aod off cmds to speed up aod unlocking\n");

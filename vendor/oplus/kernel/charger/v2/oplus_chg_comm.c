@@ -1606,6 +1606,28 @@ static int oplus_comm_set_smooth_soc(struct oplus_chg_comm *chip, int soc)
 	return 0;
 }
 
+static int oplus_comm_set_vbat_uv_thr(struct oplus_chg_comm *chip, int uv_thr)
+{
+	struct mms_msg *msg;
+	int rc;
+
+	chg_info("set uv_thr=%d\n", uv_thr);
+	msg = oplus_mms_alloc_msg(MSG_TYPE_ITEM, MSG_PRIO_MEDIUM,
+				  COMM_ITEM_VBAT_UV_THR);
+	if (msg == NULL) {
+		chg_err("alloc msg error\n");
+		return -ENOMEM;
+	}
+	rc = oplus_mms_publish_msg(chip->comm_topic, msg);
+	if (rc < 0) {
+		chg_err("publish uv_thr msg error, rc=%d\n", rc);
+		kfree(msg);
+		return rc;
+	}
+
+	return 0;
+}
+
 static int oplus_comm_push_vbat_too_low_msg(struct oplus_chg_comm *chip)
 {
 	struct oplus_mms *err_topic;
@@ -3370,10 +3392,12 @@ static void oplus_comm_noplug_batt_volt_work(struct work_struct *work)
 		noplug_batt_volt_max, noplug_batt_volt_min);
 }
 
+#define GAUGE_VBAT_UV_DELATA	100
 static void oplus_comm_gauge_subs_callback(struct mms_subscribe *subs,
 					   enum mms_msg_type type, u32 id)
 {
 	struct oplus_chg_comm *chip = subs->priv_data;
+	struct oplus_comm_spec_config *spec = &chip->spec;
 	union mms_msg_data data = { 0 };
 	int rc;
 
@@ -3425,6 +3449,20 @@ static void oplus_comm_gauge_subs_callback(struct mms_subscribe *subs,
 				chip->hmac = !!data.intval;
 			}
 			break;
+		case GAUGE_ITEM_VBAT_UV:
+			rc = oplus_mms_get_item_data(chip->gauge_topic, id,
+							 &data, false);
+			if (rc < 0) {
+				chg_err("can't get GAUGE_ITEM_VBAT_UV data, rc=%d\n",
+					rc);
+			} else {
+				if (data.intval > GAUGE_VBAT_UV_DELATA) {
+					spec->vbat_uv_thr_mv = data.intval;
+					spec->vbat_charging_uv_thr_mv = spec->vbat_uv_thr_mv - GAUGE_VBAT_UV_DELATA;
+					oplus_comm_set_vbat_uv_thr(chip, spec->vbat_uv_thr_mv);
+				}
+			}
+			break;
 		default:
 			break;
 		}
@@ -3439,6 +3477,7 @@ static void oplus_comm_subscribe_gauge_topic(struct oplus_mms *topic,
 					     void *prv_data)
 {
 	struct oplus_chg_comm *chip = prv_data;
+	struct oplus_comm_spec_config *spec = &chip->spec;
 	union mms_msg_data data = { 0 };
 	struct mms_msg *msg;
 	int rc;
@@ -3504,6 +3543,18 @@ static void oplus_comm_subscribe_gauge_topic(struct oplus_mms *topic,
 		chip->gauge_err_code = 0;
 	else
 		chip->gauge_err_code = data.intval;
+
+	rc = oplus_mms_get_item_data(topic, GAUGE_ITEM_VBAT_UV, &data,
+					 false);
+	if (rc < 0) {
+		chg_err("can't get GAUGE_ITEM_VBAT_UV data, rc=%d\n", rc);
+	} else {
+		if (data.intval > GAUGE_VBAT_UV_DELATA) {
+			spec->vbat_uv_thr_mv = data.intval;
+			spec->vbat_charging_uv_thr_mv = spec->vbat_uv_thr_mv - GAUGE_VBAT_UV_DELATA;
+			oplus_comm_set_vbat_uv_thr(chip, spec->vbat_uv_thr_mv);
+		}
+	}
 
 #ifndef CONFIG_DISABLE_OPLUS_FUNCTION
 	if (get_eng_version() == HIGH_TEMP_AGING ||
@@ -4237,6 +4288,28 @@ static int oplus_comm_update_ui_soc(struct oplus_mms *mms,
 	return 0;
 }
 
+static int oplus_comm_update_vbat_uv_thr(struct oplus_mms *mms,
+				    union mms_msg_data *data)
+{
+	struct oplus_chg_comm *chip;
+	struct oplus_comm_spec_config *spec;
+
+	if (mms == NULL) {
+		chg_err("mms is NULL");
+		return -EINVAL;
+	}
+	if (data == NULL) {
+		chg_err("data is NULL");
+		return -EINVAL;
+	}
+	chip = oplus_mms_get_drvdata(mms);
+	spec = &chip->spec;
+
+	data->intval = spec->vbat_uv_thr_mv;
+
+	return 0;
+}
+
 static int oplus_comm_update_notify_code(struct oplus_mms *mms,
 					 union mms_msg_data *data)
 {
@@ -4636,6 +4709,16 @@ static struct mms_item oplus_comm_item[] = {
 			.down_thr_enable = false,
 			.dead_thr_enable = false,
 			.update = NULL,
+		}
+	},
+	{
+		.desc = {
+			.item_id = COMM_ITEM_VBAT_UV_THR,
+			.str_data = false,
+			.up_thr_enable = false,
+			.down_thr_enable = false,
+			.dead_thr_enable = false,
+			.update = oplus_comm_update_vbat_uv_thr,
 		}
 	},
 	{
@@ -6234,7 +6317,7 @@ static const struct file_operations proc_reserve_soc_debug_ops = {
 static const struct proc_ops proc_reserve_soc_debug_ops = {
 	.proc_write = proc_reserve_soc_debug_write,
 	.proc_read = proc_reserve_soc_debug_read,
-	.proc_lseek = seq_lseek,
+	.proc_lseek = noop_llseek,
 };
 #endif
 

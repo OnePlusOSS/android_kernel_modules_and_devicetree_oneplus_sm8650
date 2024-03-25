@@ -125,8 +125,10 @@ static ssize_t kmalloc_used_read(struct file *file,
 
 	if (len > *off)
 		len -= *off;
-	else
-		len = 0;
+	else {
+		vfree(kbuf);
+		return 0;
+	}
 
 	ret = copy_to_user(buffer, kbuf + *off, (len < count ? len : count));
 	vfree(kbuf);

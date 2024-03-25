@@ -44,7 +44,7 @@ static char bright_skip_stages[][64] = {
 
 static int br_start_check_systemid = -1;
 u64 mLastPwkTime = 0;
-u64 FrequencyInterval = 60000;
+u64 FrequencyInterval = 300000;
 
 int bright_screen_timer_restart(void)
 {
@@ -174,6 +174,9 @@ static void bright_error_happen_work(struct work_struct *work)
 {
 	struct pwrkey_monitor_data *bri_data = container_of(work, struct pwrkey_monitor_data, error_happen_work);
 	struct timespec64 ts;
+
+	/* stop recored stage when happen work for alm:6864732 */
+	set_timer_started_false();
 
 	/* for bright screen check, check if need skip, we direct return */
 	if (is_need_skip())

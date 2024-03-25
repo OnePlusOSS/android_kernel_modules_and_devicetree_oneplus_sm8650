@@ -110,6 +110,8 @@ struct oplus_configfs_device {
 	bool pps_charging;
 	bool pps_oplus_adapter;
 	u32 pps_adapter_id;
+
+	int vbat_uv_thr;
 };
 
 static struct oplus_configfs_device *g_cfg_dev;
@@ -1899,6 +1901,81 @@ static ssize_t mutual_cmd_store(struct device *dev, struct device_attribute *att
 }
 static DEVICE_ATTR_RW(mutual_cmd);
 
+static ssize_t deep_dischg_counts_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct oplus_configfs_device *chip = dev->driver_data;
+	int counts = 0;
+
+	if (!chip) {
+		chg_err("chip is NULL\n");
+		return -EINVAL;
+	}
+
+	counts = oplus_gauge_show_deep_dischg_count(chip->gauge_topic);
+	if (counts < 0)
+		return counts;
+
+	return sprintf(buf, "%d\n", counts);
+}
+
+static ssize_t deep_dischg_counts_store(struct device *dev, struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct oplus_configfs_device *chip = dev->driver_data;
+	int val = 0;
+
+	if (!chip) {
+		chg_err("chip is NULL\n");
+		return -EINVAL;
+	}
+
+	if (kstrtos32(buf, 0, &val)) {
+		chg_err("buf error\n");
+		return -EINVAL;
+	}
+
+	oplus_gauge_set_deep_dischg_count(chip->gauge_topic, val);
+
+	return count;
+}
+static DEVICE_ATTR_RW(deep_dischg_counts);
+
+static ssize_t deep_dischg_count_cali_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct oplus_configfs_device *chip = dev->driver_data;
+	int volt = 0;
+
+	if (!chip) {
+		chg_err("chip is NULL\n");
+		return -EINVAL;
+	}
+
+	volt = oplus_gauge_get_deep_count_cali(chip->gauge_topic);
+
+	return sprintf(buf, "%d\n", volt);
+}
+
+static ssize_t deep_dischg_count_cali_store(struct device *dev, struct device_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct oplus_configfs_device *chip = dev->driver_data;
+	int val = 0;
+
+	if (!chip) {
+		chg_err("chip is NULL\n");
+		return -EINVAL;
+	}
+
+	if (kstrtos32(buf, 0, &val)) {
+		chg_err("buf error\n");
+		return -EINVAL;
+	}
+	oplus_gauge_set_deep_count_cali(chip->gauge_topic, val);
+
+	return count;
+}
+static DEVICE_ATTR_RW(deep_dischg_count_cali);
+
 static struct device_attribute *oplus_common_attributes[] = {
 	&dev_attr_common,
 	&dev_attr_boot_completed,
@@ -1907,6 +1984,8 @@ static struct device_attribute *oplus_common_attributes[] = {
 	&dev_attr_time_zone,
 	&dev_attr_battlog_push_config,
 	&dev_attr_mutual_cmd,
+	&dev_attr_deep_dischg_counts,
+	&dev_attr_deep_dischg_count_cali,
 	NULL
 };
 
@@ -2603,6 +2682,10 @@ static void oplus_configfs_comm_subs_callback(struct mms_subscribe *subs,
 			chip->slow_chg_watt = SLOW_CHG_TO_WATT(data.intval);
 			chip->slow_chg_enable = !!SLOW_CHG_TO_ENABLE(data.intval);
 			break;
+		case COMM_ITEM_VBAT_UV_THR:
+			oplus_mms_get_item_data(chip->comm_topic, id, &data, false);
+			chip->vbat_uv_thr = data.intval;
+			break;
 		default:
 			break;
 		}
@@ -2632,6 +2715,9 @@ static void oplus_configfs_subscribe_comm_topic(struct oplus_mms *topic,
 	oplus_mms_get_item_data(chip->comm_topic, COMM_ITEM_NOTIFY_CODE, &data,
 				true);
 	chip->notify_code = data.intval;
+	oplus_mms_get_item_data(chip->comm_topic, COMM_ITEM_VBAT_UV_THR, &data,
+				true);
+	chip->vbat_uv_thr = data.intval;
 
 	oplus_mms_get_item_data(chip->comm_topic, COMM_ITEM_SLOW_CHG, &data, true);
 	chip->slow_chg_pct = SLOW_CHG_TO_PCT(data.intval);

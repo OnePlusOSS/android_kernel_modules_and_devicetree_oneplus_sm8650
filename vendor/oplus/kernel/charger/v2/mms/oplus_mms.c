@@ -30,6 +30,7 @@ static struct device_type oplus_mms_dev_type;
 static struct workqueue_struct	*mms_wq;
 static DEFINE_MUTEX(wait_list_lock);
 static LIST_HEAD(oplus_mms_wait_list);
+static void oplus_mms_call(struct oplus_mms *topic);
 static struct mms_item *oplus_mms_get_item(struct oplus_mms *mms, u32 id)
 {
 	struct mms_item *item_table = mms->desc->item_table;
@@ -571,6 +572,18 @@ int oplus_mms_wait_topic(const char *name, mms_callback_t call, void *data)
 	mutex_lock(&wait_list_lock);
 	list_add(&head->list, &oplus_mms_wait_list);
 	mutex_unlock(&wait_list_lock);
+
+	/*
+	 * The topic here may have been registered, but the registered
+	 * callback function has not been called, so we need to check
+	 * again here.
+	 */
+	topic = oplus_mms_get_by_name(name);
+	if (topic == NULL)
+		return 0;
+	if (!topic->initialized)
+		return 0;
+	oplus_mms_call(topic);
 
 	return 0;
 }

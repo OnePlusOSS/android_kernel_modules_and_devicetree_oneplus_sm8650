@@ -1293,7 +1293,7 @@ void binder_del_ref_hook(void *data,
 
 	handle_name_find = NULL;
 	hash_for_each_possible(g_binder_stats_driver.handle_name_hash, handle_name_tmp, hentry_handle, ref_desc) {
-		if (handle_name_tmp->handle == ref_desc)
+		if (virt_addr_valid(handle_name_tmp) && handle_name_tmp->handle == ref_desc)
 			handle_name_find = handle_name_tmp;
 	}
 	if (NULL != handle_name_find) {

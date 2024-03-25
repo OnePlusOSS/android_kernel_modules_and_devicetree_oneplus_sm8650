@@ -226,6 +226,9 @@ static void black_error_happen_work(struct work_struct *work)
 	struct pwrkey_monitor_data *bla_data = container_of(work, struct pwrkey_monitor_data, error_happen_work);
 	struct timespec64 ts;
 
+	/* stop recored stage when happen work for alm:6864732 */
+	set_timer_started_false();
+
 	/* for black screen check, check if need skip, we direct return */
 	if (is_need_skip())
 		return;

@@ -626,6 +626,7 @@ struct battery_chg_dev {
 	struct delayed_work adsp_track_notify_work;
 	struct delayed_work mcu_en_init_work;
 	struct delayed_work adspvoocphy_plugin_cnt_check_work;
+	struct delayed_work check_abnormal_usbin_status;
 #endif
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	struct mutex	pps_read_buffer_lock;

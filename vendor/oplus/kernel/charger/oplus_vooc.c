@@ -50,6 +50,7 @@ extern int enable_charger_log;
 
 static struct oplus_vooc_chip *g_vooc_chip = NULL;
 static struct oplus_vooc_cp *g_vooc_cp = NULL;
+static bool force_allow_reading = true;
 bool __attribute__((weak)) oplus_get_fg_i2c_err_occured(void)
 {
 	return false;
@@ -2433,7 +2434,7 @@ void oplus_vooc_print_log(void)
 bool oplus_vooc_get_allow_reading(void)
 {
 	if (!g_vooc_chip) {
-		return true;
+		return force_allow_reading;
 	} else {
 		if (g_vooc_chip->support_vooc_by_normal_charger_path &&
 		    g_vooc_chip->fast_chg_type == CHARGER_SUBTYPE_FASTCHG_VOOC) {
@@ -2441,6 +2442,15 @@ bool oplus_vooc_get_allow_reading(void)
 		} else {
 			return g_vooc_chip->allow_reading;
 		}
+	}
+}
+
+void oplus_vooc_set_allow_reading(bool state)
+{
+	if (!g_vooc_chip) {
+		force_allow_reading = state;
+	} else {
+		g_vooc_chip->allow_reading = state;
 	}
 }
 

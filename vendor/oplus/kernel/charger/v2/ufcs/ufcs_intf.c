@@ -279,13 +279,15 @@ static int ufcs_send_exit_ufcs_mode(struct ufcs_class *class)
 	mutex_lock(&class->ext_req_lock);
 	mutex_lock(&class->pe_lock);
 	reinit_completion(&class->request_ack);
+	if (!class->handshake_success) {
+		ufcs_err("ufcs no handshake\n");
+		rc = -EINVAL;
+		goto err;
+	}
 	rc = ufcs_push_event(class, event);
 	if (rc < 0) {
-		mutex_unlock(&class->pe_lock);
-		mutex_unlock(&class->ext_req_lock);
 		ufcs_err("push exit ufcs mode event error, rc=%d\n", rc);
-		devm_kfree(&class->ufcs->dev, event);
-		return rc;
+		goto err;
 	}
 	mutex_unlock(&class->pe_lock);
 	wait_for_completion(&class->request_ack);
@@ -299,6 +301,12 @@ static int ufcs_send_exit_ufcs_mode(struct ufcs_class *class)
 	class->handshake_success = false;
 
 	return 0;
+
+err:
+	mutex_unlock(&class->pe_lock);
+	mutex_unlock(&class->ext_req_lock);
+	devm_kfree(&class->ufcs->dev, event);
+	return rc;
 }
 
 int ufcs_force_exit(struct ufcs_dev *ufcs)
@@ -388,13 +396,15 @@ int ufcs_config_watchdog(struct ufcs_class *class, u16 time_ms)
 	mutex_lock(&class->ext_req_lock);
 	mutex_lock(&class->pe_lock);
 	reinit_completion(&class->request_ack);
+	if (!class->handshake_success) {
+		ufcs_err("ufcs no handshake\n");
+		rc = -EINVAL;
+		goto err;
+	}
 	rc = ufcs_push_event(class, event);
 	if (rc < 0) {
-		mutex_unlock(&class->pe_lock);
-		mutex_unlock(&class->ext_req_lock);
 		ufcs_err("push config watch dog event error, rc=%d\n", rc);
-		devm_kfree(&class->ufcs->dev, event);
-		return rc;
+		goto err;
 	}
 	mutex_unlock(&class->pe_lock);
 	wait_for_completion(&class->request_ack);
@@ -407,6 +417,12 @@ int ufcs_config_watchdog(struct ufcs_class *class, u16 time_ms)
 	}
 
 	return 0;
+
+err:
+	mutex_unlock(&class->pe_lock);
+	mutex_unlock(&class->ext_req_lock);
+	devm_kfree(&class->ufcs->dev, event);
+	return rc;
 }
 
 int ufcs_intf_config_watchdog(struct ufcs_dev *ufcs, u16 time_ms)
@@ -536,13 +552,15 @@ int ufcs_get_device_info(struct ufcs_class *class, u64 *dev_info)
 	mutex_lock(&class->ext_req_lock);
 	mutex_lock(&class->pe_lock);
 	reinit_completion(&class->request_ack);
+	if (!class->handshake_success) {
+		ufcs_err("ufcs no handshake\n");
+		rc = -EINVAL;
+		goto err;
+	}
 	rc = ufcs_push_event(class, event);
 	if (rc < 0) {
-		mutex_unlock(&class->pe_lock);
-		mutex_unlock(&class->ext_req_lock);
 		ufcs_err("push get device info event error, rc=%d\n", rc);
-		devm_kfree(&class->ufcs->dev, event);
-		return rc;
+		goto err;
 	}
 	mutex_unlock(&class->pe_lock);
 	wait_for_completion(&class->request_ack);
@@ -557,6 +575,12 @@ int ufcs_get_device_info(struct ufcs_class *class, u64 *dev_info)
 	*dev_info = class->dev_info;
 
 	return 0;
+
+err:
+	mutex_unlock(&class->pe_lock);
+	mutex_unlock(&class->ext_req_lock);
+	devm_kfree(&class->ufcs->dev, event);
+	return rc;
 }
 
 int ufcs_intf_get_device_info(struct ufcs_dev *ufcs, u64 *dev_info)
@@ -614,13 +638,15 @@ int ufcs_get_error_info(struct ufcs_class *class, u64 *err_info)
 	mutex_lock(&class->ext_req_lock);
 	mutex_lock(&class->pe_lock);
 	reinit_completion(&class->request_ack);
+	if (!class->handshake_success) {
+		ufcs_err("ufcs no handshake\n");
+		rc = -EINVAL;
+		goto err;
+	}
 	rc = ufcs_push_event(class, event);
 	if (rc < 0) {
-		mutex_unlock(&class->pe_lock);
-		mutex_unlock(&class->ext_req_lock);
 		ufcs_err("push get error info event error, rc=%d\n", rc);
-		devm_kfree(&class->ufcs->dev, event);
-		return rc;
+		goto err;
 	}
 	mutex_unlock(&class->pe_lock);
 	wait_for_completion(&class->request_ack);
@@ -635,6 +661,12 @@ int ufcs_get_error_info(struct ufcs_class *class, u64 *err_info)
 	*err_info = class->err_info;
 
 	return 0;
+
+err:
+	mutex_unlock(&class->pe_lock);
+	mutex_unlock(&class->ext_req_lock);
+	devm_kfree(&class->ufcs->dev, event);
+	return rc;
 }
 
 int ufcs_intf_get_error_info(struct ufcs_dev *ufcs, u64 *err_info)
@@ -692,13 +724,15 @@ int ufcs_get_source_info(struct ufcs_class *class, u64 *src_info)
 	mutex_lock(&class->ext_req_lock);
 	mutex_lock(&class->pe_lock);
 	reinit_completion(&class->request_ack);
+	if (!class->handshake_success) {
+		ufcs_err("ufcs no handshake\n");
+		rc = -EINVAL;
+		goto err;
+	}
 	rc = ufcs_push_event(class, event);
 	if (rc < 0) {
-		mutex_unlock(&class->pe_lock);
-		mutex_unlock(&class->ext_req_lock);
 		ufcs_err("push get source info event error, rc=%d\n", rc);
-		devm_kfree(&class->ufcs->dev, event);
-		return rc;
+		goto err;
 	}
 	mutex_unlock(&class->pe_lock);
 	wait_for_completion(&class->request_ack);
@@ -713,6 +747,12 @@ int ufcs_get_source_info(struct ufcs_class *class, u64 *src_info)
 	*src_info = class->src_info;
 
 	return 0;
+
+err:
+	mutex_unlock(&class->pe_lock);
+	mutex_unlock(&class->ext_req_lock);
+	devm_kfree(&class->ufcs->dev, event);
+	return rc;
 }
 
 int ufcs_intf_get_source_info(struct ufcs_dev *ufcs, u64 *src_info)
@@ -770,13 +810,15 @@ int ufcs_get_cable_info(struct ufcs_class *class, u64 *cable_info)
 	mutex_lock(&class->ext_req_lock);
 	mutex_lock(&class->pe_lock);
 	reinit_completion(&class->request_ack);
+	if (!class->handshake_success) {
+		ufcs_err("ufcs no handshake\n");
+		rc = -EINVAL;
+		goto err;
+	}
 	rc = ufcs_push_event(class, event);
 	if (rc < 0) {
-		mutex_unlock(&class->pe_lock);
-		mutex_unlock(&class->ext_req_lock);
 		ufcs_err("push get cable info event error, rc=%d\n", rc);
-		devm_kfree(&class->ufcs->dev, event);
-		return rc;
+		goto err;
 	}
 	mutex_unlock(&class->pe_lock);
 	wait_for_completion(&class->request_ack);
@@ -791,6 +833,12 @@ int ufcs_get_cable_info(struct ufcs_class *class, u64 *cable_info)
 	*cable_info = class->cable_info;
 
 	return 0;
+
+err:
+	mutex_unlock(&class->pe_lock);
+	mutex_unlock(&class->ext_req_lock);
+	devm_kfree(&class->ufcs->dev, event);
+	return rc;
 }
 
 int ufcs_intf_get_cable_info(struct ufcs_dev *ufcs, u64 *cable_info)
@@ -849,13 +897,15 @@ int ufcs_get_pdo_info(struct ufcs_class *class, u64 *pdo, int num)
 	mutex_lock(&class->ext_req_lock);
 	mutex_lock(&class->pe_lock);
 	reinit_completion(&class->request_ack);
+	if (!class->handshake_success) {
+		ufcs_err("ufcs no handshake\n");
+		rc = -EINVAL;
+		goto err;
+	}
 	rc = ufcs_push_event(class, event);
 	if (rc < 0) {
-		mutex_unlock(&class->pe_lock);
-		mutex_unlock(&class->ext_req_lock);
 		ufcs_err("push get output cap event error, rc=%d\n", rc);
-		devm_kfree(&class->ufcs->dev, event);
-		return rc;
+		goto err;
 	}
 	mutex_unlock(&class->pe_lock);
 	wait_for_completion(&class->request_ack);
@@ -875,6 +925,12 @@ int ufcs_get_pdo_info(struct ufcs_class *class, u64 *pdo, int num)
 		pdo[i] = class->pdo.data[i];
 
 	return num;
+
+err:
+	mutex_unlock(&class->pe_lock);
+	mutex_unlock(&class->ext_req_lock);
+	devm_kfree(&class->ufcs->dev, event);
+	return rc;
 }
 
 int ufcs_intf_get_pdo_info(struct ufcs_dev *ufcs, u64 *pdo, int num)
@@ -946,13 +1002,15 @@ int ufcs_verify_adapter(struct ufcs_class *class, u8 key_index, u8 *auth_data, u
 	mutex_lock(&class->pe_lock);
 	class->verify_pass = false;
 	reinit_completion(&class->request_ack);
+	if (!class->handshake_success) {
+		ufcs_err("ufcs no handshake\n");
+		rc = -EINVAL;
+		goto err;
+	}
 	rc = ufcs_push_event(class, event);
 	if (rc < 0) {
-		mutex_unlock(&class->pe_lock);
-		mutex_unlock(&class->ext_req_lock);
 		ufcs_err("push verify request event error, rc=%d\n", rc);
-		devm_kfree(&class->ufcs->dev, event);
-		return rc;
+		goto err;
 	}
 	mutex_unlock(&class->pe_lock);
 	wait_for_completion(&class->request_ack);
@@ -965,6 +1023,12 @@ int ufcs_verify_adapter(struct ufcs_class *class, u8 key_index, u8 *auth_data, u
 	}
 
 	return class->verify_pass;
+
+err:
+	mutex_unlock(&class->pe_lock);
+	mutex_unlock(&class->ext_req_lock);
+	devm_kfree(&class->ufcs->dev, event);
+	return rc;
 }
 
 int ufcs_intf_verify_adapter(struct ufcs_dev *ufcs, u8 key_index, u8 *auth_data, u8 data_len)
@@ -1077,13 +1141,15 @@ int ufcs_get_emark_info(struct ufcs_class *class, u64 *info)
 	mutex_lock(&class->ext_req_lock);
 	mutex_lock(&class->pe_lock);
 	reinit_completion(&class->request_ack);
+	if (!class->handshake_success) {
+		ufcs_err("ufcs no handshake\n");
+		rc = -EINVAL;
+		goto err;
+	}
 	rc = ufcs_push_event(class, event);
 	if (rc < 0) {
-		mutex_unlock(&class->pe_lock);
-		mutex_unlock(&class->ext_req_lock);
 		ufcs_err("push oplus get emark info event error, rc=%d\n", rc);
-		devm_kfree(&class->ufcs->dev, event);
-		return rc;
+		goto err;
 	}
 	mutex_unlock(&class->pe_lock);
 	wait_for_completion(&class->request_ack);
@@ -1097,6 +1163,12 @@ int ufcs_get_emark_info(struct ufcs_class *class, u64 *info)
 	*info = class->emark_info;
 
 	return 0;
+
+err:
+	mutex_unlock(&class->pe_lock);
+	mutex_unlock(&class->ext_req_lock);
+	devm_kfree(&class->ufcs->dev, event);
+	return rc;
 }
 
 int ufcs_intf_get_emark_info(struct ufcs_dev *ufcs, u64 *info)
@@ -1155,13 +1227,15 @@ int ufcs_get_power_info_ext(struct ufcs_class *class, u64 *pie, int num)
 	mutex_lock(&class->ext_req_lock);
 	mutex_lock(&class->pe_lock);
 	reinit_completion(&class->request_ack);
+	if (!class->handshake_success) {
+		ufcs_err("ufcs no handshake\n");
+		rc = -EINVAL;
+		goto err;
+	}
 	rc = ufcs_push_event(class, event);
 	if (rc < 0) {
-		mutex_unlock(&class->pe_lock);
-		mutex_unlock(&class->ext_req_lock);
 		ufcs_err("push oplus get power info event error, rc=%d\n", rc);
-		devm_kfree(&class->ufcs->dev, event);
-		return rc;
+		goto err;
 	}
 	mutex_unlock(&class->pe_lock);
 	wait_for_completion(&class->request_ack);
@@ -1181,6 +1255,12 @@ int ufcs_get_power_info_ext(struct ufcs_class *class, u64 *pie, int num)
 		pie[i] = class->pie.data[i];
 
 	return num;
+
+err:
+	mutex_unlock(&class->pe_lock);
+	mutex_unlock(&class->ext_req_lock);
+	devm_kfree(&class->ufcs->dev, event);
+	return rc;
 }
 
 int ufcs_intf_get_power_info_ext(struct ufcs_dev *ufcs, u64 *pie, int num)

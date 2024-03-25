@@ -33,9 +33,14 @@
 #define OEM_OPCODE_READ_BUFFER    0x10000
 #define BCC_OPCODE_READ_BUFFER    0x10003
 #define PPS_OPCODE_READ_BUFFER    0x10004
-#define UFCS_OPCODE_READ_BUFFER   0x10005
+#define AP_OPCODE_UFCS_BUFFER     0x10005
+#define AP_OPCODE_READ_BUFFER  0x10006
 #define OEM_READ_WAIT_TIME_MS    500
 #define MAX_OEM_PROPERTY_DATA_SIZE 128
+#define AP_READ_WAIT_TIME_MS      500
+#define MAX_AP_PROPERTY_DATA_SIZE 512
+#define AP_UFCS_WAIT_TIME_MS      500
+#define MAX_UFCS_CAPS_ITEM        16
 #endif
 
 #define MSG_OWNER_BC			32778
@@ -86,6 +91,8 @@
 #define BC_UFCS_POWER_READY		0X70
 #define BC_UFCS_HANDSHAKE_OK		0X71
 #define BC_VOOC_GAN_MOS_ERROR	   0X72
+#define BC_UFCS_DISABLE_MOS		0X73
+#define BC_UFCS_PDO_READY		0X74
 #endif
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
@@ -110,6 +117,36 @@ struct oem_read_buffer_resp_msg {
 	struct pmic_glink_hdr hdr;
 	u32 data_buffer[MAX_OEM_PROPERTY_DATA_SIZE];
 	u32 data_size;
+};
+
+struct oplus_ap_read_ufcs_req_msg {
+	struct pmic_glink_hdr hdr;
+	u32 data_size;
+};
+
+struct oplus_ap_read_ufcs_resp_msg {
+	struct pmic_glink_hdr hdr;
+	u64 data_buffer[MAX_UFCS_CAPS_ITEM];
+	u32 data_size;
+};
+
+struct oplus_ap_read_req_msg {
+	struct pmic_glink_hdr hdr;
+	u32 message_id;
+};
+
+struct oplus_ap_read_buffer_resp_msg {
+	struct pmic_glink_hdr hdr;
+	u32 message_id;
+	u8 data_buffer[MAX_AP_PROPERTY_DATA_SIZE];
+	u32 data_size;
+};
+
+enum oplus_ap_message_id {
+	AP_MESSAGE_ACK,
+	AP_MESSAGE_GET_GAUGE_REG_INFO,
+	AP_MESSAGE_GET_GAUGE_CALIB_TIME,
+	AP_MESSAGE_MAX_SIZE = 32,
 };
 #endif
 
@@ -537,6 +574,7 @@ struct battery_chg_dev {
 	bool				ufcs_test_mode;
 	bool				ufcs_power_ready;
 	bool				ufcs_handshake_ok;
+	bool				ufcs_pdo_ready;
 	struct delayed_work 	hvdcp_disable_work;
 	struct delayed_work 	pd_only_check_work;
 	bool					voocphy_err_check;
@@ -577,12 +615,15 @@ struct battery_chg_dev {
 	struct mutex    bcc_read_buffer_lock;
 	struct completion    bcc_read_ack;
 	struct oem_read_buffer_resp_msg  bcc_read_buffer_dump;
-	struct oem_read_buffer_resp_msg  ufcs_read_buffer_dump;
-	struct mutex	ufcs_read_buffer_lock;
-	struct completion	 ufcs_read_ack;
 	struct oem_read_buffer_resp_msg  pps_read_buffer_dump;
 	struct mutex	pps_read_buffer_lock;
 	struct completion	 pps_read_ack;
+	struct oplus_ap_read_buffer_resp_msg	*ap_read_buffer_dump;
+	struct mutex				ap_read_buffer_lock;
+	struct completion			ap_read_ack[AP_MESSAGE_MAX_SIZE];
+	struct oplus_ap_read_ufcs_resp_msg  ufcs_read_buffer_dump;
+	struct mutex	ufcs_read_buffer_lock;
+	struct completion	 ufcs_read_ack;
 	int cp_work_mode;
 	bool gauge_data_initialized;
 	int otg_scheme;

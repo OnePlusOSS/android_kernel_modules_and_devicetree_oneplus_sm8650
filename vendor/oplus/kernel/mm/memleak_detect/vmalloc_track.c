@@ -146,7 +146,7 @@ static ssize_t vmalloc_debug_enable_read(struct file *file,
 	if (len > *off)
 		len -= *off;
 	else
-		len = 0;
+		return 0;
 
 	if (copy_to_user(buffer, kbuf, (len < count ? len : count)))
 		return -EFAULT;
@@ -171,7 +171,7 @@ static ssize_t hash_cal_time_read(struct file *file,
 	if (len > *off)
 		len -= *off;
 	else
-		len = 0;
+		return 0;
 
 	if (copy_to_user(buffer, kbuf + *off, (len < count ? len : count)))
 		return -EFAULT;
@@ -239,7 +239,7 @@ static ssize_t vmalloc_used_read(struct file *filp,
 	if (len > *off)
 		len -= *off;
 	else
-		len = 0;
+		return 0;
 
 	if (copy_to_user(buff, kbuf, (len < count ? len : count))) {
 		pr_err("vmalloc_debug : copy to user failed.\n");

@@ -81,7 +81,10 @@
                 "OPLUS_IC_ERR_MOS_ERROR",
                 "OPLUS_IC_ERR_OFFLINE",
                 "OPLUS_IC_ERR_UFCS",
-                "OPLUS_IC_ERR_GAN_MOS_ERROR"
+                "OPLUS_IC_ERR_GAN_MOS_ERROR",
+                "OPLUS_IC_ERR_NTC",
+                "OPLUS_IC_ERR_BYB_ID",
+                "OPLUS_IC_ERR_BATT_ID"
             ]
         },
         {
@@ -115,6 +118,37 @@
                 "UFCS_ERR_READ",
                 "UFCS_ERR_WRITE",
                 "UFCS_ERR_REG_DUMP"
+            ]
+        },
+        {
+            "name": "oplus_chg_ic_gpio_status",
+            "desc":{
+                "zh": "GPIO状态枚举值"
+            },
+            "list": [
+                "GPIO_STATUS_NC",
+                "GPIO_STATUS_PD",
+                "GPIO_STATUS_PU",
+                "GPIO_STATUS_NOT_SUPPORT"
+            ]
+        },
+        {
+            "name": "oplus_chg_track_gague_device_error",
+            "list": [
+                "TRACK_GAGUE_ERR_DEFAULT",
+                "TRACK_GAGUE_ERR_SEAL",
+                "TRACK_GAGUE_ERR_UNSEAL",
+                "TRACK_GAGUE_GENERAL_INFO",
+                "TRACK_GAGUE_ERR_RSOC_JUMP",
+                "TRACK_GAGUE_ERR_VOLT_SOC_NOT_MATCH",
+                "TRACK_GAGUE_ERR_QMAX",
+                "TRACK_GAGUE_ERR_FCC",
+                "TRACK_GAGUE_ERR_RSOC_SMOOTH",
+                "TRACK_GAGUE_ERR_TEMP",
+                "TRACK_GAGUE_ERR_SOH_JUMP",
+                "TRACK_GAGUE_ERR_CC_JUMP",
+                "TRACK_GAGUE_SOC_1_PCT_INFO",
+                "TRACK_GAGUE_ERR_MAX"
             ]
         }
     ],

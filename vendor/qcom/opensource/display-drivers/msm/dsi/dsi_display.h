@@ -152,6 +152,7 @@ struct dsi_display_ext_bridge {
  * @sw_te_using_wd:   Is software te enabled
  * @display_lock:     Mutex for dsi_display interface.
  * @disp_te_gpio:     GPIO for panel TE interrupt.
+ * @is_spurious_interrupt: bool to specify spurious interrupt.
  * @is_te_irq_enabled:bool to specify whether TE interrupt is enabled.
  * @esd_te_gate:      completion gate to signal TE interrupt.
  * @ctrl_count:       Number of DSI interfaces required by panel.
@@ -218,6 +219,7 @@ struct dsi_display {
 	int disp_te_gpio;
 	bool is_te_irq_enabled;
 	struct completion esd_te_gate;
+	bool is_spurious_interrupt;
 
 	u32 ctrl_count;
 	struct dsi_display_ctrl ctrl[MAX_DSI_CTRLS_PER_DISPLAY];
@@ -306,6 +308,12 @@ struct dsi_display {
 
 	bool enabled;
 
+#ifdef OPLUS_FEATURE_DISPLAY
+	u8 oplus_panel_flag;
+	u8 oplus_panel_id1;
+	u8 oplus_panel_id2;
+	u8 oplus_panel_id3;
+#endif /* OPLUS_FEATURE_DISPLAY */
 #if defined(CONFIG_PXLW_IRIS)
 	u32 off;
 	u32 cnt;

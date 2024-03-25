@@ -876,7 +876,7 @@ static int zram_used_limit_mb_write(struct cgroup_subsys_state *css,
 static s64 zram_used_limit_mb_read(struct cgroup_subsys_state *css,
 				   struct cftype *cft)
 {
-	return chp_per_reclaim_mib;
+	return (zram_used_limit_pages << PAGE_SHIFT) >> 20;
 }
 
 static int chp_per_reclaim_mib_write(struct cgroup_subsys_state *css,
@@ -892,7 +892,7 @@ static int chp_per_reclaim_mib_write(struct cgroup_subsys_state *css,
 static s64 chp_per_reclaim_mib_read(struct cgroup_subsys_state *css,
 				    struct cftype *cft)
 {
-	return zram_used_limit_pages << PAGE_SHIFT;
+	return chp_per_reclaim_mib;
 }
 
 static struct cftype mem_cgroup_swapd_legacy_files[] = {

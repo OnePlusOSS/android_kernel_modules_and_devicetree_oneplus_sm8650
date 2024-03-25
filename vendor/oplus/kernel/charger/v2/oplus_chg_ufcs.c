@@ -2715,7 +2715,7 @@ static void oplus_ufcs_check_ibat_safety(struct oplus_ufcs *chip)
 		vote(chip->ufcs_disable_votable, NO_DATA_VOTER, true, 1, false);
 		return;
 	}
-	rc = oplus_mms_get_item_data(chip->gauge_topic, GAUGE_ITEM_CURR, &data, false);
+	rc = oplus_mms_get_item_data(chip->gauge_topic, GAUGE_ITEM_CURR, &data, true);
 	if (rc < 0) {
 		chg_err("can't get ibat, rc=%d\n", rc);
 		vote(chip->ufcs_disable_votable, NO_DATA_VOTER, true, 1, false);

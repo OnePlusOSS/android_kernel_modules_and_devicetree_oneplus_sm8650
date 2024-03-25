@@ -2702,6 +2702,258 @@ skip_overwrite:
 	return rc;
 }
 
+static int oplus_chg_vg_get_batt_deep_dischg_count(struct oplus_chg_ic_dev *ic_dev, int *count)
+{
+	struct oplus_virtual_gauge_ic *chip;
+	int i;
+	int rc = 0;
+#ifdef CONFIG_OPLUS_CHG_IC_DEBUG
+	struct oplus_chg_ic_overwrite_data *data;
+	const void *buf;
+#endif
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+#ifdef CONFIG_OPLUS_CHG_IC_DEBUG
+	data = oplus_chg_ic_get_overwrite_data(ic_dev, OPLUS_IC_FUNC_GAUGE_GET_DEEP_DISCHG_COUNT);
+	if (unlikely(data != NULL)) {
+		buf = (const void *)data->buf;
+		if (!oplus_chg_ic_debug_data_check(buf, data->size))
+			goto skip_overwrite;
+		*count = oplus_chg_ic_get_item_data(buf, 0);
+		return 0;
+	}
+skip_overwrite:
+#endif
+
+	/* TODO: check common config */
+
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+	for (i = 0; i < chip->child_num; i++) {
+		if (!func_is_support(&chip->child_list[i],
+				     OPLUS_IC_FUNC_GAUGE_GET_DEEP_DISCHG_COUNT)) {
+			rc = (rc == 0) ? -ENOTSUPP : rc;
+			continue;
+		}
+		rc = oplus_chg_ic_func(chip->child_list[i].ic_dev,
+				       OPLUS_IC_FUNC_GAUGE_GET_DEEP_DISCHG_COUNT, count);
+		if (rc < 0)
+			chg_err("child ic[%d] get battery deep dischg count error, rc=%d\n",
+				i, rc);
+		break;
+	}
+
+	return rc;
+}
+
+static int oplus_chg_vg_set_batt_deep_dischg_count(struct oplus_chg_ic_dev *ic_dev, int *count)
+{
+	struct oplus_virtual_gauge_ic *chip;
+	int i;
+	int rc = 0;
+#ifdef CONFIG_OPLUS_CHG_IC_DEBUG
+	struct oplus_chg_ic_overwrite_data *data;
+	const void *buf;
+#endif
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+
+#ifdef CONFIG_OPLUS_CHG_IC_DEBUG
+	data = oplus_chg_ic_get_overwrite_data(ic_dev, OPLUS_IC_FUNC_GAUGE_SET_DEEP_DISCHG_COUNT);
+	if (unlikely(data != NULL)) {
+		buf = (const void *)data->buf;
+		if (!oplus_chg_ic_debug_data_check(buf, data->size))
+			goto skip_overwrite;
+		*count = oplus_chg_ic_get_item_data(buf, 0);
+	}
+skip_overwrite:
+#endif
+
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+	for (i = 0; i < chip->child_num; i++) {
+		if (!func_is_support(&chip->child_list[i],
+				     OPLUS_IC_FUNC_GAUGE_SET_DEEP_DISCHG_COUNT)) {
+			rc = (rc == 0) ? -ENOTSUPP : rc;
+			continue;
+		}
+		rc = oplus_chg_ic_func(chip->child_list[i].ic_dev,
+				       OPLUS_IC_FUNC_GAUGE_SET_DEEP_DISCHG_COUNT, count);
+		if (rc < 0)
+			chg_err("child ic[%d] set battery deep dischg count error, rc=%d\n",
+				i, rc);
+		break;
+	}
+
+	return rc;
+}
+
+static int oplus_chg_vg_set_batt_deep_term_volt(struct oplus_chg_ic_dev *ic_dev, int *volt)
+
+{
+	struct oplus_virtual_gauge_ic *chip;
+	int i;
+	int rc = 0;
+#ifdef CONFIG_OPLUS_CHG_IC_DEBUG
+	struct oplus_chg_ic_overwrite_data *data;
+	const void *buf;
+#endif
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+
+#ifdef CONFIG_OPLUS_CHG_IC_DEBUG
+	data = oplus_chg_ic_get_overwrite_data(ic_dev, OPLUS_IC_FUNC_GAUGE_SET_DEEP_TERM_VOLT);
+	if (unlikely(data != NULL)) {
+		buf = (const void *)data->buf;
+		if (!oplus_chg_ic_debug_data_check(buf, data->size))
+			goto skip_overwrite;
+		*volt = oplus_chg_ic_get_item_data(buf, 0);
+	}
+skip_overwrite:
+#endif
+
+	/* TODO: check common config */
+
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+	for (i = 0; i < chip->child_num; i++) {
+		if (!func_is_support(&chip->child_list[i],
+				     OPLUS_IC_FUNC_GAUGE_SET_DEEP_TERM_VOLT)) {
+			rc = (rc == 0) ? -ENOTSUPP : rc;
+			continue;
+		}
+		rc = oplus_chg_ic_func(chip->child_list[i].ic_dev,
+				       OPLUS_IC_FUNC_GAUGE_SET_DEEP_TERM_VOLT, volt);
+		if (rc < 0)
+			chg_err("child ic[%d] set battery deep term volt error, rc=%d\n",
+				i, rc);
+		break;
+	}
+
+	return rc;
+}
+
+static int oplus_chg_vg_get_batt_id_info(struct oplus_chg_ic_dev *ic_dev, int *count)
+{
+	struct oplus_virtual_gauge_ic *chip;
+	int i;
+	int rc = 0;
+#ifdef CONFIG_OPLUS_CHG_IC_DEBUG
+	struct oplus_chg_ic_overwrite_data *data;
+	const void *buf;
+#endif
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+#ifdef CONFIG_OPLUS_CHG_IC_DEBUG
+	data = oplus_chg_ic_get_overwrite_data(ic_dev, OPLUS_IC_FUNC_GAUGE_GET_BATTID_INFO);
+	if (unlikely(data != NULL)) {
+		buf = (const void *)data->buf;
+		if (!oplus_chg_ic_debug_data_check(buf, data->size))
+			goto skip_overwrite;
+		*count = oplus_chg_ic_get_item_data(buf, 0);
+		return 0;
+	}
+skip_overwrite:
+#endif
+
+	/* TODO: check common config */
+
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+	for (i = 0; i < chip->child_num; i++) {
+		if (!func_is_support(&chip->child_list[i],
+				     OPLUS_IC_FUNC_GAUGE_GET_BATTID_INFO)) {
+			rc = (rc == 0) ? -ENOTSUPP : rc;
+			continue;
+		}
+		rc = oplus_chg_ic_func(chip->child_list[i].ic_dev,
+				       OPLUS_IC_FUNC_GAUGE_GET_BATTID_INFO, count);
+		if (rc < 0)
+			chg_err("child ic[%d] get battid error, rc=%d\n",
+				i, rc);
+		break;
+	}
+
+	return rc;
+}
+
+static int oplus_chg_vg_get_reg_info(struct oplus_chg_ic_dev *ic_dev, unsigned char *info, int len)
+{
+	struct oplus_virtual_gauge_ic *chip;
+	int i, index;
+	int rc = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+	index = 0;
+	for (i = 0; i < chip->child_num; i++) {
+		if (!func_is_support(&chip->child_list[i], OPLUS_IC_FUNC_GAUGE_GET_REG_INFO)) {
+			rc = (rc == 0) ? -ENOTSUPP : rc;
+			continue;
+		}
+
+		if (index >= len)
+			return len;
+		rc = oplus_chg_ic_func(chip->child_list[i].ic_dev,
+				       OPLUS_IC_FUNC_GAUGE_GET_REG_INFO, info + index, len - index);
+		if (rc < 0) {
+			if (rc != -ENOTSUPP) {
+				chg_err("child ic[%d] get reg info error, rc=%d\n", i, rc);
+				rc = snprintf(info + index, len - index, "ic %d read error, rc=%d", i, rc);
+			} else {
+				rc = 0;
+			}
+		}
+		index += rc;
+	}
+
+	return index;
+}
+
+static int oplus_chg_vg_get_calib_time(struct oplus_chg_ic_dev *ic_dev, int *dod_calib_time, int *qmax_calib_time)
+{
+	struct oplus_virtual_gauge_ic *chip;
+	int i;
+	int rc = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+	for (i = 0; i < chip->child_num; i++) {
+		if (!func_is_support(&chip->child_list[i], OPLUS_IC_FUNC_GAUGE_GET_CALIB_TIME)) {
+			rc = (rc == 0) ? -ENOTSUPP : rc;
+			continue;
+		}
+		rc = oplus_chg_ic_func(chip->child_list[i].ic_dev, OPLUS_IC_FUNC_GAUGE_GET_CALIB_TIME,
+			dod_calib_time, qmax_calib_time);
+		if (rc < 0)
+			chg_err("child ic[%d] get gauge cali time, rc=%d\n", i, rc);
+		else
+			break;
+	}
+
+	return rc;
+}
+
 static void *oplus_chg_vg_get_func(struct oplus_chg_ic_dev *ic_dev,
 				   enum oplus_chg_ic_func func_id)
 {
@@ -2958,6 +3210,30 @@ static void *oplus_chg_vg_get_func(struct oplus_chg_ic_dev *ic_dev,
 	case OPLUS_IC_FUNC_GAUGE_GET_SUBBOARD_TEMP:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_SUBBOARD_TEMP,
 			oplus_chg_vg_get_subboard_temp);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_DEEP_DISCHG_COUNT:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_DEEP_DISCHG_COUNT,
+			oplus_chg_vg_get_batt_deep_dischg_count);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_SET_DEEP_DISCHG_COUNT:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_SET_DEEP_DISCHG_COUNT,
+			oplus_chg_vg_set_batt_deep_dischg_count);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_SET_DEEP_TERM_VOLT:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_SET_DEEP_TERM_VOLT,
+			oplus_chg_vg_set_batt_deep_term_volt);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_BATTID_INFO:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_BATTID_INFO,
+			oplus_chg_vg_get_batt_id_info);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_REG_INFO:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_REG_INFO,
+			oplus_chg_vg_get_reg_info);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_CALIB_TIME:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_CALIB_TIME,
+			oplus_chg_vg_get_calib_time);
 		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);
@@ -3326,6 +3602,24 @@ static ssize_t oplus_chg_vg_get_func_data(struct oplus_chg_ic_dev *ic_dev,
 		*item_data = cpu_to_le32(*item_data);
 		rc = oplus_chg_ic_debug_data_size(1);
 		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_DEEP_DISCHG_COUNT:
+		oplus_chg_ic_debug_data_init(buf, 1);
+		item_data = oplus_chg_ic_get_item_data_addr(buf, 0);
+		rc = oplus_chg_vg_get_batt_deep_dischg_count(ic_dev, item_data);
+		if (rc < 0)
+			break;
+		*item_data = cpu_to_le32(*item_data);
+		rc = oplus_chg_ic_debug_data_size(1);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_BATTID_INFO:
+		oplus_chg_ic_debug_data_init(buf, 1);
+		item_data = oplus_chg_ic_get_item_data_addr(buf, 0);
+		rc = oplus_chg_vg_get_batt_id_info(ic_dev, item_data);
+		if (rc < 0)
+			break;
+		*item_data = cpu_to_le32(*item_data);
+		rc = oplus_chg_ic_debug_data_size(1);
+		break;
 	default:
 		chg_err("this func(=%d) is not supported to get\n", func_id);
 		return -ENOTSUPP;
@@ -3340,6 +3634,7 @@ static int oplus_chg_vg_set_func_data(struct oplus_chg_ic_dev *ic_dev,
 				      const void *buf, size_t buf_len)
 {
 	int rc = 0;
+	int *item_data;
 
 	if (!ic_dev->online && (func_id != OPLUS_IC_FUNC_INIT) &&
 	    (func_id != OPLUS_IC_FUNC_EXIT))
@@ -3385,6 +3680,18 @@ static int oplus_chg_vg_set_func_data(struct oplus_chg_ic_dev *ic_dev,
 		if (!oplus_chg_ic_debug_data_check(buf, buf_len))
 			return -EINVAL;
 		rc = oplus_chg_vg_set_lock(ic_dev, oplus_chg_ic_get_item_data(buf, 0));
+		break;
+	case OPLUS_IC_FUNC_GAUGE_SET_DEEP_DISCHG_COUNT:
+		if (!oplus_chg_ic_debug_data_check(buf, buf_len))
+			return -EINVAL;
+		item_data = oplus_chg_ic_get_item_data_addr((void *)buf, 0);
+		rc = oplus_chg_vg_set_batt_deep_dischg_count(ic_dev, item_data);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_SET_DEEP_TERM_VOLT:
+		if (!oplus_chg_ic_debug_data_check(buf, buf_len))
+			return -EINVAL;
+		item_data = oplus_chg_ic_get_item_data_addr((void *)buf, 0);
+		rc = oplus_chg_vg_set_batt_deep_term_volt(ic_dev, item_data);
 		break;
 	default:
 		chg_err("this func(=%d) is not supported to set\n", func_id);
@@ -3433,6 +3740,10 @@ enum oplus_chg_ic_func oplus_chg_vg_overwrite_funcs[] = {
 	OPLUS_IC_FUNC_GAUGE_GET_BATT_CAP,
 	OPLUS_IC_FUNC_GAUGE_IS_SUSPEND,
 	OPLUS_IC_FUNC_GAUGE_GET_SUBBOARD_TEMP,
+	OPLUS_IC_FUNC_GAUGE_GET_DEEP_DISCHG_COUNT,
+	OPLUS_IC_FUNC_GAUGE_SET_DEEP_DISCHG_COUNT,
+	OPLUS_IC_FUNC_GAUGE_SET_DEEP_TERM_VOLT,
+	OPLUS_IC_FUNC_GAUGE_GET_BATTID_INFO,
 };
 
 #endif /* CONFIG_OPLUS_CHG_IC_DEBUG */

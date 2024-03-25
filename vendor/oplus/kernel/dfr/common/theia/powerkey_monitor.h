@@ -113,6 +113,7 @@ ssize_t get_last_pwkey_stage(char *buf);
 ssize_t get_pwkey_stages(char *buf);
 void record_stage(const char *buf);
 int get_systemserver_pid(void);
+void set_timer_started_false(void);
 void doPanic(void);
 void recovery_timer_func(struct timer_list *t);
 void theia_send_event_init(void);

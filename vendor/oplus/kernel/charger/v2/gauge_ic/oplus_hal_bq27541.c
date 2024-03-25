@@ -73,12 +73,11 @@
 #define BCC_TYPE_IS_SVOOC	1
 #define BCC_TYPE_IS_VOOC	0
 
-enum {
-	GPIO_STATUS_NC,
-	GPIO_STATUS_PD,
-	GPIO_STATUS_PU,
-	GPIO_STATUS_NOT_SUPPORT,
-	GPIO_STATUS_MAX = GPIO_STATUS_NOT_SUPPORT,
+struct gauge_track_info_reg {
+	int addr;
+	int len;
+	int start_index;
+	int end_index;
 };
 
 static const char *gpio_status_name[] = {
@@ -274,6 +273,27 @@ int bq27541_read_i2c(struct chip_bq27541 *chip, int cmd, int *returnData)
 		bq27541_i2c_err_clr(chip);
 		return 0;
 	}
+}
+
+static int bq28z610_i2c_deep_int(struct chip_bq27541 *chip)
+{
+	int rc = 0;
+
+	if (!chip->client) {
+		pr_err(" gauge_ic->client NULL, return\n");
+		return 0;
+	}
+	if (oplus_is_rf_ftm_mode())
+		return 0;
+	mutex_lock(&chip->chip_mutex);
+	rc = i2c_smbus_write_word_data(chip->client, BQ28Z610_REG_CNTL1, BQ28Z610_UNSEAL_SUBCMD1);
+	usleep_range(10000, 10000);
+	rc = i2c_smbus_write_word_data(chip->client, BQ28Z610_REG_CNTL1, BQ28Z610_UNSEAL_SUBCMD2);
+	if (rc < 0)
+		chg_err("write err, rc = %d\n", rc);
+
+	mutex_unlock(&chip->chip_mutex);
+	return 0;
 }
 
 int bq27541_i2c_txsubcmd(struct chip_bq27541 *chip, int cmd, int writeData)
@@ -3381,7 +3401,6 @@ static int bq27541_gpio_init(struct chip_bq27541 *chip)
 {
 	struct device_node *node = chip->dev->of_node;
 	int rc = 0;
-	int gpio_value = 0;
 
 	mutex_init(&chip->pinctrl_lock);
 	chip->id_gpio = of_get_named_gpio(node, "oplus,id-gpio", 0);
@@ -3393,6 +3412,11 @@ static int bq27541_gpio_init(struct chip_bq27541 *chip)
 	if (rc < 0) {
 		chg_err("bq27541-id gpio request error, rc=%d\n", rc);
 		return rc;
+	}
+	rc = of_property_read_u32(node, "oplus,id-match-status", &chip->id_match_status);
+	if (rc < 0) {
+		chg_err("oplus,id-match-status read failed, rc=%d\n", rc);
+		chip->id_match_status = GPIO_STATUS_NOT_SUPPORT;
 	}
 
 	chip->pinctrl = devm_pinctrl_get(chip->dev);
@@ -3418,8 +3442,9 @@ static int bq27541_gpio_init(struct chip_bq27541 *chip)
 		goto free_id_gpio;
 	}
 
-	gpio_value = bq27541_get_id_status(chip);
-	chg_info("id gpio value %d %s\n", gpio_value, gpio_status_name[gpio_value]);
+	chip->id_value = bq27541_get_id_status(chip);
+
+	chg_info("id gpio value %d %s\n", chip->id_value, gpio_status_name[chip->id_value]);
 	return 0;
 
 free_id_gpio:
@@ -3467,6 +3492,7 @@ static void bq27541_parse_dt(struct chip_bq27541 *chip)
 	chip->modify_soc_calibration =
 		of_property_read_bool(node, "qcom,modify-soc-calibration");
 	chip->batt_bq28z610 = of_property_read_bool(node, "qcom,batt_bq28z610");
+	chip->batt_bq27z561 = false;
 	chip->bq28z610_need_balancing =
 		of_property_read_bool(node, "qcom,bq28z610_need_balancing");
 	chip->enable_sleep_mode = of_property_read_bool(node, "oplus,enable_sleep_mode");
@@ -4309,7 +4335,6 @@ static int bq8z610_sealed(struct chip_bq27541 *chip)
 {
 	int value = 0;
 	u8 CNTL1_VAL[BQ28Z610_REG_CNTL1_SIZE] = { 0 };
-
 	bq27541_i2c_txsubcmd(chip, BQ28Z610_REG_CNTL1, BQ28Z610_SEAL_STATUS);
 	usleep_range(10000, 10000);
 	bq27541_read_i2c_block(chip, BQ28Z610_REG_CNTL1, BQ28Z610_REG_CNTL1_SIZE, CNTL1_VAL);
@@ -5236,6 +5261,233 @@ static int bq28z610_get_2cell_voltage(struct chip_bq27541 *chip)
 	return 0;
 }*/
 
+static bool bq8z610_deep_init(struct chip_bq27541 *chip)
+{
+	if (!bq8z610_sealed(chip)) {
+		chg_err("bq8z610 already unsealed\n");
+		return true;
+	}
+	bq28z610_i2c_deep_int(chip);
+
+	usleep_range(100000, 100000);
+	if (!bq8z610_sealed(chip)) {
+		return true;
+	} else {
+		chg_err("bq8z610 unseal failed\n");
+		return false;
+	}
+}
+
+static void bq8z610_deep_deinit(struct chip_bq27541 *chip)
+{
+	int i = 0;
+
+	if (bq8z610_sealed(chip) == 0) {
+		usleep_range(1000, 1000);
+		bq27541_i2c_txsubcmd(chip, BQ28Z610_REG_CNTL1, BQ28Z610_SEAL_SUBCMD);
+		usleep_range(100000, 100000);
+		for (i = 0; i < BQ28Z610_SEAL_POLLING_RETRY_LIMIT; i++) {
+			if (bq8z610_sealed(chip)) {
+				chg_info("bq8z610 sealed,used %d x100ms\n", i);
+				return;
+			}
+			usleep_range(10000, 10000);
+		}
+	}
+}
+
+static int bq28z610_set_term_volt(struct chip_bq27541 *chip, int volt_mv)
+{
+	int rc = -1, value = 0;
+	u8 write_main[BQ28Z610_TERM_VOLT_SIZE] = { 0xBE, 0x45, (volt_mv * 2) & BQ28Z610_DEEP_DISCHG_CHECK,
+		(volt_mv * 2) >> BQ28Z610_DEEP_DISCHG_SHIFT_MASK };
+	u8 write_sub[BQ28Z610_TERM_VOLT_SIZE] = { 0xC3, 0x45, volt_mv, volt_mv >> BQ28Z610_DEEP_DISCHG_SHIFT_MASK };
+	u8 check_data[2] = { 0, BQ28Z610_TERM_VOLT_CHECK_SIZE };
+	u8 deep_read[BQ28Z610_DEEP_DISCHG_SIZE] = { 0, 0, 0, 0, 0 };
+	u8 deep_write[BQ28Z610_DEEP_DISCHG_SIZE] = { 0x82, 0x40, 0x08, 0, 0, 0,
+		(volt_mv * 2) & BQ28Z610_DEEP_DISCHG_CHECK, (volt_mv * 2) >> BQ28Z610_DEEP_DISCHG_SHIFT_MASK };
+	u8 deep_check[2] = { 0, BQ28Z610_DEEP_DISCHG_CEHECK_SIZE };
+
+	if (!chip || atomic_read(&chip->suspended) == 1 || (!chip->batt_bq28z610 && !chip->batt_bq27z561))
+		return rc;
+
+	mutex_lock(&chip->bq28z610_alt_manufacturer_access);
+	bq27541_i2c_txsubcmd(chip, BQ28Z610_REG_CNTL1, BQ28Z610_DEEP_DISCHG_NAME_CMD);
+	usleep_range(1000, 1000);
+	bq27541_read_i2c_block(chip, BQ28Z610_REG_CNTL1, BQ28Z610_DEEP_DISCHG_SIZE, deep_read);
+
+	value = (deep_read[6] << BQ28Z610_DEEP_DISCHG_SHIFT_MASK) + deep_read[5];
+
+	chg_info("[%d, %d][0x%x, 0x%x], [0x%x, 0x%x, 0x%x][0x%x, 0x%x, 0x%x]\n", value, volt_mv,
+			deep_read[0], deep_read[1], deep_read[2], deep_read[3], deep_read[4], deep_read[5], deep_read[6], deep_read[7]);
+
+	if ((value == volt_mv * 2) && (deep_read[7] == (BQ28Z610_DEEP_DISCHG_CHECK - (deep_read[5] + deep_read[6]) & BQ28Z610_DEEP_DISCHG_CHECK))) {
+		mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+		return 0;
+	}
+
+	deep_write[3] = deep_read[2];
+	deep_write[4] = deep_read[3];
+	deep_write[5] = deep_read[4];
+	deep_write[8] = BQ28Z610_DEEP_DISCHG_CHECK - (deep_write[6] + deep_write[7]) & BQ28Z610_DEEP_DISCHG_CHECK;
+
+	if (!bq8z610_deep_init(chip)) {
+		mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+		return rc;
+	}
+	rc = bq27541_write_i2c_block(chip, BQ28Z610_REG_CNTL1, BQ28Z610_DEEP_DISCHG_SIZE, deep_write);
+	usleep_range(1000, 1000);
+
+	deep_check[0] = BQ28Z610_DEEP_DISCHG_CHECK - (deep_write[0] + deep_write[1] + deep_write[2] + deep_write[3] + deep_write[4]
+	+ deep_write[5] + deep_write[6] + deep_write[7] + deep_write[8]) & BQ28Z610_DEEP_DISCHG_CHECK;
+	rc = bq27541_write_i2c_block(chip, BQ28Z610_TERM_VOLT_CHECK_ADDR, 2, deep_check);
+	usleep_range(1000, 1000);
+
+	rc = bq27541_write_i2c_block(chip, BQ28Z610_REG_CNTL1, BQ28Z610_TERM_VOLT_SIZE, write_main);
+	check_data[0] = BQ28Z610_DEEP_DISCHG_CHECK - (write_main[0] + write_main[1] + write_main[2] + write_main[3]) & BQ28Z610_DEEP_DISCHG_CHECK;
+	rc = bq27541_write_i2c_block(chip, BQ28Z610_TERM_VOLT_CHECK_ADDR, 2, check_data);
+	rc = bq27541_write_i2c_block(chip, BQ28Z610_REG_CNTL1, BQ28Z610_TERM_VOLT_SIZE, write_sub);
+	check_data[0] = BQ28Z610_DEEP_DISCHG_CHECK - (write_sub[0] + write_sub[1] + write_sub[2] + write_sub[3]) & BQ28Z610_DEEP_DISCHG_CHECK;
+	rc = bq27541_write_i2c_block(chip, BQ28Z610_TERM_VOLT_CHECK_ADDR, 2, check_data);
+
+	bq8z610_deep_deinit(chip);
+	mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+
+	return rc;
+}
+
+static int bq28z610_get_deep_dischg_num(struct chip_bq27541 *chip)
+{
+	int rc = 0;
+	int dischg_num = 0;
+	u8 read_data[BQ28Z610_DEEP_DISCHG_SIZE] = { 0, 0, 0, 0, 0 };
+
+	if (!chip || atomic_read(&chip->suspended) == 1 || (!chip->batt_bq28z610 && !chip->batt_bq27z561))
+		return rc;
+
+	mutex_lock(&chip->bq28z610_alt_manufacturer_access);
+	bq27541_i2c_txsubcmd(chip, BQ28Z610_REG_CNTL1, BQ28Z610_DEEP_DISCHG_NAME_CMD);
+	usleep_range(1000, 1000);
+	bq27541_read_i2c_block(chip, BQ28Z610_REG_CNTL1, BQ28Z610_DEEP_DISCHG_SIZE, read_data);
+	mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+
+	dischg_num = (read_data[3] << BQ28Z610_DEEP_DISCHG_SHIFT_MASK) + read_data[2];
+	chg_info("[0x%x, 0x%x] [0x%x, 0x%x, 0x%x][0x%x, 0x%x, 0x%x]\n",
+			read_data[0], read_data[1], read_data[2], read_data[3], read_data[4], read_data[5], read_data[6], read_data[7]);
+
+	if (read_data[4] == (BQ28Z610_DEEP_DISCHG_CHECK - (read_data[2] + read_data[3]) & BQ28Z610_DEEP_DISCHG_CHECK))
+		return dischg_num;
+	else
+		return 0;
+}
+
+static int bq28z610_set_deep_dischg_num(struct chip_bq27541 *chip, int dischg_num)
+{
+	int rc = -1;
+	int value = 0;
+	u8 write_data[BQ28Z610_DEEP_DISCHG_SIZE] = { 0x82, 0x40, 0x08, dischg_num & BQ28Z610_DEEP_DISCHG_CHECK, dischg_num >> BQ28Z610_DEEP_DISCHG_SHIFT_MASK };
+	u8 read_data[BQ28Z610_DEEP_DISCHG_SIZE] = { 0, 0, 0, 0, 0 };
+	u8 check_data[2] = { 0, BQ28Z610_DEEP_DISCHG_CEHECK_SIZE };
+
+	if (!chip || atomic_read(&chip->suspended) == 1 || (!chip->batt_bq28z610 && !chip->batt_bq27z561))
+		return rc;
+
+	mutex_lock(&chip->bq28z610_alt_manufacturer_access);
+	bq27541_i2c_txsubcmd(chip, BQ28Z610_REG_CNTL1, BQ28Z610_DEEP_DISCHG_NAME_CMD);
+	usleep_range(1000, 1000);
+	bq27541_read_i2c_block(chip, BQ28Z610_REG_CNTL1, BQ28Z610_DEEP_DISCHG_SIZE, read_data);
+
+	chg_info("[0x%x, 0x%x]  [0x%x, 0x%x, 0x%x] [0x%x, 0x%x, 0x%x]\n",
+		read_data[0], read_data[1], read_data[2], read_data[3], read_data[4], read_data[5], read_data[6], read_data[7]);
+	value = (read_data[3] << BQ28Z610_DEEP_DISCHG_SHIFT_MASK) + read_data[2];
+	if ((value == dischg_num) && (read_data[4] == (BQ28Z610_DEEP_DISCHG_CHECK - (read_data[2] + read_data[3]) & BQ28Z610_DEEP_DISCHG_CHECK))) {
+		mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+		return rc;
+	}
+
+	if (!bq8z610_deep_init(chip)) {
+		mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+		return rc;
+	}
+
+	write_data[5] = BQ28Z610_DEEP_DISCHG_CHECK - (write_data[3] + write_data[4]) & BQ28Z610_DEEP_DISCHG_CHECK;
+	write_data[6] = read_data[5];
+	write_data[7] = read_data[6];
+	write_data[8] = read_data[7];
+
+	chg_info("[0x%x, 0x%x, 0x%x][0x%x, 0x%x, 0x%x]\n", write_data[3], write_data[4], write_data[5],
+		write_data[6], write_data[7], write_data[8]);
+	rc = bq27541_write_i2c_block(chip, BQ28Z610_REG_CNTL1, BQ28Z610_DEEP_DISCHG_SIZE, write_data);
+	usleep_range(1000, 1000);
+	check_data[0] = BQ28Z610_DEEP_DISCHG_CHECK - (write_data[0] + write_data[1] + write_data[2] + write_data[3] + write_data[4]
+	+ write_data[5] + write_data[6] + write_data[7] + write_data[8]) & BQ28Z610_DEEP_DISCHG_CHECK;
+	rc = bq27541_write_i2c_block(chip, BQ28Z610_TERM_VOLT_CHECK_ADDR, 2, check_data);
+	usleep_range(1000, 1000);
+
+	bq8z610_deep_deinit(chip);
+	mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+
+	return rc;
+}
+
+static int oplus_get_batt_deep_dischg_count(struct oplus_chg_ic_dev *ic_dev, int *count)
+{
+	struct chip_bq27541 *chip;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+
+	*count = bq28z610_get_deep_dischg_num(chip);
+
+	return 0;
+}
+
+static int oplus_sett_deep_dischg_count(struct oplus_chg_ic_dev *ic_dev, int *count)
+{
+	struct chip_bq27541 *chip;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+
+	bq28z610_set_deep_dischg_num(chip, *count);
+	return 0;
+}
+
+static int oplus_set_deep_term_volt(struct oplus_chg_ic_dev *ic_dev, int *volt_mv)
+{
+	struct chip_bq27541 *chip;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+
+	bq28z610_set_term_volt(chip, *volt_mv);
+	return 0;
+}
+
+static int oplus_get_batt_id_info(struct oplus_chg_ic_dev *ic_dev, int *count)
+{
+	struct chip_bq27541 *chip;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+
+	*count = chip->id_value;
+
+	return 0;
+}
+
 #ifdef CONFIG_OPLUS_CHARGER_MTK
 #define AUTH_MESSAGE_LEN 20
 #define AUTH_TAG "ogauge_auth="
@@ -5445,6 +5697,216 @@ static bool get_smem_batt_info(oplus_gauge_auth_result *auth, int kk)
 	}
 	return true;
 #endif
+}
+
+#define EXTEND_DATA_SIZE 34
+static int bq28z610_get_info(struct chip_bq27541 *chip, u8 *info, int len)
+{
+	int i;
+	int j;
+	int ret;
+	int data = 0;
+	int index = 0;
+	int data_check;
+	int try_count = BQ28Z610_SUBCMD_TRY_COUNT;
+	u8 extend_data[EXTEND_DATA_SIZE] = {0};
+	struct gauge_track_info_reg standard[] = {
+		{ chip->cmd_addr.reg_temp, 2 },
+		{ chip->cmd_addr.reg_volt, 2 },
+		{ chip->cmd_addr.reg_flags, 2 },
+		{ chip->cmd_addr.reg_nac, 2 },
+		{ chip->cmd_addr.reg_rm, 2 },
+		{ chip->cmd_addr.reg_fcc, 2 },
+		{ BQ28Z610_REG_AI, 2 },
+		{ chip->cmd_addr.reg_cc, 2 },
+		{ chip->cmd_addr.reg_soc, 2 },
+		{ chip->cmd_addr.reg_soh, 2 },
+	};
+
+	struct gauge_track_info_reg extend[] = {
+		{ BQ28Z610_SUBCMD_CHEMID, 2 },
+		{ BQ28Z610_SUBCMD_GAUGEING_STATUS, 3 },
+		{ BQ28Z610_SUBCMD_DA_STATUS1, 12 },
+		{ BQ28Z610_SUBCMD_IT_STATUS1, 16 },
+		{ BQ28Z610_SUBCMD_IT_STATUS2, 24 },
+		{ BQ28Z610_SUBCMD_IT_STATUS3, 16 },
+		{ BQ28Z610_SUBCMD_CB_STATUS, 8 },
+	};
+
+	for (i = 0; i < ARRAY_SIZE(standard); i++) {
+		ret = bq27541_read_i2c(chip, standard[i].addr, &data);
+		if (ret < 0)
+			continue;
+		index += snprintf(info + index, len - index,
+			  "0x%02x=%02x,%02x|", standard[i].addr, (data & 0xff), ((data >> 8) & 0xff));
+	}
+
+	for (i = 0; i < ARRAY_SIZE(extend); i++) {
+		try_count = BQ28Z610_SUBCMD_TRY_COUNT;
+try:
+		mutex_lock(&chip->bq28z610_alt_manufacturer_access);
+		ret = bq27541_i2c_txsubcmd(chip, BQ28Z610_DATAFLASHBLOCK, extend[i].addr);
+		if (ret < 0) {
+			mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+			continue;
+		}
+
+		if (sizeof(extend_data) >= extend[i].len + 2) {
+			usleep_range(1000, 1000);
+			ret = bq27541_read_i2c_block(chip, BQ28Z610_DATAFLASHBLOCK, (extend[i].len + 2), extend_data);
+			mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+			if (ret < 0)
+				continue;
+			data_check = (extend_data[1] << 0x8) | extend_data[0];
+			if (try_count-- > 0 && data_check != extend[i].addr) {
+				chg_err("not match. extend_data=0x%2x, expect=0x%2x\n", data_check, extend[i].addr);
+				usleep_range(500, 500);
+				goto try;
+			}
+			if (!try_count)
+				continue;
+			index += snprintf(info + index, len - index, "0x%04x=", extend[i].addr);
+			for (j = 0; j < extend[i].len - 1; j++)
+				index += snprintf(info + index, len - index, "%02x,", extend_data[j + 2]);
+			index += snprintf(info + index, len - index, "%02x", extend_data[j + 2]);
+			if (i < ARRAY_SIZE(extend) - 1)
+				usleep_range(500, 500);
+		} else {
+			mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+		}
+		if (i  <  ARRAY_SIZE(extend) - 1)
+			index += snprintf(info + index, len - index, "|");
+	}
+
+	return index;
+}
+
+static int oplus_bq27541_get_reg_info(struct oplus_chg_ic_dev *ic_dev, u8 *info, int len)
+{
+	struct chip_bq27541 *chip;
+	int index = -1;
+
+	if (ic_dev == NULL || !info) {
+		chg_err("oplus_chg_ic_dev or info is NULL");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+
+	if (!chip || atomic_read(&chip->suspended) || atomic_read(&chip->locked))
+		return -1;
+
+	if (chip->batt_bq28z610 && DEVICE_BQ27541 == chip->device_type && !chip->batt_zy0603)
+		index = bq28z610_get_info(chip, info, len);
+
+	return index;
+}
+
+static int bq28z610_get_calib_time(struct chip_bq27541 *chip, int *dod_calib_time, int *qmax_calib_time)
+{
+	int i;
+	int ret;
+	int data_check;
+	int try_count;
+	u8 extend_data[16] = {0};
+	int check_args[CALIB_TIME_CHECK_ARGS] = {0};
+	static bool init_flag = false;
+	struct gauge_track_info_reg extend[] = {
+		{ BQ28Z610_MAC_CELL_DOD0_CMD, 14 },
+		{ BQ28Z610_MAC_CELL_QMAX_CMD, 8 },
+	};
+
+	if (!chip || !dod_calib_time || !qmax_calib_time)
+		return -1;
+
+	for (i = 0; i < ARRAY_SIZE(extend); i++) {
+		try_count = BQ28Z610_SUBCMD_TRY_COUNT;
+try:
+		mutex_lock(&chip->bq28z610_alt_manufacturer_access);
+		ret = bq27541_i2c_txsubcmd(chip, BQ28Z610_DATAFLASHBLOCK, extend[i].addr);
+		if (ret < 0) {
+			mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+			return -1;
+		}
+
+		if (sizeof(extend_data) >= extend[i].len + 2) {
+			usleep_range(1000, 1000);
+			ret = bq27541_read_i2c_block(chip, BQ28Z610_DATAFLASHBLOCK, (extend[i].len + 2), extend_data);
+			mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+			if (ret < 0)
+				return -1;
+			data_check = (extend_data[1] << 0x8) | extend_data[0];
+			if (try_count-- > 0 && data_check != extend[i].addr) {
+				chg_err("not match. extend_data=0x%2x, expect=0x%2x\n", data_check, extend[i].addr);
+				usleep_range(500, 500);
+				goto try;
+			}
+			if (!try_count)
+				return -1;
+			if (extend[i].addr == BQ28Z610_MAC_CELL_DOD0_CMD) {
+				check_args[0] = (extend_data[13] << 0x08) | extend_data[12];
+				check_args[3] = (extend_data[15] << 0x08) | extend_data[14];
+			} else {
+				check_args[1] = (extend_data[3] << 0x08) | extend_data[2];
+				check_args[2] = (extend_data[7] << 0x08) | extend_data[6];
+				check_args[4] = (extend_data[5] << 0x08) | extend_data[4];
+				check_args[5] = (extend_data[9] << 0x08) | extend_data[8];
+			}
+			if (i < ARRAY_SIZE(extend) - 1)
+				usleep_range(500, 500);
+		} else {
+			mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+		}
+	}
+
+	if (!init_flag || check_args[0] != chip->calib_check_args_pre[0] || check_args[3] != chip->calib_check_args_pre[3])
+		chip->dod_time = 0;
+	else
+		chip->dod_time++;
+
+	if (!init_flag || check_args[1] != chip->calib_check_args_pre[1] || check_args[2] != chip->calib_check_args_pre[2] ||
+	    check_args[4] != chip->calib_check_args_pre[4] || check_args[5] != chip->calib_check_args_pre[5])
+		chip->qmax_time = 0;
+	else
+		chip->qmax_time++;
+
+	init_flag = true;
+	memcpy(chip->calib_check_args_pre, check_args, sizeof(check_args));
+	*dod_calib_time = chip->dod_time;
+	*qmax_calib_time = chip->qmax_time;
+
+	return ret;
+}
+
+static int oplus_bq27541_get_calib_time(struct oplus_chg_ic_dev *ic_dev,
+	int *dod_calib_time, int *qmax_calib_time)
+{
+	struct chip_bq27541 *chip;
+	int rc = -1;
+
+	if (ic_dev == NULL || !dod_calib_time || !qmax_calib_time) {
+		chg_err("oplus_chg_ic_dev or qmax_calib_time or dod_calib_time is NULL");
+		return -ENODEV;
+	}
+
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+	if (!chip) {
+		chg_err("chip is NULL");
+		return -ENODEV;
+	}
+	if (atomic_read(&chip->suspended) || atomic_read(&chip->locked)) {
+		*dod_calib_time = chip->dod_time_pre;
+		*qmax_calib_time = chip->qmax_time_pre;
+		return 0;
+	}
+	mutex_lock(&chip->calib_time_mutex);
+	if (chip->batt_bq28z610 && DEVICE_BQ27541 == chip->device_type && !chip->batt_zy0603)
+		rc = bq28z610_get_calib_time(chip, dod_calib_time, qmax_calib_time);
+
+	chip->dod_time_pre = *dod_calib_time;
+	chip->qmax_time_pre = *qmax_calib_time;
+	mutex_unlock(&chip->calib_time_mutex);
+
+	return rc;
 }
 
 static bool init_gauge_auth(struct chip_bq27541 *chip,
@@ -6823,6 +7285,30 @@ static void *oplus_chg_get_func(struct oplus_chg_ic_dev *ic_dev,
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_SET_RESET,
 					      oplus_fg_reset);
 		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_DEEP_DISCHG_COUNT:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_DEEP_DISCHG_COUNT,
+						  oplus_get_batt_deep_dischg_count);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_SET_DEEP_DISCHG_COUNT:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_SET_DEEP_DISCHG_COUNT,
+						  oplus_sett_deep_dischg_count);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_SET_DEEP_TERM_VOLT:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_SET_DEEP_TERM_VOLT,
+						  oplus_set_deep_term_volt);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_BATTID_INFO:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_BATTID_INFO,
+						  oplus_get_batt_id_info);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_REG_INFO:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_REG_INFO,
+					      oplus_bq27541_get_reg_info);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_CALIB_TIME:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_CALIB_TIME,
+					      oplus_bq27541_get_calib_time);
+		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);
 		func = NULL;
@@ -6859,6 +7345,7 @@ static int bq27541_driver_probe(struct i2c_client *client,
 	fg_ic->client = client;
 	atomic_set(&fg_ic->suspended, 0);
 	mutex_init(&fg_ic->chip_mutex);
+	mutex_init(&fg_ic->calib_time_mutex);
 	mutex_init(&fg_ic->bq28z610_alt_manufacturer_access);
 	bq27541_parse_dt(fg_ic);
 	/* workaround for I2C pull SDA can't trigger error issue 230504153935012779 */
@@ -6958,7 +7445,12 @@ rerun:
 	ic_cfg.index = ic_index;
 	switch (fg_ic->device_type) {
 	case DEVICE_BQ27541:
-		snprintf(ic_cfg.manu_name, OPLUS_CHG_IC_MANU_NAME_MAX - 1, "gauge-bq27541:%d", ic_index);
+		if (fg_ic->batt_zy0603)
+			snprintf(ic_cfg.manu_name, OPLUS_CHG_IC_MANU_NAME_MAX - 1, "gauge-zy0603:%d", ic_index);
+		else if (fg_ic->batt_bq28z610)
+			snprintf(ic_cfg.manu_name, OPLUS_CHG_IC_MANU_NAME_MAX - 1, "gauge-bq28z610:%d", ic_index);
+		else
+			snprintf(ic_cfg.manu_name, OPLUS_CHG_IC_MANU_NAME_MAX - 1, "gauge-bq27541:%d", ic_index);
 		snprintf(ic_cfg.fw_id, OPLUS_CHG_IC_FW_ID_MAX - 1, "0x00");
 		break;
 	case DEVICE_BQ27411:

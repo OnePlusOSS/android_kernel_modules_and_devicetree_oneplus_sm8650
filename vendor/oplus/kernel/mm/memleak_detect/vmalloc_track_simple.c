@@ -39,7 +39,7 @@ static ssize_t vmalloc_used_read(struct file *filp,
 	if (len > *off)
 		len -= *off;
 	else
-		len = 0;
+		return 0;
 
 	if (copy_to_user(buff, kbuf, (len < count ? len : count))) {
 		pr_err("vmalloc_debug : copy to user failed.\n");

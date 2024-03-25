@@ -234,6 +234,7 @@
 
 #define ZY602_MAC_CELL_DOD0_EN_ADDR		0x00
 #define ZY602_MAC_CELL_DOD0_CMD			0x00E3
+
 #define ZY602_MAC_CELL_DOD0_ADDR		0x40
 #define ZY602_MAC_CELL_DOD0_SIZE		12
 
@@ -271,6 +272,18 @@
 #define BQ28Z610_DEVICE_CHEMISTRY_CMD		0x4B
 #define BQ28Z610_DEVICE_CHEMISTRY_ADDR		0x40
 #define BQ28Z610_DEVICE_CHEMISTRY_SIZE		4
+
+#define BQ28Z610_DEEP_DISCHG_CHECK 		0xFF
+#define BQ28Z610_DEEP_DISCHG_NUM_CMD		0x4082
+#define BQ28Z610_DEEP_DISCHG_NAME_CMD		0x004A
+#define BQ28Z610_DEEP_DISCHG_SIZE		9
+#define BQ28Z610_DEEP_DISCHG_CEHECK_SIZE	11
+#define BQ28Z610_TERM_VOLT_CMD			0x45BE
+#define BQ28Z610_TERM_VOLT_SIZE			4
+#define BQ28Z610_TERM_VOLT_S_CMD		0x45C3
+#define BQ28Z610_TERM_VOLT_CHECK_ADDR		0x60
+#define BQ28Z610_TERM_VOLT_CHECK_SIZE		6
+#define BQ28Z610_DEEP_DISCHG_SHIFT_MASK		8
 
 #define ZY0603_CMDMASK_ALTMAC_R			0x08000000
 #define ZY0603_CMDMASK_ALTMAC_W			0x88000000
@@ -322,6 +335,17 @@ typedef enum {
 #define BCC_PARMS_COUNT		19
 #define BCC_PARMS_COUNT_LEN	69
 #define ZY0602_KEY_INDEX	0X02
+
+#define BQ28Z610_DATAFLASHBLOCK		0x3e
+#define BQ28Z610_SUBCMD_CHEMID		0x0006
+#define BQ28Z610_SUBCMD_GAUGEING_STATUS	0x0056
+#define BQ28Z610_SUBCMD_DA_STATUS1	0x0071
+#define BQ28Z610_SUBCMD_IT_STATUS1	0x0073
+#define BQ28Z610_SUBCMD_IT_STATUS2	0x0074
+#define BQ28Z610_SUBCMD_IT_STATUS3	0x0075
+#define BQ28Z610_SUBCMD_CB_STATUS	0x0076
+#define BQ28Z610_SUBCMD_TRY_COUNT	3
+#define CALIB_TIME_CHECK_ARGS		6
 
 struct cmd_address {
 	/*      bq27411 standard cmds     */
@@ -509,6 +533,7 @@ struct chip_bq27541 {
 	const u8 **afi_buf;
 	unsigned int *afi_buf_len;
 	bool batt_bq28z610;
+	bool batt_bq27z561;
 	bool batt_zy0603;
 	bool bq28z610_need_balancing;
 	bool enable_sleep_mode;
@@ -517,6 +542,7 @@ struct chip_bq27541 {
 	int fg_soft_version;
 	int gauge_num;
 	struct mutex chip_mutex;
+	struct mutex calib_time_mutex;
 	struct mutex bq28z610_alt_manufacturer_access;
 	atomic_t i2c_err_count;
 	bool i2c_err;
@@ -533,6 +559,12 @@ struct chip_bq27541 {
 	int batt_qmax_passed_q;
 	int bcc_buf[BCC_PARMS_COUNT];
 
+	int dod_time;
+	int qmax_time;
+	int dod_time_pre;
+	int qmax_time_pre;
+	int calib_check_args_pre[CALIB_TIME_CHECK_ARGS];
+
 	struct delayed_work check_iic_recover;
 	/* workaround for I2C pull SDA can't trigger error issue 230504153935012779 */
 	bool i2c_rst_ext;
@@ -545,6 +577,8 @@ struct chip_bq27541 {
 	struct pinctrl_state *id_pull_up;
 	struct pinctrl_state *id_pull_down;
 	int id_gpio;
+	int id_match_status;
+	int id_value;
 #if IS_ENABLED(CONFIG_OPLUS_CHG_TEST_KIT)
 	struct test_feature *battery_id_gpio_test;
 #endif

@@ -3035,6 +3035,7 @@ static void oplus_pps_check_resistense(struct oplus_pps_chip *chip)
 	}
 }
 
+static void oplus_pps_voter_charging_stop(struct oplus_pps_chip *chip);
 static void oplus_pps_check_disconnect(struct oplus_pps_chip *chip)
 {
 	if (chip->pps_status <= OPLUS_PPS_STATUS_OPEN_MOS)
@@ -3046,9 +3047,11 @@ static void oplus_pps_check_disconnect(struct oplus_pps_chip *chip)
 			pps_err("current = %d, count:%d\n", chip->data.ap_input_current, chip->count.output_low);
 			if (chip->count.output_low >= PPS_DISCONNECT_IOUT_CNT) {
 				chip->pps_stop_status = PPS_STOP_VOTER_DISCONNECT_OVER;
+				oplus_pps_voter_charging_stop(chip);
 				chip->count.output_low = 0;
 				oplus_pps_track_upload_err_info(chip, TRACK_PPS_ERR_IOUT_MIN,
 								chip->data.ap_input_current);
+				chip->pps_stop_status = 0;
 			}
 		} else {
 			chip->count.output_low = 0;

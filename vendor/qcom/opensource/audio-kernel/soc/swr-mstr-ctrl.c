@@ -2233,9 +2233,27 @@ handle_irq:
 								&devnum);
 			switch (chg_sts) {
 			case SWR_NOT_PRESENT:
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+				dev_info(swrm->dev,
+					"%s: device %d got detached, dev_up:%d, state:%d\n",
+					__func__, devnum, swrm->dev_up,swrm->state);
+				if (!strcmp(dev_name(swrm->dev), "va_swr_ctrl") && (devnum == 1)) {
+					ratelimited_fb("payload@@%s %s:device %d got detached",
+						dev_driver_string(swrm->dev), dev_name(swrm->dev), devnum);
+				}
+#else /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
 				dev_dbg(swrm->dev,
 					"%s: device %d got detached\n",
 					__func__, devnum);
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
+#ifdef OPLUS_ARCH_EXTENDS
+				if (!strcmp(dev_name(swrm->dev), "va_swr_ctrl") && (devnum == 1) &&
+					(swrm->state != SWR_MSTR_SSR && swrm->dev_up) &&
+					(ktime_after(ktime_get(), ktime_add_ms(ssr_time, SWRM_FIFO_FAILED_LIMIT_MS)))) {
+					ssr_time = ktime_get();
+					schedule_delayed_work(&swrm->adsp_ssr_work, msecs_to_jiffies(200));
+				}
+#endif /* OPLUS_ARCH_EXTENDS */
 				if (devnum == 0) {
 					/*
 					 * enable host irq if device 0 detached
@@ -3980,6 +3998,7 @@ done:
 
 #ifdef OPLUS_ARCH_EXTENDS
 	if (swrm->state == SWR_MSTR_SSR) {
+		ssr_time = ktime_get();
 		adsp_ssr_count = SWR_ADSP_RETRY_COUNT;
 	}
 #endif /* OPLUS_ARCH_EXTENDS */

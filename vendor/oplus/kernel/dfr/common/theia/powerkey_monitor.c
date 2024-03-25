@@ -32,6 +32,11 @@ int get_systemserver_pid(void)
 	return systemserver_pid;
 }
 
+void set_timer_started_false(void)
+{
+	timer_started = false;
+}
+
 static ssize_t powerkey_monitor_param_proc_read(struct file *file,
 	char __user *buf, size_t count, loff_t *off)
 {

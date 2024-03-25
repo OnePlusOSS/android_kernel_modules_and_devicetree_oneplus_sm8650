@@ -27,6 +27,7 @@
 		pinctrl-names = "uphall_tri_state_key_active";
 		pinctrl-0 = <&uphall_tri_state_key_active>;
 		esd-check-support;
+		new_threshold_support;
 	};
 
 	magnachip@0C {
@@ -43,6 +44,7 @@
 		pinctrl-names = "downhall_tri_state_key_active";
 		pinctrl-0 = <&downhall_tri_state_key_active>;
 		esd-check-support;
+		new_threshold_support;
 	};
 };
 

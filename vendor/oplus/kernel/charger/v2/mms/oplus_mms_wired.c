@@ -4574,6 +4574,31 @@ static int oplus_mms_wired_vbus(
 	return 0;
 }
 
+int oplus_wired_get_byb_id_info(struct oplus_mms *topic)
+{
+	int rc = 0;
+	struct oplus_mms_wired *chip;
+	int bybid_info = 0;
+
+	if (topic == NULL) {
+		chg_err("mms is NULL");
+		return -EINVAL;
+	}
+	chip = oplus_mms_get_drvdata(topic);
+
+	rc = oplus_chg_ic_func(chip->buck_ic,
+			       OPLUS_IC_FUNC_BUCK_GET_BYBID_INFO,
+			       &bybid_info);
+	if (rc < 0) {
+		if (rc != -ENOTSUPP)
+			chg_err("can't get bybid info, rc=%d\n", rc);
+
+		return GPIO_STATUS_NOT_SUPPORT;
+	}
+
+	return bybid_info;
+}
+
 static void oplus_mms_wired_update(struct oplus_mms *mms, bool publish)
 {
 }

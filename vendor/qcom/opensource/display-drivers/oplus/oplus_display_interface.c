@@ -39,6 +39,7 @@ int oplus_panel_cmd_print(struct dsi_panel *panel, enum dsi_cmd_set_type type)
 	case DSI_CMD_READ_SAMSUNG_PANEL_REGISTER_OFF:
 	case DSI_CMD_ESD_SWITCH_PAGE:
 	case DSI_CMD_SKIPFRAME_DBV:
+	case DSI_CMD_DEFAULT_SWITCH_PAGE:
 #ifdef OPLUS_FEATURE_DISPLAY_ADFR_IGNORE
 	case DSI_CMD_ADFR_MIN_FPS_0:
 	case DSI_CMD_ADFR_MIN_FPS_1:
@@ -90,7 +91,6 @@ int oplus_panel_cmd_switch(struct dsi_panel *panel, enum dsi_cmd_set_type *type)
 	u8 cmd;
 	char replace_reg[REG_SIZE];
 	size_t replace_reg_len;
-	unsigned int refresh_rate = panel->cur_mode->timing.refresh_rate;
 	unsigned int last_refresh_rate = panel->last_refresh_rate;
 
 	/* switch the command when pwm turbo is enabled */
@@ -160,15 +160,14 @@ int oplus_panel_cmd_switch(struct dsi_panel *panel, enum dsi_cmd_set_type *type)
 		*type = type_store;
 	}
 
-	if (!strcmp(panel->name, "enzo boe_ili7838e 1264 2780 evt dsc cmd mode panel")
-		|| !strcmp(panel->name, "enzo boe_ili7838e 1264 2780 pvt bd dsc cmd mode panel")) {
+	if (!strcmp(panel->oplus_priv.vendor_name , "BOE_ILI7838E")) {
 		if (*type == DSI_CMD_SET_TIMING_SWITCH || *type == DSI_CMD_TIMMING_PWM_SWITCH_ONEPULSE) {
-			if ((refresh_rate == 144 && last_refresh_rate != 144) || (refresh_rate != 144 && last_refresh_rate == 144)) {
-				oplus_sde_early_wakeup(panel);
-				oplus_wait_for_vsync(panel);
+			oplus_sde_early_wakeup(panel);
+			oplus_wait_for_vsync(panel);
+			if (last_refresh_rate == 60 || last_refresh_rate == 90) {
 				oplus_need_to_sync_te(panel);
-				LCD_INFO("[%s] need sync te to set timing switch command：refresh_rate = %d, last_refresh_rate = %d \n",
-						panel->oplus_priv.vendor_name, refresh_rate, last_refresh_rate);
+			} else {
+				usleep_range(200, 200);
 			}
 		}
 	}

@@ -5,6 +5,7 @@
 
 #include <include/linux/sched/cputime.h>
 #include <linux/sched.h>
+#include <linux/sched/rt.h>
 #include <linux/list.h>
 #include <linux/rwsem.h>
 #include <../kernel/sched/sched.h>
@@ -106,15 +107,30 @@ static bool rwsem_list_add_ux(struct list_head *entry, struct list_head *head)
 static void rwsem_set_inherit_ux(struct rw_semaphore *sem)
 {
 	bool is_ux = test_set_inherit_ux(current);
+	bool is_rt = rt_prio(current->prio);
+	int inherit_type;
 	struct task_struct *owner = rwsem_owner(sem);
 
 	/* set writer as ux task */
-	if (is_ux && !is_rwsem_reader_owned(sem) && !test_inherit_ux(owner, INHERIT_UX_RWSEM)) {
+	if ((is_ux || is_rt) && !is_rwsem_reader_owned(sem) && !test_inherit_ux(owner, INHERIT_UX_RWSEM)) {
 		int type = get_ux_state_type(owner);
 
-		if ((type == UX_STATE_NONE) || (type == UX_STATE_INHERIT))
-			set_inherit_ux(owner, INHERIT_UX_RWSEM, oplus_get_ux_depth(current),
-				oplus_get_ux_state(current));
+		if ((type == UX_STATE_NONE) || (type == UX_STATE_INHERIT)) {
+			/*
+			 * Non-ux tasks' ux type is 0, but we need a sched assist type.
+			 * SA_TYPE_LIGHT is a good choice.
+			 */
+			if (is_ux)
+				inherit_type = oplus_get_ux_state(current);
+			else
+				inherit_type = SA_TYPE_LIGHT;
+
+			cond_trace_printk(locking_opt_debug(LK_DEBUG_FTRACE),
+				"task: %s pid: %d rt:%d set owner to ux, type = %d\n",
+				current->comm, current->pid, rt_prio(current->prio), inherit_type);
+
+			set_inherit_ux(owner, INHERIT_UX_RWSEM, oplus_get_ux_depth(current), inherit_type);
+		}
 	}
 }
 

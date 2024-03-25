@@ -4022,9 +4022,9 @@ int oplus_adfr_osync_threshold_lines_update(void *drm_connector, unsigned int *t
 
 	/* correct the ap window setting to be less than the ddic window */
 	if (yres > 3216) {
-		*threshold_lines = *threshold_lines - 47 - 58;
+		*threshold_lines = *threshold_lines - 110 - 110;
 	} else {
-		*threshold_lines = *threshold_lines - 35 - 43;
+		*threshold_lines = *threshold_lines - 100 - 100;
 	}
 
 	ADFR_DEBUG("threshold_lines=%u\n", *threshold_lines);
@@ -4146,11 +4146,6 @@ int oplus_adfr_osync_tearcheck_update(void *sde_encoder_phys)
 
 		qsync_mode = sde_connector_get_qsync_mode(phys_enc->connector);
 		panel_dead = sde_connector_panel_dead(phys_enc->connector);
-
-		if (cmd_enc->base.hw_intf->ops.enable_te_level_trigger &&
-				!sde_enc->disp_info.is_te_using_watchdog_timer)
-			cmd_enc->base.hw_intf->ops.enable_te_level_trigger(cmd_enc->base.hw_intf,
-					qsync_mode && !panel_dead);
 
 		SDE_EVT32(DRMID(phys_enc->parent), tc_cfg.sync_threshold_start, tc_cfg.start_pos,
 				qsync_mode, sde_enc->disp_info.is_te_using_watchdog_timer,

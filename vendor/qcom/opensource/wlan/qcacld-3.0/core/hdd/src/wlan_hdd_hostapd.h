@@ -36,6 +36,17 @@
 
 /* Preprocessor definitions and constants */
 
+#ifdef OPLUS_FEATURE_SOFTAP_DCS_SWITCH
+//Add for softap connect fail monitor
+void hostapdConnUeventInit(void);
+void hostapdConnUeventDeinit(void);
+void hostapdConnSendUevent(char *envp[]);
+void hostapd_driver_send_uevent(struct hdd_adapter *sta_adapter,
+                                uint32_t reasoncode,
+                                uint8_t *macaddr,
+                                eSapDisassocReason reason);
+#endif /* OPLUS_FEATURE_SOFTAP_DCS_SWITCH */
+
 struct hdd_adapter *hdd_wlan_create_ap_dev(struct hdd_context *hdd_ctx,
 				      tSirMacAddr macAddr,
 				      unsigned char name_assign_type,

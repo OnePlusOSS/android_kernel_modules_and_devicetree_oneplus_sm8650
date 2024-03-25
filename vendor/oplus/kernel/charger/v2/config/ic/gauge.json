@@ -1618,8 +1618,213 @@
                     }
                 }
             }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_GAUGE_GET_DEEP_DISCHG_COUNT",
+            "desc": {
+                "zh": "获取深度放电次数"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["int *"],
+            "parameter_desc": [
+                {
+                    "range": "0-*",
+                    "type": "out",
+                    "desc": {
+                        "zh": "深度放电次数"
+                    }
+                }
+            ],
+            "vict": {
+                "read": {
+                    "cmd": "vict -f {id} -G vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                },
+                "write": false,
+                "overwrite": {
+                    "cmd": "vict -f {id} -O {val} vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                }
+            }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_GAUGE_SET_DEEP_DISCHG_COUNT",
+            "desc": {
+                "zh": "设置深度放电次数"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["int *"],
+            "parameter_desc": [
+                {
+                    "range": "0-10000",
+                    "type": "in",
+                    "desc": {
+                        "zh": "次数"
+                    }
+                }
+            ],
+            "vict": {
+                "read": false,
+                "write": {
+                    "cmd": "vict -f {id} -S{val} vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                },
+                "overwrite": {
+                    "cmd": "vict -f {id} -O {val} vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                }
+            }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_GAUGE_SET_DEEP_TERM_VOLT",
+            "desc": {
+                "zh": "设置深度电压"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["int *"],
+            "parameter_desc": [
+                {
+                    "range": "0-*",
+                    "type": "in",
+                    "desc": {
+                        "zh": "电压mv"
+                    }
+                }
+            ],
+            "vict": {
+                "read": false,
+                "write": {
+                    "cmd": "vict -f {id} -S{val} vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                },
+                "overwrite": {
+                    "cmd": "vict -f {id} -O {val} vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                }
+            }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_GAUGE_GET_BATTID_INFO",
+            "desc": {
+                "zh": "获取battid信息"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["int *"],
+            "parameter_desc": [
+                {
+                    "range": "0-*",
+                    "type": "out",
+                    "desc": {
+                        "zh": "battid信息"
+                    }
+                }
+            ],
+            "vict": {
+                "read": {
+                    "cmd": "vict -f {id} -G vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                },
+                "write": false,
+                "overwrite": {
+                    "cmd": "vict -f {id} -O {val} vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                }
+            }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_GAUGE_GET_REG_INFO",
+            "desc": {
+                "zh": "获取电量计寄存器信息"
+            },
+            "auto_debug_code": false,
+            "parameter_list": ["unsigned char *", "int"],
+            "parameter_desc": [
+                {
+                    "range": "字符串",
+                    "type": "out",
+                    "desc": {
+                        "zh": "用于接收输出结果的buf"
+                    }
+                },
+                {
+                    "range": "N/A",
+                    "type": "in",
+                    "desc": {
+                        "zh": "参数0对应的buf长度"
+                    }
+                }
+            ],
+            "vict": {
+                "read": {
+                    "cmd": "vict -f {id} -G vic-*",
+                    "desc": {
+                        "zh": "返回寄存器字符串"
+                    }
+                },
+                "write": false,
+                "overwrite": {
+                    "cmd": "vict -f {id} -O {val} vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                }
+            }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_GAUGE_GET_CALIB_TIME",
+            "desc": {
+                "zh": "获取电量计校准天数"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["int *", "int *"],
+            "parameter_desc": [
+                {
+                    "range": "0-*",
+                    "type": "out",
+                    "desc": {
+                        "zh": "dod校准的天数"
+                    }
+                },
+                {
+                    "range": "0-*",
+                    "type": "out",
+                    "desc": {
+                        "zh": "qmax校准的天数"
+                    }
+                }
+            ],
+            "vict": {
+                "read": {
+                    "cmd": "vict -f {id} -G vic-*",
+                    "desc": {
+                        "zh": "返回dod校准天数,qmax校准天数"
+                    }
+                },
+                "write": false,
+                "overwrite": {
+                    "cmd": "vict -f {id} -O {val} vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                }
+            }
         }
     ],
-
-    "version": "V2.0:54:f50e8f3d9657719b49d0210c4713838323041fbf6031c725b2f785a1e7c2daaf"
+    "version": "V2.1:60:ea6748d804fb6269510e07b1cfbad19902fc134bb91f4692b97fe66fa0b81037"
 }

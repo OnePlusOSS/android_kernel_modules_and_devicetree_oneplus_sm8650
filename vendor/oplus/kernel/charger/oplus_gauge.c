@@ -950,3 +950,16 @@ int oplus_gauge_soft_reset_rc_sfr(void)
 		return -1;
 	}
 }
+
+void oplus_gauge_cal_model_check(bool ffc_state)
+{
+	if (!g_gauge_chip)
+		return;
+	else {
+		if (g_gauge_chip->gauge_ops && g_gauge_chip->gauge_ops->cal_model_check) {
+			return g_gauge_chip->gauge_ops->cal_model_check(ffc_state);
+		}
+		return;
+	}
+}
+

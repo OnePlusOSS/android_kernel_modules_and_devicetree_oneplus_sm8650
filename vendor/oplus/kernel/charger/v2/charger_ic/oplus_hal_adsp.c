@@ -334,6 +334,76 @@ static void handle_oem_read_buffer(struct battery_chg_dev *bcdev,
 	complete(&bcdev->oem_read_ack);
 }
 
+static int ap_set_message_id(struct battery_chg_dev *bcdev, u32 message_id)
+{
+	struct oplus_ap_read_req_msg req_msg = { { 0 } };
+	int rc = 0;
+
+	req_msg.message_id = message_id;
+	req_msg.hdr.owner = MSG_OWNER_BC;
+	req_msg.hdr.type = MSG_TYPE_REQ_RESP;
+	req_msg.hdr.opcode = AP_OPCODE_READ_BUFFER;
+
+	if (atomic_read(&bcdev->state) == PMIC_GLINK_STATE_DOWN) {
+		chg_err("glink state is down\n");
+		return -ENOTCONN;
+	}
+
+	reinit_completion(&bcdev->ap_read_ack[AP_MESSAGE_ACK]);
+	rc = pmic_glink_write(bcdev->client, &req_msg, sizeof(req_msg));
+	if (!rc) {
+		rc = wait_for_completion_timeout(&bcdev->ap_read_ack[AP_MESSAGE_ACK], msecs_to_jiffies(AP_READ_WAIT_TIME_MS));
+		if (!rc) {
+			chg_err("Error, timed out sending message\n");
+			return -ETIMEDOUT;
+		}
+		rc = 0;
+	}
+
+	return rc;
+}
+
+static void handle_ap_read_buffer(struct battery_chg_dev *bcdev,
+	struct oplus_ap_read_buffer_resp_msg *resp_msg, size_t len)
+{
+	u32 buf_len;
+
+	chg_info("correct length received: %zu expected: %zu id=%u\n", len, sizeof(*bcdev->ap_read_buffer_dump), resp_msg->message_id);
+
+	if (len > sizeof(*bcdev->ap_read_buffer_dump)) {
+		chg_err("Incorrect length received: %zu expected: %zu\n", len, sizeof(*bcdev->ap_read_buffer_dump));
+		memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+		return;
+	}
+
+	buf_len = resp_msg->data_size;
+	if (buf_len > sizeof(bcdev->ap_read_buffer_dump->data_buffer)) {
+		chg_err("Incorrect buffer length: %u\n", buf_len);
+		memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+		return;
+	}
+
+	if (resp_msg->message_id == AP_MESSAGE_ACK) {
+		complete(&bcdev->ap_read_ack[resp_msg->message_id]);
+		return;
+	}
+
+	if (buf_len == 0) {
+		chg_err("Incorrect buffer length: %u\n", buf_len);
+		memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+		return;
+	}
+	if (resp_msg->message_id >= AP_MESSAGE_MAX_SIZE) {
+		chg_err("message_id %d invalid\n", resp_msg->message_id);
+		memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+		return;
+	}
+	memcpy(bcdev->ap_read_buffer_dump->data_buffer, resp_msg->data_buffer, buf_len);
+	bcdev->ap_read_buffer_dump->data_size = buf_len;
+	bcdev->ap_read_buffer_dump->message_id = resp_msg->message_id;
+	complete(&bcdev->ap_read_ack[resp_msg->message_id]);
+}
+
 static bool oplus_vooc_get_fastchg_ing(struct battery_chg_dev *bcdev);
 static int oplus_vooc_get_fast_chg_type(struct battery_chg_dev *bcdev);
 static int bcc_battery_chg_write(struct battery_chg_dev *bcdev, void *data,
@@ -643,7 +713,7 @@ static int oplus_set_bcc_debug_parameters(struct oplus_chg_ic_dev *ic_dev, const
 }
 #endif
 
-/*static int ufcs_battery_chg_write(struct battery_chg_dev *bcdev, void *data,
+static int ufcs_battery_chg_write(struct battery_chg_dev *bcdev, void *data,
 	int len)
 {
 	int rc;
@@ -658,7 +728,7 @@ static int oplus_set_bcc_debug_parameters(struct oplus_chg_ic_dev *ic_dev, const
 	rc = pmic_glink_write(bcdev->client, data, len);
 	if (!rc) {
 		rc = wait_for_completion_timeout(&bcdev->ufcs_read_ack,
-			msecs_to_jiffies(OEM_READ_WAIT_TIME_MS));
+			msecs_to_jiffies(AP_UFCS_WAIT_TIME_MS));
 		if (!rc) {
 			chg_err("Error, timed out sending message\n");
 			mutex_unlock(&bcdev->ufcs_read_buffer_lock);
@@ -675,7 +745,7 @@ static int oplus_set_bcc_debug_parameters(struct oplus_chg_ic_dev *ic_dev, const
 
 static int ufcs_read_buffer(struct battery_chg_dev *bcdev)
 {
-	struct oem_read_buffer_req_msg req_msg = { { 0 } };
+	struct oplus_ap_read_ufcs_req_msg req_msg = { { 0 } };
 
 	if (!bcdev) {
 		return false;
@@ -684,13 +754,13 @@ static int ufcs_read_buffer(struct battery_chg_dev *bcdev)
 	req_msg.data_size = sizeof(bcdev->ufcs_read_buffer_dump.data_buffer);
 	req_msg.hdr.owner = MSG_OWNER_BC;
 	req_msg.hdr.type = MSG_TYPE_REQ_RESP;
-	req_msg.hdr.opcode = UFCS_OPCODE_READ_BUFFER;
+	req_msg.hdr.opcode = AP_OPCODE_UFCS_BUFFER;
 
 	return ufcs_battery_chg_write(bcdev, &req_msg, sizeof(req_msg));
 }
 
 static void handle_ufcs_read_buffer(struct battery_chg_dev *bcdev,
-	struct oem_read_buffer_resp_msg *resp_msg, size_t len)
+	struct oplus_ap_read_ufcs_resp_msg *resp_msg, size_t len)
 {
 	u32 buf_len;
 
@@ -714,7 +784,7 @@ static void handle_ufcs_read_buffer(struct battery_chg_dev *bcdev,
 	}
 	memcpy(bcdev->ufcs_read_buffer_dump.data_buffer, resp_msg->data_buffer, buf_len);
 	complete(&bcdev->ufcs_read_ack);
-}*/
+}
 
 static int battery_chg_fw_write(struct battery_chg_dev *bcdev, void *data,
 				int len)
@@ -2530,6 +2600,10 @@ static void handle_notification(struct battery_chg_dev *bcdev, void *data,
 		voocphy_push_gan_mos_err(bcdev->buck_ic);
 		chg_err("gan_mos_err\n");
 		break;
+	case BC_UFCS_PDO_READY:
+		bcdev->ufcs_pdo_ready = true;
+		chg_info("ufcs pdo ready = %d\n", bcdev->ufcs_pdo_ready);
+		break;
 #endif
 	default:
 		break;
@@ -2565,8 +2639,10 @@ static int battery_chg_callback(void *priv, void *data, size_t len)
 		handle_bcc_read_buffer(bcdev, data, len);
 	else if (hdr->opcode == PPS_OPCODE_READ_BUFFER)
 		handle_pps_read_buffer(bcdev, data, len);
-	/*else if (hdr->opcode == UFCS_OPCODE_READ_BUFFER)
-		handle_ufcs_read_buffer(bcdev, data, len);*/
+	else if (hdr->opcode == AP_OPCODE_UFCS_BUFFER)
+		handle_ufcs_read_buffer(bcdev, data, len);
+	else if (hdr->opcode == AP_OPCODE_READ_BUFFER)
+		handle_ap_read_buffer(bcdev, data, len);
 #endif
 	else
 		handle_message(bcdev, data, len);
@@ -4508,6 +4584,7 @@ static void oplus_plugin_irq_work(struct work_struct *work)
 		bcdev->pd_svooc = false;
 		bcdev->ufcs_power_ready = false;
 		bcdev->ufcs_handshake_ok = false;
+		bcdev->ufcs_pdo_ready = false;
 		bcdev->bc12_completed = false;
 		bcdev->hvdcp_detach_time = cpu_clock(smp_processor_id()) / CPU_CLOCK_TIME_MS;
 		chg_err("the hvdcp_detach_time:%llu, detect time %llu \n",
@@ -7691,6 +7768,86 @@ oplus_sm8350_get_battery_gauge_type_for_bcc(struct oplus_chg_ic_dev *ic_dev,
 	return 0;
 }
 
+static int oplus_sm8350_get_reg_info(struct oplus_chg_ic_dev *ic_dev, u8 *info, int len)
+{
+	struct battery_chg_dev *bcdev;
+	int index = 0;
+	int rc = 0;
+
+	if (ic_dev == NULL || !info) {
+		chg_err("oplus_chg_ic_dev or info is NULL");
+		return -ENODEV;
+	}
+	bcdev = oplus_chg_ic_get_drvdata(ic_dev);
+
+	if (!bcdev || !bcdev->ap_read_buffer_dump)
+		return -ENODEV;
+
+	mutex_lock(&bcdev->ap_read_buffer_lock);
+	rc = ap_set_message_id(bcdev, AP_MESSAGE_GET_GAUGE_REG_INFO);
+	if (rc)
+		goto err;
+
+	reinit_completion(&bcdev->ap_read_ack[AP_MESSAGE_GET_GAUGE_REG_INFO]);
+	rc = wait_for_completion_timeout(&bcdev->ap_read_ack[AP_MESSAGE_GET_GAUGE_REG_INFO],
+					 msecs_to_jiffies(AP_READ_WAIT_TIME_MS));
+	if (!rc) {
+		chg_err("Error, timed out sending message\n");
+		goto err;
+	}
+
+	index = bcdev->ap_read_buffer_dump->data_size;
+	if (index >= len)
+		goto err;
+
+	memcpy(info, bcdev->ap_read_buffer_dump->data_buffer, index);
+	memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+	mutex_unlock(&bcdev->ap_read_buffer_lock);
+	return index;
+err:
+	memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+	mutex_unlock(&bcdev->ap_read_buffer_lock);
+	return -EINVAL;
+}
+
+static int oplus_sm8350_get_calib_time(struct oplus_chg_ic_dev *ic_dev, int *dod_calib_time, int *qmax_calib_time)
+{
+	struct battery_chg_dev *bcdev;
+	int rc = 0;
+
+	if (ic_dev == NULL || !qmax_calib_time || !dod_calib_time) {
+		chg_err("oplus_chg_ic_dev or qmax_calib_time or dod_calib_time is NULL");
+		return -ENODEV;
+	}
+	bcdev = oplus_chg_ic_get_drvdata(ic_dev);
+
+	if (!bcdev || !bcdev->ap_read_buffer_dump)
+		return -ENODEV;
+
+	mutex_lock(&bcdev->ap_read_buffer_lock);
+	rc = ap_set_message_id(bcdev, AP_MESSAGE_GET_GAUGE_CALIB_TIME);
+	if (rc)
+		goto err;
+
+	reinit_completion(&bcdev->ap_read_ack[AP_MESSAGE_GET_GAUGE_CALIB_TIME]);
+	rc = wait_for_completion_timeout(&bcdev->ap_read_ack[AP_MESSAGE_GET_GAUGE_CALIB_TIME],
+					 msecs_to_jiffies(AP_READ_WAIT_TIME_MS));
+	if (!rc) {
+		chg_err("Error, timed out sending message\n");
+		goto err;
+	}
+
+	if (sscanf(bcdev->ap_read_buffer_dump->data_buffer, "%d,%d", dod_calib_time, qmax_calib_time) != 2)
+		goto err;
+	memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+	mutex_unlock(&bcdev->ap_read_buffer_lock);
+	return 0;
+err:
+	memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+	mutex_unlock(&bcdev->ap_read_buffer_lock);
+	return -EINVAL;
+}
+
 static void *oplus_chg_8350_gauge_get_func(struct oplus_chg_ic_dev *ic_dev,
 					   enum oplus_chg_ic_func func_id)
 {
@@ -7851,6 +8008,14 @@ static void *oplus_chg_8350_gauge_get_func(struct oplus_chg_ic_dev *ic_dev,
 	case OPLUS_IC_FUNC_GAUGE_GET_SUBBOARD_TEMP:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_SUBBOARD_TEMP,
 					       oplus_get_subboard_temp);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_REG_INFO:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_REG_INFO,
+					      oplus_sm8350_get_reg_info);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_CALIB_TIME:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_CALIB_TIME,
+					      oplus_sm8350_get_calib_time);
 		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);
@@ -8621,10 +8786,11 @@ static int oplus_chg_adsp_ufcs_get_dev_info(struct oplus_chg_ic_dev *ic_dev, u64
 #define UFCS_PDO_MAX 7
 static int oplus_chg_adsp_ufcs_get_pdo_info_buffer(struct oplus_chg_ic_dev *ic_dev, u64 *pdo, int num)
 {
-	/*int pdo_index = 0;
-	int pdo_max = num > UFCS_PDO_MAX ? UFCS_PDO_MAX:num;
+	int pdo_index = 0;
+	int pdo_max = num > UFCS_PDO_MAX ? UFCS_PDO_MAX : num;
 	int pdo_num = 0;
 	struct battery_chg_dev *bcdev;
+	int retry_count = 12;
 
 	if (ic_dev == NULL) {
 		chg_err("oplus_chg_ic_dev is NULL");
@@ -8632,22 +8798,23 @@ static int oplus_chg_adsp_ufcs_get_pdo_info_buffer(struct oplus_chg_ic_dev *ic_d
 	}
 	bcdev = oplus_chg_ic_get_drvdata(ic_dev);
 
-	ufcs_read_buffer(bcdev);
-	for (pdo_index = 0; pdo_index < pdo_max; pdo_index++) {
-		pdo[pdo_index] = bcdev->ufcs_read_buffer_dump.data_buffer[pdo_index];
-		chg_err("pdo[%d] = 0x%llx\n", pdo_index, pdo[pdo_index]);
+	while (retry_count--) {
+		if (bcdev->ufcs_pdo_ready) {
+			ufcs_read_buffer(bcdev);
+			for (pdo_index = 0; pdo_index < pdo_max; pdo_index++) {
+				pdo[pdo_index] = bcdev->ufcs_read_buffer_dump.data_buffer[pdo_index];
+				if (pdo[pdo_index] == 0) {
+					pdo_num = pdo_index;
+					break;
+				}
+				chg_err("pdo[%d] = 0x%llu\n", pdo_index, pdo[pdo_index]);
+			}
+			bcdev->ufcs_pdo_ready = 0;
+			break;
+		}
+		msleep(10);
 	}
-	pdo_num = bcdev->ufcs_read_buffer_dump.data_buffer[7];
-	return pdo_num;*/
-
-	if (num == 0)
-		*pdo = 1801989615150771250;
-	else if (num == 1)
-		*pdo = 2955570826734283826;
-	else
-		*pdo = 2955570826734283826;
-
-	return 1;
+	return pdo_num;
 }
 
 static int oplus_chg_adsp_ufcs_get_src_info(struct oplus_chg_ic_dev *ic_dev, u64 *src_info)
@@ -9112,6 +9279,12 @@ static int battery_chg_probe(struct platform_device *pdev)
 	init_completion(&bcdev->pps_read_ack);
 	mutex_init(&bcdev->ufcs_read_buffer_lock);
 	init_completion(&bcdev->ufcs_read_ack);
+	mutex_init(&bcdev->ap_read_buffer_lock);
+	for (i = 0; i< AP_MESSAGE_MAX_SIZE; i++)
+		init_completion(&bcdev->ap_read_ack[i]);
+	bcdev->ap_read_buffer_dump = devm_kzalloc(&pdev->dev, sizeof(*bcdev->ap_read_buffer_dump), GFP_KERNEL);
+	if (!bcdev->ap_read_buffer_dump)
+		return -ENOMEM;
 #endif
 	init_completion(&bcdev->ack);
 	init_completion(&bcdev->fw_buf_ack);

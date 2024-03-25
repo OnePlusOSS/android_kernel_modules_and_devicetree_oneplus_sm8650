@@ -122,6 +122,7 @@ struct oplus_monitor {
 	int mmi_chg;
 	int usb_status;
 	bool otg_switch_status;
+	bool deep_support;
 
 	/* vooc */
 	bool vooc_online;

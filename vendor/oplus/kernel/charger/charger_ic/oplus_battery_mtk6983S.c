@@ -204,6 +204,9 @@ extern void oplus_set_hvdcp_flag_clear(void);
 struct oplus_chg_operations  mtk6375_chg_ops;
 static int oplus_mt6375_check_charging_enable(void);
 static int oplus_mt6375_disable_charging(void);
+static int ntc_temp_dbg = 0;
+module_param(ntc_temp_dbg, int, 0644);
+MODULE_PARM_DESC(ntc_temp_dbg, "ntc temp debug");
 
 #if 0
 static void oplus_set_usb_status(int status)
@@ -5356,9 +5359,26 @@ static int oplus_get_ntc_temp(struct iio_channel *ntc_temp_chan, struct ntc_temp
 	return chargeric_temp;
 }
 
+#define OPEN_NTC_TEMP (-200)
+#define TRACK_LOCAL_T_NS_TO_S_THD 1000000000
+#define TRACK_DEVICE_ABNORMAL_UPLOAD_PERIOD (24 * 3600)
+static int oplus_chg_track_get_local_time_s(void)
+{
+	int local_time_s;
+
+	local_time_s = local_clock() / TRACK_LOCAL_T_NS_TO_S_THD;
+	pr_debug("local_time_s:%d\n", local_time_s);
+
+	return local_time_s;
+}
+
 static int oplus_chg_get_main_battery_btb(void)
 {
 	int temp = DEFUALT_TEMP;
+	int curr_time;
+	static int pre_upload_time = 0;
+	static int upload_count = 0;
+	int ret = 0;
 
 	if (!pinfo || !g_oplus_chip) {
 		chg_err("pinfo is NULL\n");
@@ -5375,6 +5395,21 @@ static int oplus_chg_get_main_battery_btb(void)
 
 	if (!IS_ERR_OR_NULL(pinfo->batcon_temp_chan)) {
 		temp = oplus_get_ntc_temp(pinfo->batcon_temp_chan, pinfo->batt_ntc_param);
+		if (ntc_temp_dbg != 0)
+			temp = ntc_temp_dbg;
+		if (temp < OPEN_NTC_TEMP) {
+			curr_time = oplus_chg_track_get_local_time_s();
+			if (curr_time - pre_upload_time > TRACK_DEVICE_ABNORMAL_UPLOAD_PERIOD)
+				upload_count = 0;
+			if (upload_count == 0) {
+				ret = oplus_track_upload_ntc_abnormal_info(temp,
+					"batcon_temp", "temp_err", "too_low", NULL);
+				if (ret == 0) {
+					pre_upload_time = curr_time;
+					upload_count++;
+				}
+			}
+		}
 		return temp;
 	}
 

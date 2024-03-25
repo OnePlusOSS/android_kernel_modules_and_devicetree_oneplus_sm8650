@@ -174,8 +174,10 @@ static int get_dma_buf_info(const void *data, struct file *file, unsigned int n)
 
 	dma_info->dmabuf = dmabuf;
 	strncpy(dma_info->exp_name, dmabuf->exp_name, EXP_NAME_LEN - 1);
+	spin_lock(&dmabuf->name_lock);
 	if (dmabuf->name)
 		strncpy(dma_info->name, dmabuf->name, NAME_LEN - 1);
+	spin_unlock(&dmabuf->name_lock);
 
 	dma_info->i_ino = file_inode(dmabuf->file)->i_ino;
 	dma_info->file_count = file_count(dmabuf->file);

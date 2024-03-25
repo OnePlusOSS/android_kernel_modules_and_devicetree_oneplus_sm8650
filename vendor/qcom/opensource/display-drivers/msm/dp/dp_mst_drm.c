@@ -965,7 +965,7 @@ static void dp_mst_bridge_disable(struct drm_bridge *drm_bridge)
 
 static void dp_mst_bridge_post_disable(struct drm_bridge *drm_bridge)
 {
-	int rc = 0;
+	int rc = 0, conn = 0;
 	struct dp_mst_bridge *bridge;
 	struct dp_display *dp;
 	struct dp_mst_private *mst;
@@ -981,8 +981,10 @@ static void dp_mst_bridge_post_disable(struct drm_bridge *drm_bridge)
 		return;
 	}
 
+	conn = DP_MST_CONN_ID(bridge);
+
 	DP_MST_DEBUG_V("enter\n");
-	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_ENTRY, DP_MST_CONN_ID(bridge));
+	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_ENTRY, conn);
 
 	dp = bridge->display;
 	mst = dp->dp_mst_prv_info;
@@ -990,19 +992,19 @@ static void dp_mst_bridge_post_disable(struct drm_bridge *drm_bridge)
 	rc = dp->disable(dp, bridge->dp_panel);
 	if (rc)
 		DP_MST_INFO("bridge:%d conn:%d display disable failed, rc=%d\n",
-				bridge->id, DP_MST_CONN_ID(bridge), rc);
+				bridge->id, conn, rc);
 
 	rc = dp->unprepare(dp, bridge->dp_panel);
 	if (rc)
 		DP_MST_INFO("bridge:%d conn:%d display unprepare failed, rc=%d\n",
-				bridge->id, DP_MST_CONN_ID(bridge), rc);
+				bridge->id, conn, rc);
 
 	bridge->connector = NULL;
 	bridge->dp_panel =  NULL;
 
 	DP_MST_INFO("mst bridge:%d conn:%d post disable complete\n",
-			bridge->id, DP_MST_CONN_ID(bridge));
-	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, DP_MST_CONN_ID(bridge));
+			bridge->id, conn);
+	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_EXIT, conn);
 }
 
 static void dp_mst_bridge_mode_set(struct drm_bridge *drm_bridge,
@@ -1309,6 +1311,10 @@ enum drm_mode_status dp_mst_connector_mode_valid(
 
 	vrefresh = drm_mode_vrefresh(mode);
 
+	/* As per spec, failsafe mode should always be present */
+	if ((mode->hdisplay == 640) && (mode->vdisplay == 480) && (mode->clock == 25175))
+		goto validate_mode;
+
 	if (dp_panel->mode_override && (mode->hdisplay != dp_panel->hdisplay ||
 			mode->vdisplay != dp_panel->vdisplay ||
 			vrefresh != dp_panel->vrefresh ||
@@ -1347,6 +1353,7 @@ enum drm_mode_status dp_mst_connector_mode_valid(
 		return MODE_BAD;
 	}
 
+validate_mode:
 	return dp_display->validate_mode(dp_display, dp_panel, mode, avail_res);
 }
 
@@ -2050,6 +2057,7 @@ static void dp_mst_display_hpd_irq(void *dp_display)
 	struct dp_display *dp = dp_display;
 	struct dp_mst_private *mst = dp->dp_mst_prv_info;
 	u8 esi[14];
+	u8 ack[8] = {};
 	unsigned int esi_res = DP_SINK_COUNT_ESI + 1;
 	bool handled;
 
@@ -2068,17 +2076,19 @@ static void dp_mst_display_hpd_irq(void *dp_display)
 	DP_MST_DEBUG("mst irq: esi1[0x%x] esi2[0x%x] esi3[%x]\n",
 			esi[1], esi[2], esi[3]);
 
-	rc = drm_dp_mst_hpd_irq(&mst->mst_mgr, esi, &handled);
+	rc = drm_dp_mst_hpd_irq_handle_event(&mst->mst_mgr, esi, ack, &handled);
 
 	/* ack the request */
 	if (handled) {
-		rc = drm_dp_dpcd_write(mst->caps.drm_aux, esi_res, &esi[1], 3);
+		rc = drm_dp_dpcd_writeb(mst->caps.drm_aux, esi_res, ack[1]);
 
 		if (esi[1] & DP_UP_REQ_MSG_RDY)
 			dp_mst_clear_edid_cache(dp);
 
-		if (rc != 3)
+		if (rc != 1)
 			DP_ERR("dpcd esi_res failed. rlen=%d\n", rc);
+		else
+			drm_dp_mst_hpd_irq_send_new_request(&mst->mst_mgr);
 	}
 
 	DP_MST_DEBUG("mst display hpd_irq handled:%d rc:%d\n", handled, rc);

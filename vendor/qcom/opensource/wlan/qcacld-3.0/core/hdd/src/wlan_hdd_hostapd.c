@@ -147,6 +147,11 @@
 #ifndef BSS_MEMBERSHIP_SELECTOR_HT_PHY
 #define BSS_MEMBERSHIP_SELECTOR_HT_PHY  127
 #endif
+#ifdef OPLUS_FEATURE_SOFTAP_DCS_SWITCH
+//Add for softap connect fail monitor
+#include <linux/workqueue.h>
+#include <linux/fs.h>
+#endif /* OPLUS_FEATURE_SOFTAP_DCS_SWITCH */
 
 #ifndef BSS_MEMBERSHIP_SELECTOR_VHT_PHY
 #define BSS_MEMBERSHIP_SELECTOR_VHT_PHY 126
@@ -251,6 +256,155 @@ static const struct index_vht_data_rate_type supported_vht_mcs_rate_nss2[] = {
 };
 
 /* Function definitions */
+
+#ifdef OPLUS_FEATURE_SOFTAP_DCS_SWITCH
+//Add for softap connect fail monitor
+#define INIT_FINISHED 1
+#define MAX_ENVP_SIZE 7
+
+static struct work_struct mWork;
+static volatile unsigned char mUeventInit = 0;
+char *mUevent[MAX_ENVP_SIZE] = {0};
+int mCount = 0;
+qdf_atomic_t is_mem_malloc;
+
+void hostapd_driver_send_uevent(struct hdd_adapter *sta_adapter, uint32_t reasoncode,
+                                uint8_t *macaddr, eSapDisassocReason reason)
+{
+	char event[] = "HOSTAPD_EVENT=sta_connect";
+	char sta_connect_event[30] = {'\0'};
+	char disassoc_reason[30] = {'\0'};
+	char reason_code[30] = {'\0'};
+	char sta_mode[30] = {'\0'};
+	char sta_addr[30] = {'\0'};
+	char *envp[7];
+
+	snprintf(sta_connect_event, sizeof(sta_connect_event), "STA_CONNECT_EVENT=disassoc");
+	snprintf(disassoc_reason, sizeof(disassoc_reason), "DISASSOCREASON=%d", reason);
+	snprintf(reason_code, sizeof(reason_code), "DISASSOCCODE=%d", reasoncode);
+
+	if (sta_adapter) {
+		snprintf(sta_mode, sizeof(sta_mode), "STAMODE=%s", qdf_opmode_str(sta_adapter->device_mode));
+	} else {
+		snprintf(sta_mode, sizeof(sta_mode), "STAMODE=unknown");
+	}
+
+	if (macaddr) {
+		snprintf(sta_addr, sizeof(sta_addr), "STAADDR=" QDF_MAC_ADDR_FMT, QDF_MAC_ADDR_REF(macaddr));
+	} else {
+		snprintf(sta_addr, sizeof(sta_addr), "STAADDR=unknown");
+	}
+
+	envp[0] = (char *)&event;
+	envp[1] = (char *)&sta_connect_event;
+	envp[2] = (char *)&disassoc_reason;
+	envp[3] = (char *)&reason_code;
+	envp[4] = (char *)&sta_mode;
+	envp[5] = (char *)&sta_addr;
+	envp[6] = NULL;
+
+	hostapdConnSendUevent(envp);
+}
+
+static void hostapdWorkHandler(struct work_struct *data)
+{
+	int i;
+	int ret_val;
+	qdf_device_t qdf_dev = cds_get_context(QDF_MODULE_ID_QDF_DEVICE);
+
+	if (mUevent[0] == NULL) {
+		hdd_nofl_info("softap sta connect: workhandler is null, do nothing");
+		return;
+	}
+
+	if (qdf_dev && qdf_dev->dev) {
+		mUevent[mCount] = NULL;
+		ret_val = kobject_uevent_env(&(qdf_dev->dev->kobj), KOBJ_CHANGE, mUevent);
+		if (!ret_val) {
+			hdd_debug("softap sta connect: kobject_uevent_env success");
+		} else {
+			hdd_debug("softap sta connect: kobject_uevent_env fail, error=%d!\n", ret_val);
+		}
+	}
+
+	for (i = 0; i < mCount; i++) {
+		qdf_mem_free(mUevent[i]);
+		mUevent[i] = NULL;
+	}
+	qdf_atomic_init(&is_mem_malloc);
+	mCount = 0;
+}
+
+void hostapdConnUeventInit(void)
+{
+	INIT_WORK(&mWork, hostapdWorkHandler);
+	mUeventInit = INIT_FINISHED;
+	qdf_atomic_init(&is_mem_malloc);
+	hdd_nofl_info("softap sta connect: uevent init success");
+}
+
+void hostapdConnUeventDeinit(void)
+{
+	int i;
+	if (mUeventInit == INIT_FINISHED) {
+		cancel_work_sync(&mWork);
+	}
+
+	mUeventInit = 0;
+
+	if (mUevent[0] != NULL) {
+		for (i = 0; (i < MAX_ENVP_SIZE) && (mUevent[i] != NULL); i++) {
+			qdf_mem_free(mUevent[i]);
+			mUevent[i] = NULL;
+		}
+		hdd_nofl_info("softap sta connect: mem free %d times if unfree when deinit", i);
+	}
+
+	hdd_nofl_info("softap sta connect: uevent deinit sucess");
+}
+
+void hostapdConnSendUevent(char *envp[])
+{
+	int i;
+	if (qdf_atomic_read(&is_mem_malloc) != 0) {
+		hdd_nofl_info("softap sta connect: mem has malloc, drop this envp");
+		return;
+	}
+
+	if (envp && mUeventInit == INIT_FINISHED) {
+		if (mUevent[0] != NULL) {
+			hdd_nofl_info("softap sta connect: another work is running, drop this envp");
+			return;
+		}
+
+		qdf_atomic_inc(&is_mem_malloc);
+
+		if (qdf_atomic_read(&is_mem_malloc) == 1) {
+			for (i = 0; (i < MAX_ENVP_SIZE) && (envp[i] != NULL); i++) {
+				size_t len = strlen(envp[i]) + 1;
+				mUevent[i] = (char *)qdf_mem_malloc(len);
+
+				if (!mUevent[i]) {
+					hdd_nofl_info("softap sta connect: uevent mem alloc fail");
+					for (i--; i >= 0; i--) {
+						qdf_mem_free(mUevent[i]);
+						mUevent[i] = NULL;
+					}
+					return;
+				}
+
+				memcpy(mUevent[i], envp[i], len);
+			}
+			mCount = i;
+			hdd_debug("softap sta connect: mCount is %d, last char is %s", mCount, mUevent[mCount-1]);
+			schedule_work(&mWork);
+		}
+	} else {
+		hdd_nofl_info("softap sta connect: recv envp is null or uevent uninit, do nothing");
+		return;
+	}
+}
+#endif /* OPLUS_FEATURE_SOFTAP_DCS_SWITCH */
 
 /**
  * hdd_sap_context_init() - Initialize SAP context.
@@ -512,6 +666,12 @@ static int __hdd_hostapd_open(struct net_device *dev)
 	wlan_hdd_netif_queue_control(adapter,
 				   WLAN_START_ALL_NETIF_QUEUE_N_CARRIER,
 				   WLAN_CONTROL_PATH);
+
+#ifdef OPLUS_FEATURE_SOFTAP_DCS_SWITCH
+//Add for softap connect fail monitor
+	hostapdConnUeventInit();
+#endif /* OPLUS_FEATURE_SOFTAP_DCS_SWITCH */
+
 	hdd_exit();
 	return 0;
 }
@@ -639,6 +799,11 @@ static void hdd_hostapd_uninit(struct net_device *dev)
 
 	/* after uninit our adapter structure will no longer be valid */
 	adapter->magic = 0;
+
+#ifdef OPLUS_FEATURE_SOFTAP_DCS_SWITCH
+//Add for softap connect fail monitor
+	hostapdConnUeventDeinit();
+#endif /* OPLUS_FEATURE_SOFTAP_DCS_SWITCH */
 
 	hdd_exit();
 }
@@ -2123,6 +2288,10 @@ QDF_STATUS hdd_hostapd_sap_event_cb(struct sap_event *sap_event,
 	qdf_freq_t dfs_freq;
 	struct wlan_hdd_link_info *link_info;
 	bool alt_pipe;
+#ifdef OPLUS_FEATURE_SOFTAP_DCS_SWITCH
+	//Add for softap connect fail monitor
+	struct hdd_adapter *sta_adapter;
+#endif /* OPLUS_FEATURE_SOFTAP_DCS_SWITCH */
 
 	dev = context;
 	if (!dev) {
@@ -2784,11 +2953,30 @@ QDF_STATUS hdd_hostapd_sap_event_cb(struct sap_event *sap_event,
 		if (!QDF_IS_STATUS_SUCCESS(qdf_status))
 			hdd_err("Station Deauth event Set failed");
 
+#ifdef OPLUS_FEATURE_SOFTAP_DCS_SWITCH
+//Add for softap connect fail monitor
+		sta_adapter = hdd_get_adapter(hdd_ctx, QDF_STA_MODE);
+		if (sap_event->sapevt.sapStationDisassocCompleteEvent.reason ==
+		    eSAP_USR_INITATED_DISASSOC) {
+			hdd_debug(" User initiated disassociation");
+			hostapd_driver_send_uevent(sta_adapter,
+						disassoc_comp->reason_code,
+						disassoc_comp->staMac.bytes,
+						eSAP_USR_INITATED_DISASSOC);
+		} else {
+			hdd_debug(" MAC initiated disassociation");
+			hostapd_driver_send_uevent(sta_adapter,
+						disassoc_comp->reason_code,
+						disassoc_comp->staMac.bytes,
+						eSAP_MAC_INITATED_DISASSOC);
+		}
+#else
 		if (sap_event->sapevt.sapStationDisassocCompleteEvent.reason ==
 		    eSAP_USR_INITATED_DISASSOC)
 			hdd_debug(" User initiated disassociation");
 		else
 			hdd_debug(" MAC initiated disassociation");
+#endif /* OPLUS_FEATURE_SOFTAP_DCS_SWITCH */
 		we_event = IWEVEXPIRED;
 
 		DPTRACE(qdf_dp_trace_mgmt_pkt(QDF_DP_TRACE_MGMT_PACKET_RECORD,

@@ -64,6 +64,11 @@
 #include "../../core/src/vdev_mgr_ops.h"
 #include "wlan_p2p_cfg_api.h"
 
+#ifdef OPLUS_FEATURE_SOFTAP_DCS_SWITCH
+//Add for softap connect SAE status
+#include <wlan_hdd_hostapd.h>
+#endif /* OPLUS_FEATURE_SOFTAP_DCS_SWITCH */
+
 void lim_log_session_states(struct mac_context *mac);
 static void lim_process_normal_hdd_msg(struct mac_context *mac_ctx,
 	struct scheduler_msg *msg, uint8_t rsp_reqd);
@@ -179,6 +184,11 @@ static void lim_process_sae_msg_ap(struct mac_context *mac,
 			 QDF_MAC_ADDR_FMT " status: %u",
 			 QDF_MAC_ADDR_REF(sae_msg->peer_mac_addr),
 			 sae_msg->sae_status);
+#ifdef OPLUS_FEATURE_SOFTAP_DCS_SWITCH
+		//Add for softap connect fail monitor
+		hostapd_send_sae_uevent(sae_msg);
+#endif /* OPLUS_FEATURE_SOFTAP_DCS_SWITCH */
+
 		if (assoc_req->present) {
 			pe_debug("Assoc req cached; clean it up");
 			lim_process_assoc_cleanup(mac, session,
@@ -263,6 +273,36 @@ void lim_process_sae_msg(struct mac_context *mac, struct sir_sae_msg *body)
 		pe_debug("SAE message on unsupported interface");
 }
 #endif
+
+#ifdef OPLUS_FEATURE_SOFTAP_DCS_SWITCH
+//Add for softap connect SAE status
+void hostapd_send_sae_uevent(struct sir_sae_msg *sae_msg)
+{
+	char event[] = "HOSTAPD_EVENT=sta_connect";
+	char sta_connect_event[30] = {'\0'};
+	char sae_status[30] = {'\0'};
+	char peer_addr[30] = {'\0'};
+	char result_code[30] = {'\0'};
+	char *envp[6];
+
+	snprintf(sta_connect_event, sizeof(sta_connect_event), "STA_CONNECT_EVENT=preauth");
+
+	if (sae_msg) {
+		snprintf(sae_status, sizeof(sae_status), "SAESTATUS=%d", sae_msg->sae_status);
+		snprintf(peer_addr, sizeof(peer_addr), "PEERADDR=" QDF_MAC_ADDR_FMT, QDF_MAC_ADDR_REF(sae_msg->peer_mac_addr));
+		snprintf(result_code, sizeof(result_code), "PREAUTHFAILCODE=%d", sae_msg->result_code);
+	}
+
+	envp[0] = (char *)&event;
+	envp[1] = (char *)&sta_connect_event;
+	envp[2] = (char *)&sae_status;
+	envp[3] = (char *)&peer_addr;
+	envp[4] = (char *)&result_code;
+	envp[5] = NULL;
+
+	hostapdConnSendUevent(envp);
+}
+#endif /* OPLUS_FEATURE_SOFTAP_DCS_SWITCH */
 
 /**
  * lim_process_dual_mac_cfg_resp() - Process set dual mac config response

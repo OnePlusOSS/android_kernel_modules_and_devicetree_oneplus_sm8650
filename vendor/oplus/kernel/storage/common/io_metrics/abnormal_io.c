@@ -768,7 +768,7 @@ void abnormal_io_unregister_tracepoint_probes(void)
 
 static bool over_limit_dump(time64_t current_time_seconds)
 {
-    static int dump_limit_1_day = 0;
+    static int dump_limit_1_day = 1;
 
     /* 当导出日志周期超过1天时重新计数 */
     if ((current_time_seconds - base_dump_seconds) >= DAY_TO_SECONDS(1)) {

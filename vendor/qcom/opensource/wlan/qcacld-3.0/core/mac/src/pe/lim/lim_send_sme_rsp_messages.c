@@ -1786,9 +1786,9 @@ static bool lim_is_csa_channel_allowed(struct mac_context *mac_ctx,
 
 	if (WLAN_REG_IS_24GHZ_CH_FREQ(csa_freq) &&
 	    wlan_reg_get_bw_value(new_ch_width) > 20) {
-		if (csa_params->sec_chan_offset == PHY_DOUBLE_CHANNEL_LOW_PRIMARY)
+		if (csa_params->new_ch_freq_seg1 == csa_params->channel + 2)
 			sec_ch_2g_freq = csa_freq + HT40_SEC_OFFSET;
-		else if (csa_params->sec_chan_offset == PHY_DOUBLE_CHANNEL_HIGH_PRIMARY)
+		else if (csa_params->new_ch_freq_seg1 == csa_params->channel - 2)
 			sec_ch_2g_freq = csa_freq - HT40_SEC_OFFSET;
 	}
 
@@ -1799,8 +1799,9 @@ static bool lim_is_csa_channel_allowed(struct mac_context *mac_ctx,
 						REG_CURRENT_PWR_MODE);
 	if (chan_state == CHANNEL_STATE_INVALID ||
 	    chan_state == CHANNEL_STATE_DISABLE) {
-		pe_err("Invalid csa_freq:%d for provided ch_width:%d. Disconnect",
-		       csa_freq, new_ch_width);
+		pe_err("Invalid csa_freq %d ch_width %d ccfs0 %d ccfs1 %d sec_ch %d. Disconnect",
+		       csa_freq, new_ch_width, csa_params->new_ch_freq_seg1,
+		       csa_params->new_ch_freq_seg2, sec_ch_2g_freq);
 		lim_tear_down_link_with_ap(mac_ctx,
 					   session_entry->peSessionId,
 					   REASON_CHANNEL_SWITCH_FAILED,

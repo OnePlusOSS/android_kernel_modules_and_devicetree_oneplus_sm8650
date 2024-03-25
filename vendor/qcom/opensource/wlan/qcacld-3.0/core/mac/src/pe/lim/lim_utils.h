@@ -154,6 +154,11 @@ QDF_STATUS lim_send_set_max_tx_power_req(struct mac_context *mac,
 		int8_t txPower,
 		struct pe_session *pe_session);
 
+#ifdef OPLUS_FEATURE_SOFTAP_DCS_SWITCH
+//Add for softap connect fail monitor
+void hostapd_send_sae_uevent(struct sir_sae_msg *sae_msg);
+#endif /* OPLUS_FEATURE_SOFTAP_DCS_SWITCH */
+
 /**
  * lim_get_num_pwr_levels() - Utility to get number of tx power levels
  * @is_psd: PSD power check

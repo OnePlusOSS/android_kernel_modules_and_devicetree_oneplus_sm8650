@@ -142,6 +142,11 @@ typedef int (qdf_abstract_print)(void *priv, const char *fmt, ...);
 #endif
 #define NO_SESSION 0xFF
 
+#ifdef OPLUS_FEATURE_SOFTAP_DCS_SWITCH
+//Add for softap connect fail monitor
+void hostapd_send_eapol_uevent(uint8_t type, uint8_t subtype, uint8_t status);
+#endif /* OPLUS_FEATURE_SOFTAP_DCS_SWITCH */
+
 /**
  * struct qdf_trace_record_s - keep trace record
  * @qtime: qtimer ticks

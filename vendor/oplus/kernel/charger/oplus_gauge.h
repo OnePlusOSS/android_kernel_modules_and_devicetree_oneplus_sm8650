@@ -100,6 +100,7 @@ struct oplus_gauge_operations {
 	bool (*set_gauge_power_sel)(int sel);
 	bool (*check_rc_sfr)(void);
 	int (*soft_reset_rc_sfr)(void);
+	void (*cal_model_check)(bool ffc_state);
 };
 
 /****************************************
@@ -193,6 +194,7 @@ int oplus_gauge_get_prev_bcc_parameters(char *buf);
 int oplus_gauge_set_bcc_parameters(const char *buf);
 bool oplus_gauge_check_rc_sfr(void);
 int oplus_gauge_soft_reset_rc_sfr(void);
+void oplus_gauge_cal_model_check(bool ffc_state);
 
 #if defined(CONFIG_OPLUS_CHARGER_MTK6763) ||                                   \
 	defined(CONFIG_OPLUS_CHARGER_MTK6771)

@@ -1192,8 +1192,30 @@
                 "write": false,
                 "overwrite": false
             }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_BUCK_GET_BYBID_INFO",
+            "desc": {
+                "zh": "获取bybid信息"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["int *"],
+            "parameter_desc": [
+                {
+                    "range": "0-*",
+                    "type": "out",
+                    "desc": {
+                        "zh": "bybid信息"
+                    }
+                }
+            ],
+            "vict": {
+                "read": false,
+                "write": false,
+                "overwrite": false
+            }
         }
     ],
 
-    "version": "V1.2:42:450882acb69ff31774f41134aa87e51c69153751249be87e7e2c937e11fafe3b"
+    "version": "V1.3:43:353f1f7be369bb3298cc7d6f7f4e250601ab69016c1fe0b21ffa0de49027e6f0"
 }

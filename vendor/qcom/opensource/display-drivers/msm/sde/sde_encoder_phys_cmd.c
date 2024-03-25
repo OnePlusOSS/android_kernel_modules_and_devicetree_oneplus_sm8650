@@ -1479,6 +1479,10 @@ static void _get_tearcheck_cfg(struct sde_encoder_phys *phys_enc,
 	default_line_time_ns = mult_frac(1, default_time_ns, yres);
 	threshold_lines = mult_frac(1, extra_time_ns, default_line_time_ns);
 
+#ifdef OPLUS_FEATURE_DISPLAY
+	oplus_adfr_osync_threshold_lines_update(conn, &threshold_lines, yres);
+#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
+
 	/* some DDICs express the timeout value in lines/4, round down to compensate */
 	adjusted_threshold_lines = round_down(threshold_lines, 4);
 	/* remove 2 lines to cover for latency */
@@ -1504,10 +1508,6 @@ static void _get_tearcheck_cfg(struct sde_encoder_phys *phys_enc,
 		ept_threshold_lines = mult_frac(1, ept_extra_time_ns, default_line_time_ns);
 		start_pos += ept_threshold_lines;
 	}
-
-#ifdef OPLUS_FEATURE_DISPLAY_ADFR
-		oplus_adfr_osync_threshold_lines_update(conn, &threshold_lines, yres);
-#endif /* OPLUS_FEATURE_DISPLAY_ADFR */
 
 end:
 	SDE_DEBUG_CMDENC(cmd_enc,

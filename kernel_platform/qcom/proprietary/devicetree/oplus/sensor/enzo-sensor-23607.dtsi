@@ -19,6 +19,7 @@
 		sup-power-fb;
 		sup-hbm-mode = <1>;
 		need_lb_algo = <1>;
+		report_blank_mode = <1>;
 
 		primary_lb_brl_info {
 			brl_thrd_num = <1>;

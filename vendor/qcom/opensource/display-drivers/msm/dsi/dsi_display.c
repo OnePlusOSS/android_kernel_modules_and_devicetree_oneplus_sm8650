@@ -2784,6 +2784,9 @@ static void dsi_display_parse_cmdline_topology(struct dsi_display *display,
 	char *sw_te = NULL;
 	unsigned long cmdline_topology = NO_OVERRIDE;
 	unsigned long cmdline_timing = NO_OVERRIDE;
+#ifdef OPLUS_FEATURE_DISPLAY
+	unsigned int oplus_panel_id = NO_OVERRIDE;
+#endif /* OPLUS_FEATURE_DISPLAY */
 
 	if (display_type >= MAX_DSI_ACTIVE_DISPLAY) {
 		DSI_ERR("display_type=%d not supported\n", display_type);
@@ -2817,6 +2820,27 @@ static void dsi_display_parse_cmdline_topology(struct dsi_display *display,
 			goto end;
 		}
 	}
+#ifdef OPLUS_FEATURE_DISPLAY
+	str = strnstr(boot_str, ":PanelID-0x", strlen(boot_str));
+	if (str) {
+		if (sscanf(str, ":PanelID-0x%08X", &oplus_panel_id) != 1) {
+			LCD_ERR("invalid PanelID override: %s\n",
+					boot_str);
+			goto end;
+		}
+		display->oplus_panel_flag = (oplus_panel_id >> 24) & 0xFF;
+		display->oplus_panel_id1 = (oplus_panel_id >> 16) & 0xFF;
+		display->oplus_panel_id2 = (oplus_panel_id >> 8) & 0xFF;
+		display->oplus_panel_id3 = oplus_panel_id & 0xFF;
+	}
+	LCD_INFO("Parse cmdline display%d PanelID-0x%08X, Flag=0x%02X, ID1=0x%02X, ID2=0x%02X, ID3=0x%02X\n",
+			display_type,
+			oplus_panel_id,
+			display->oplus_panel_flag,
+			display->oplus_panel_id1,
+			display->oplus_panel_id2,
+			display->oplus_panel_id3);
+#endif /* OPLUS_FEATURE_DISPLAY */
 	DSI_DEBUG("successfully parsed command line topology and timing\n");
 end:
 	display->cmdline_topology = cmdline_topology;
@@ -8396,6 +8420,11 @@ static void dsi_display_handle_fifo_underflow(struct work_struct *work)
 	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
 
 	mutex_unlock(&display->display_lock);
+
+	if (display->is_spurious_interrupt) {
+		display->is_spurious_interrupt = false;
+		dsi_display_report_dead(display);
+	}
 }
 
 static void dsi_display_handle_fifo_overflow(struct work_struct *work)
@@ -8477,6 +8506,11 @@ end:
 	SDE_EVT32(SDE_EVTLOG_FUNC_EXIT);
 
 	mutex_unlock(&display->display_lock);
+
+	if (display->is_spurious_interrupt) {
+		display->is_spurious_interrupt = false;
+		dsi_display_report_dead(display);
+	}
 }
 
 static void dsi_display_handle_lp_rx_timeout(struct work_struct *work)
