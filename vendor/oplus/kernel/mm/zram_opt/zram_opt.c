@@ -21,6 +21,9 @@
 
 static struct config_oplus_bsp_zram_opt *config;
 #endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
+#include <../kernel/oplus_cpu/sched/sched_assist/sa_group.h>
+#include <../kernel/oplus_cpu/sched/sched_assist/sa_common.h>
+#include <../kernel/oplus_cpu/sched/sched_info/osi_healthinfo.h>
 
 static int g_direct_swappiness = 60;
 static int g_swappiness = 160;
@@ -136,6 +139,12 @@ static void balance_reclaim(void *unused, bool *balance_anon_file_reclaim)
 }
 #endif /* CONFIG_OPLUS_BALANCE_ANON_FILE_RECLAIM */
 
+static void vh_android_vh_throttle_direct_reclaim_bypass(void *data, bool *bypass)
+{
+	if (test_task_is_rt(current) || current->prio == MAX_RT_PRIO || test_task_ux(current))
+		*bypass = true;
+}
+
 #ifdef CONFIG_OPLUS_EXTRA_FREE_KBYTES
 struct pglist_data *first_online_pgdat(void)
 {
@@ -228,6 +237,11 @@ static int register_zram_opt_vendor_hooks(void)
 	}
 #endif
 
+	ret = register_trace_android_vh_throttle_direct_reclaim_bypass(vh_android_vh_throttle_direct_reclaim_bypass, NULL);
+	if (ret) {
+		pr_err("Failed to register throttle_direct_reclaim_bypass hooks ret=%d\n", ret);
+		return ret;
+	}
 out:
 	return ret;
 }
@@ -238,7 +252,7 @@ static void unregister_zram_opt_vendor_hooks(void)
 	unregister_trace_android_vh_init_adjust_zone_wmark(adjust_zone_wmark, NULL);
 #endif
 	unregister_trace_android_vh_tune_swappiness(zo_set_swappiness, NULL);
-
+	unregister_trace_android_vh_throttle_direct_reclaim_bypass(vh_android_vh_throttle_direct_reclaim_bypass, NULL);
 	return;
 }
 

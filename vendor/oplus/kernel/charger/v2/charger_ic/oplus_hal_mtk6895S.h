@@ -364,6 +364,8 @@ struct mtk_charger {
 	int wls_set_boost_vol;
 	struct oplus_mms *gauge_topic;
 	struct oplus_mms  *err_topic;
+	struct oplus_mms *vooc_topic;
+	struct mms_subscribe *vooc_subs;
 	int low_batt_otg_boost_curr_ua;
 	struct ntc_temp_parameters subboard_parameters;
 	struct temp_param *support_subboard_table;

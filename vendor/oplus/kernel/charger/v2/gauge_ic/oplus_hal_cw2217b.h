@@ -181,6 +181,7 @@ struct cw_battery {
 	int device_type;
 };
 
+bool oplus_gauge_check_chip_is_null(void);
 int oplus_vooc_get_fastchg_started(void);
 int oplus_vooc_get_fastchg_ing(void);
 #endif /* __OPLUS_CW2217B_H__ */

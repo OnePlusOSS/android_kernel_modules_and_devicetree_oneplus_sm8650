@@ -561,6 +561,19 @@ static int hbp_spi_probe(struct spi_device *spi_dev)
 		hbp_info("cs_setup %d %d\n", cs_setup[0], cs_setup[1]);
 	}
 
+#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
+#else
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+	if (cs_setup[0] == 0) {
+		bus->delay_params.spi_cs_clk_delay = 50;
+	} else {
+		bus->delay_params.spi_cs_clk_delay = cs_setup[0];
+	}
+	bus->delay_params.spi_inter_words_delay = cs_setup[1];
+	spi_dev->controller_data = (void *)&bus->delay_params;
+	hbp_info("qcom cs_setup %d %d\n", cs_setup[0], cs_setup[1]);
+#endif
+#endif
 	spi_set_drvdata(spi_dev, bus);
 
 	spi_platform->dev.parent = &spi_dev->dev;

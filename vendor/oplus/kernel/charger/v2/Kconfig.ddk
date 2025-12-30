@@ -16,6 +16,18 @@ config OPLUS_CHG_MMS_DEBUG
 	help
 	  Say Y here to declare message subscription layer debug interface
 
+config OPLUS_CHG_MMS_PUBLISH_USERSPACE
+	bool "Deliver messages to user space through uevent"
+	default n
+	help
+	  Say Y to enable
+
+config OPLUS_DEBUG_AUTH
+	bool "Debug authentication"
+	default n
+	help
+	  Say Y to enable debug authentication
+
 config OPLUS_SMART_CHARGE
 	bool "smart charge"
 	help
@@ -169,6 +181,18 @@ config OPLUS_HL7603_CHARGER
 	help
 	  Say Y here to declare hl7603 support
 
+menuconfig OPLUS_CHG_RECOVERY
+	bool "oplus charge recovery module"
+	help
+	  Say Y here to enable oplus charge recovery module
+
+if OPLUS_CHG_RECOVERY
+config OPLUS_CHG_STATE_KEEP
+	bool "state keep support"
+	help
+	  Say Y here to enable state keep support
+endif #OPLUS_CHG_RECOVERY
+
 menuconfig OPLUS_CHG_VOOCPHY
 	bool "OPLUS charging voocphy"
 	help
@@ -293,3 +317,8 @@ config OPLUS_SGM41515_CHARGER
 	bool "SGM41515 support"
 	help
 	  Say Y here to declare SGM41515 support
+
+config OPLUS_CANCEL_USB_SWITCH
+	bool "cancel usb switch support"
+	help
+	  Say Y here to declare cancel usb switch support

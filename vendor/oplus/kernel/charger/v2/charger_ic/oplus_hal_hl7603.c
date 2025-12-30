@@ -44,6 +44,7 @@ MODULE_PARM_DESC(hl7603_debug_track, "debug track");
 #define HL7603_FPWM_CFG_MASK		0x1
 #define HL7603_FPWM_CFG_FORCE_PWM	0x1
 #define HL7603_FPWM_CFG_AUTO_PFM	0x0
+#define HL7603_FPWM_CFG_AUTO_PFM_REG   0x68
 
 #define HL7603_VOUT_SEL_REG		0x02
 #define HL7603_ILIM_SET_REG		0x03
@@ -78,6 +79,14 @@ MODULE_PARM_DESC(hl7603_debug_track, "debug track");
 #define STATUS_MASK			0x12
 #define BOOST_STATUS_NORMAL		0x10
 #define BYPASS_STATUS_NORMAL		0x00
+
+#define HL7603X_REG_TEST_MODE               0xA7
+#define HL7603X_REG_TEST_MODE_OPEN          0xF9 // open success read 0x01
+#define HL7603X_REG_TEST_MODE_CLOSE         0x9F // close success read 0x00
+#define HL7603X_REG_TEST_MODE_CLOSE_STATUS  0x00
+#define HL7603X_REG_BOOST_CONTROL           0x22
+#define HL7603X_REG_BOOST_CONTROL_VAL       0x00
+#define HL7603X_BOOST_CONTROL_BIT6_MASK     0x40  /* bit6 mask */
 
 enum {
 	BYB_STATUS_FAULT = 0,
@@ -139,6 +148,8 @@ static bool hl7603_is_writeable_reg(struct device *dev, unsigned int reg)
 	case HL7603_ILIM_SET_REG:
 	case HL7603_CONFIG_2_REG:
 	case E2PROMCTRL_REG:
+	case HL7603X_REG_BOOST_CONTROL:
+	case HL7603X_REG_TEST_MODE:
 		return true;
 	default:
 		return false;
@@ -155,6 +166,8 @@ static bool hl7603_is_readable_reg(struct device *dev, unsigned int reg)
 	case HL7603_CONFIG_2_REG:
 	case HL7603_STATUS_REG:
 	case E2PROMCTRL_REG:
+	case HL7603X_REG_BOOST_CONTROL:
+	case HL7603X_REG_TEST_MODE:
 		return true;
 	default:
 		return false;
@@ -302,6 +315,67 @@ static int hl7603_get_id_status(struct chip_hl7603 *chip)
 	return gpio_value;
 }
 
+/*workround: Increase the time Q3 is turned off in boost mode to avoid high current backflow*/
+static void set_boost_control(struct chip_hl7603 *chip)
+{
+	int ret = 0;
+	unsigned int reg_val = 0;
+	unsigned int new_val = 0;
+
+	ret = hl7603_read(chip, HL7603X_REG_BOOST_CONTROL, &reg_val);
+	if (ret) {
+		chg_err("hl7603x read HL7603X_REG_BOOST_CONTROL i2c error:%d\n", ret);
+		return;
+	}
+	new_val = (u8)reg_val & ~HL7603X_BOOST_CONTROL_BIT6_MASK;
+
+	ret = hl7603_write(chip, HL7603X_REG_TEST_MODE, HL7603X_REG_TEST_MODE_OPEN);
+	if (ret) {
+		chg_err("hl7603x HL7603X_REG_TEST_MODE_OPEN i2c error:%d\n", ret);
+		return;
+	}
+
+	ret = hl7603_write(chip, HL7603X_REG_BOOST_CONTROL, new_val);
+	if (ret) {
+		chg_err("hl7603x HL7603X_REG_BOOST_CONTROL_VAL i2c error:%d\n", ret);
+	}
+
+	ret = hl7603_write(chip, HL7603X_REG_TEST_MODE, HL7603X_REG_TEST_MODE_CLOSE);
+	if (ret) {
+		chg_err("hl7603x HL7603X_REG_TEST_MODE_CLOSE i2c error:%d\n", ret);
+	}
+	chg_info("hl7603x: after w 0x%02x=0x%02x\n", HL7603X_REG_BOOST_CONTROL, (u8)new_val);
+}
+
+static void check_boost_control_twice(struct chip_hl7603 *chip)
+{
+	int ret = 0;
+	unsigned int reg_val = 0;
+	unsigned int reg_test_mode = 0;
+
+	ret = hl7603_read(chip, HL7603X_REG_BOOST_CONTROL, &reg_val);
+	chg_info("hl7603x: before r 0x%02x=0x%02x\n", HL7603X_REG_BOOST_CONTROL, (u8)reg_val);
+
+	if (!ret && ((u8)reg_val & HL7603X_BOOST_CONTROL_BIT6_MASK)) {
+		set_boost_control(chip);
+		ret = hl7603_read(chip, HL7603X_REG_BOOST_CONTROL, &reg_val);
+		if (!ret && ((u8)reg_val & HL7603X_BOOST_CONTROL_BIT6_MASK)) {
+			set_boost_control(chip);
+			hl7603_read(chip, HL7603X_REG_BOOST_CONTROL, &reg_val);
+		}
+
+		ret = hl7603_read(chip, HL7603X_REG_TEST_MODE, &reg_test_mode);
+		if (!ret && (u8)reg_test_mode != HL7603X_REG_TEST_MODE_CLOSE_STATUS) {
+			ret = hl7603_write(chip, HL7603X_REG_TEST_MODE, HL7603X_REG_TEST_MODE_CLOSE);
+			if (ret) {
+				chg_err("hl7603x HL7603X_REG_TEST_MODE_CLOSE error i2c error:%d\n", ret);
+			}
+		}
+	}
+
+	chg_info("hl7603x: after r 0x%02x=0x%02x\n", HL7603X_REG_BOOST_CONTROL, (u8)reg_val);
+}
+
 static int hl7603_gpio_init(struct chip_hl7603 *chip)
 {
 	struct device_node *node = oplus_get_node_by_type(chip->dev->of_node);
@@ -367,12 +441,13 @@ static int hl7603_hardware_init(struct chip_hl7603 *chip)
 		return 0;
 	}
 
+	check_boost_control_twice(chip);
 	rc = hl7603_write(chip, HL7603_VOUT_SEL_REG, vout_mv_to_reg(chip->vout_mv));
 	rc = hl7603_write(chip, HL7603_ILIM_SET_REG, hl7603_ilim_ma_to_reg(chip->ilim_ma));
 	rc = hl7603_read(chip, HL7603_CONFIG_1_REG, (unsigned int *)&buf[0]);
 
-	/* forced PWM mode. */
-	rc = hl7603_write(chip, HL7603_CONFIG_1_REG, (buf[0] | HL7603_FPWM_CFG_FORCE_PWM));
+	/* Auto PFM mode. */
+	rc = hl7603_write(chip, HL7603_CONFIG_1_REG, HL7603_FPWM_CFG_AUTO_PFM_REG);
 	rc = hl7603_read(chip, HL7603_CONFIG_1_REG, (unsigned int *)&buf[0]);
 	rc = hl7603_read(chip, HL7603_VOUT_SEL_REG, (unsigned int *)&buf[1]);
 	rc = hl7603_read(chip, HL7603_ILIM_SET_REG, (unsigned int *)&buf[2]);
@@ -480,6 +555,7 @@ static int hl7603_reg_dump(struct oplus_chg_ic_dev *ic_dev)
 	rc = hl7603_read(chip, HL7603_ILIM_SET_REG, (unsigned int *)&buf[2]);
 	rc = hl7603_read(chip, HL7603_CONFIG_2_REG, (unsigned int *)&buf[3]);
 	rc = hl7603_read(chip, HL7603_STATUS_REG, (unsigned int *)&buf[4]);
+	rc = hl7603_read(chip, HL7603X_REG_BOOST_CONTROL, (unsigned int *)&buf[5]);
 
 	chg_err("%*ph\n", HL7603_REG_CNT, buf);
 

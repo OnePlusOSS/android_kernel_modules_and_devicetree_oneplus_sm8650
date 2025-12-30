@@ -557,6 +557,26 @@ static bool ufcs_check_handshake(struct ufcs_class *class)
 	return true;
 }
 
+static void ufcs_check_exit_ufcs_ack(struct ufcs_class *class, unsigned int dev_err_flag)
+{
+	struct ufcs_msg_sender *sender;
+
+	sender = &class->sender;
+
+	if (sender->status == MSG_WAIT_ACK &&
+	    sender->msg &&
+	    sender->msg->head.type == UFCS_CTRL_MSG &&
+	    sender->msg->ctrl_msg.command == CTRL_MSG_EXIT_UFCS_MODE &&
+	    ((dev_err_flag & (BIT(UFCS_RECV_ERR_SENT_CMP) |
+			      BIT(UFCS_COMM_ERR_BUS_CONFLICT) |
+			      BIT(UFCS_RECV_ERR_TRANS_FAIL) |
+			      BIT(UFCS_RECV_ERR_ACK_TIMEOUT))) ==
+	     BIT(UFCS_RECV_ERR_SENT_CMP))) {
+		ufcs_info("flag=0x%x exit ufcs ack received\n", dev_err_flag);
+		class->exit_ufcs_ack_received = true;
+	}
+}
+
 static int ufcs_check_error_info(struct ufcs_class *class, unsigned int dev_err_flag)
 {
 	struct ufcs_msg_sender *sender;
@@ -568,7 +588,9 @@ static int ufcs_check_error_info(struct ufcs_class *class, unsigned int dev_err_
 		goto err;
 	}
 
-	if (dev_err_flag & BIT(UFCS_HW_ERR_HARD_RESET)) {
+	ufcs_check_exit_ufcs_ack(class, dev_err_flag);
+
+	if ((dev_err_flag & BIT(UFCS_HW_ERR_HARD_RESET)) && !class->exit_ufcs_ack_received) {
 		if (class->start_cable_detect) {
 			ufcs_send_state(UFCS_NOTIFY_CABLE_HW_RESET, NULL);
 			ufcs_err("cable hard reset\n");

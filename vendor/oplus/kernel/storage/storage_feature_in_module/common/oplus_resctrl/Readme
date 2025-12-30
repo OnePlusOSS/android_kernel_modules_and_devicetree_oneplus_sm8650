@@ -1,0 +1,19 @@
+changlog-20250417
+in-tree:
+	this is current build mode for oplus_resctrl module
+out-tree:
+	if swith out-tree build
+	just firstly:
+	1 rename
+	BUILD.bazel.outtree to BUILD.bazel
+	oplus_local_modules.bzl.outtree to
+	oplus_local_module.bzl.
+	2 then you need change other git repo codes
+	it just configure to out-tree build and
+	remove in-tree build
+
+changlog-20250418
+now use out-tree as default
+changelog-20250422
+	for Kconfig&Makefile will confict with bazel
+in outtree mode,must remove or rename Kconfig&Makefile

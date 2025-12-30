@@ -3,8 +3,6 @@
 
 #include <linux/device.h>
 #include <oplus_chg.h>
-#include <oplus_chg_voter.h>
-#include <oplus_chg_ic.h>
 #include <oplus_mms.h>
 #include <oplus_chg_comm.h>
 #include <oplus_chg_monitor.h>
@@ -114,6 +112,8 @@ struct oplus_monitor {
 	struct oplus_mms *plc_topic;
 	struct mms_subscribe *plc_subs;
 	struct oplus_mms *pps_topic;
+	struct mms_subscribe *keep_subs;
+	struct oplus_mms *keep_topic;
 
 	struct oplus_chg_track *track;
 
@@ -299,6 +299,10 @@ struct oplus_monitor {
 	bool retention_state;
 	bool pre_retention_state;
 	int total_disconnect_count;
+
+	/* state keep */
+	bool switch_protocol;
+	bool keep_wired_online;
 };
 
 struct oplus_chg_into_l{

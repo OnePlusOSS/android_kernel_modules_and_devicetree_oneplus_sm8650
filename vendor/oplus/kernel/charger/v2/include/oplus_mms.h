@@ -35,6 +35,7 @@ enum oplus_mms_type {
 	OPLUS_MMS_TYPE_LEVEL_SHIFT,
 	OPLUS_MMS_TYPE_RETENTION,
 	OPLUS_MMS_TYPE_PLC,
+	OPLUS_MMS_TYPE_STATE_KEEP,
 };
 
 enum mms_msg_type {
@@ -75,6 +76,10 @@ struct mms_item {
 	struct mutex update_lock;
 	union mms_msg_data data;
 	union mms_msg_data pre_data;
+#if IS_ENABLED(CONFIG_OPLUS_CHG_MMS_DEBUG) && IS_ENABLED(CONFIG_OPLUS_DEBUG_AUTH)
+	bool overwritten;
+	union mms_msg_data overwrite_data;
+#endif
 };
 
 enum mms_msg_payload {
@@ -152,8 +157,10 @@ struct oplus_mms {
 
 #ifdef CONFIG_OPLUS_CHG_MMS_DEBUG
 	u32 debug_item_id;
-	struct mms_subscribe *debug_subs;
 #endif /* CONFIG_OPLUS_CHG_MMS_DEBUG */
+#if IS_ENABLED(CONFIG_OPLUS_CHG_MMS_PUBLISH_USERSPACE)
+	struct mms_subscribe *userspace_subs;
+#endif /* CONFIG_OPLUS_CHG_MMS_PUBLISH_USERSPACE */
 };
 
 typedef void (*mms_callback_t)(struct oplus_mms *topic, void *data);

@@ -376,6 +376,7 @@ struct oplus_chg_wls_dynamic_config {
 	int32_t epp_high_temp_thr;
 	uint32_t boot_quiet_t;
 	uint32_t camera_icl_limit;
+	uint32_t camera_handle_icl_limit;
 } __attribute__((packed));
 
 struct oplus_wls_chg_rx {
@@ -449,6 +450,7 @@ struct oplus_chg_wls_bt_info {
 	int connect;
 	int incar;
 	int carlink;
+	int bttype;
 };
 
 struct wls_track_record {
@@ -850,10 +852,10 @@ static struct wls_adapter_curve_table adapter_curves_table[] = {
 	{0x24, {{25, 30, 64, 290}, {20, 25, 64, -1}}}, {0x25, {{25, 30, 64, 290}, {20, 25, 64, -1}}},
 	{0x26, {{25, 30, 64, 290}, {20, 25, 64, -1}}}, {0x27, {{25, 30, 64, 290}, {20, 25, 64, -1}}},
 	/* 65W */
-	{0x14, {{35, 35, 64, 290}, {25, 30, 64, 600}, {25, 25, 64, -1}}}, {0x28, {{35, 35, 64, 290}, {25, 30, 64, 600}, {25, 25, 64, -1}}},
-	{0x2A, {{35, 35, 64, 290}, {25, 30, 64, 600}, {25, 25, 64, -1}}}, {0x35, {{35, 35, 64, 290}, {25, 30, 64, 600}, {25, 25, 64, -1}}},
-	{0x63, {{35, 35, 64, 290}, {25, 30, 64, 600}, {25, 25, 64, -1}}}, {0x66, {{35, 35, 64, 290}, {25, 30, 64, 600}, {25, 25, 64, -1}}},
-	{0x6E, {{35, 35, 64, 290}, {25, 30, 64, 600}, {25, 25, 64, -1}}}, {0x04, {{35, 35, 64, 290}, {25, 30, 64, 600}, {25, 25, 64, -1}}},
+	{0x14, {{35, 35, 64, 290}, {25, 30, 64, 600}, {20, 25, 64, -1}}}, {0x28, {{35, 35, 64, 290}, {25, 30, 64, 600}, {20, 25, 64, -1}}},
+	{0x2A, {{35, 35, 64, 290}, {25, 30, 64, 600}, {20, 25, 64, -1}}}, {0x35, {{35, 35, 64, 290}, {25, 30, 64, 600}, {20, 25, 64, -1}}},
+	{0x63, {{35, 35, 64, 290}, {25, 30, 64, 600}, {20, 25, 64, -1}}}, {0x66, {{35, 35, 64, 290}, {25, 30, 64, 600}, {20, 25, 64, -1}}},
+	{0x6E, {{35, 35, 64, 290}, {25, 30, 64, 600}, {20, 25, 64, -1}}}, {0x04, {{35, 35, 64, 290}, {25, 30, 64, 600}, {20, 25, 64, -1}}},
 
 	/* 66W */
 	{0x2B, {{35, 35, 64, 170}, {25, 30, 64, 180}, {25, 25, 64, -1}}}, {0x36, {{35, 35, 64, 170}, {25, 30, 64, 180}, {25, 25, 64, -1}}},
@@ -1153,6 +1155,33 @@ static int oplus_chg_wls_get_base_power_max(u8 id)
 	}
 
 	return pwr;
+}
+
+static void oplus_chg_wls_cam_scene_icl_limit(struct oplus_chg_wls *wls_dev)
+{
+	if (!wls_dev) {
+		chg_err("wls_dev is null\n");
+		return;
+	}
+
+	if (wls_dev->mms_info.rx_present != 1)
+		return;
+
+	if (wls_dev->dynamic_config.camera_handle_icl_limit > 0 &&
+	    wls_dev->bt_info.connect == 1 && wls_dev->bt_info.bttype == BT_MAG_HANDLE) {
+		cancel_delayed_work_sync(&wls_dev->wls_nor->icl_set_work);
+		vote(wls_dev->nor_icl_votable, WLS_CAMERA_MODE_VOTER, true,
+		     wls_dev->dynamic_config.camera_handle_icl_limit, false);
+		return;
+	}
+
+	if (wls_dev->dynamic_config.camera_icl_limit > 0) {
+		cancel_delayed_work_sync(&wls_dev->wls_nor->icl_set_work);
+		vote(wls_dev->nor_icl_votable, WLS_CAMERA_MODE_VOTER, true,
+		     wls_dev->dynamic_config.camera_icl_limit, false);
+	}
+
+	return;
 }
 
 static void oplus_chg_wls_adapter_curve_vote_work(struct work_struct *work)
@@ -4416,7 +4445,7 @@ static void oplus_chg_wls_update_track_info(struct oplus_chg_wls *wls_dev,
 			"magcvr=%d,verify_by_aes=%d,tx_manu_id=%d,"
 			"vendor_id=0x%x,product_id=0x%x,last_cep=%d,"
 			"epp_to_bpp_connect_time=%lums,bt_connect=%d,bt_incar=%d,"
-			"bt_car+=%d,bt_name=%s,ldo_on=%d,max_vrect=%d" "%s",
+			"bt_car+=%d,bt_type=%d,bt_name=%s,ldo_on=%d,max_vrect=%d" "%s",
 			trx_version, rx_version, wls_status->adapter_type,
 			wls_status->adapter_id, wls_status->fastchg_started, wls_status->vout_mv,
 			wls_status->iout_ma, wls_status->break_count, wls_status->trx_err,
@@ -4425,8 +4454,8 @@ static void oplus_chg_wls_update_track_info(struct oplus_chg_wls *wls_dev,
 			wls_dev->magcvr_status, wls_status->verify_by_aes, wls_status->tx_manu_id,
 			wls_status->vendor_id, wls_status->product_id, wls_status->last_cep,
 			wls_status->epp_to_bpp_connect_time, wls_dev->bt_info.connect, wls_dev->bt_info.incar,
-			wls_dev->bt_info.carlink, wls_dev->bt_info.name, wls_status->track_record.ldo_on,
-			wls_status->track_record.max_vrect, v30_info_buf);
+			wls_dev->bt_info.carlink, wls_dev->bt_info.bttype, wls_dev->bt_info.name,
+			wls_status->track_record.ldo_on, wls_status->track_record.max_vrect, v30_info_buf);
 		chg_info("%s\n", crux_info);
 	}
 }
@@ -5383,12 +5412,12 @@ ssize_t oplus_chg_wls_rx_disable_store(struct oplus_mms *mms, const char *buf, s
 	return count;
 }
 
-#define BT_INFO_PARAM_NUM	4
 ssize_t oplus_chg_wls_bt_info_store(struct oplus_mms *mms, const char *buf, size_t count)
 {
 	struct oplus_chg_wls *wls_dev = NULL;
 	char test_buf[4] = { '\0' };
 	char *name_str = NULL;
+	int parsed_params = 0;
 
 	if (!buf) {
 		chg_err("buf is NULL\n");
@@ -5400,10 +5429,25 @@ ssize_t oplus_chg_wls_bt_info_store(struct oplus_mms *mms, const char *buf, size
 	}
 
 	wls_dev = oplus_mms_get_drvdata(mms);
-	if (sscanf(buf, "btconnect=%dbtincar=%dcarlink=%dbtname=%1s", &wls_dev->bt_info.connect,
-		&wls_dev->bt_info.incar, &wls_dev->bt_info.carlink, test_buf) != BT_INFO_PARAM_NUM) {
-		chg_err("buf format error\n");
-		return -EINVAL;
+	parsed_params = sscanf(buf, "btconnect=%dbtincar=%dcarlink=%dbttype=%dbtname=%1s",
+	                      &wls_dev->bt_info.connect,
+	                      &wls_dev->bt_info.incar,
+	                      &wls_dev->bt_info.carlink,
+	                      &wls_dev->bt_info.bttype,
+	                      test_buf);
+
+	if (parsed_params != 5) {
+		parsed_params = sscanf(buf, "btconnect=%dbtincar=%dcarlink=%dbtname=%1s",
+		                       &wls_dev->bt_info.connect,
+		                       &wls_dev->bt_info.incar,
+		                       &wls_dev->bt_info.carlink,
+		                       test_buf);
+		if (parsed_params == 4) {
+			wls_dev->bt_info.bttype = 0;
+		} else {
+			chg_err("buf format error\n");
+			return -EINVAL;
+		}
 	}
 	name_str = strstr(buf, "btname=");
 	if (name_str) {
@@ -5411,8 +5455,8 @@ ssize_t oplus_chg_wls_bt_info_store(struct oplus_mms *mms, const char *buf, size
 		memset(wls_dev->bt_info.name, '\0', sizeof(wls_dev->bt_info.name));
 		strncpy(wls_dev->bt_info.name, name_str, sizeof(wls_dev->bt_info.name) - 1);
 	}
-	chg_info("connect[%d], incar[%d], car+[%d], name[%s]\n", wls_dev->bt_info.connect, wls_dev->bt_info.incar,
-		wls_dev->bt_info.carlink, wls_dev->bt_info.name);
+	chg_info("connect[%d], incar[%d], car+[%d], bttype[%d], name[%s]\n", wls_dev->bt_info.connect, wls_dev->bt_info.incar,
+		wls_dev->bt_info.carlink, wls_dev->bt_info.bttype, wls_dev->bt_info.name);
 
 	return count;
 }
@@ -6669,6 +6713,7 @@ static int oplus_chg_wls_fastchg_restart_check(struct oplus_chg_wls *wls_dev)
 	int ibat_ma = 0;
 	int vbat_mv = 0;
 	int rc;
+	static int cnt = 0;
 
 	if (wls_status->switch_quiet_mode || !wls_dev->batt_charge_enable)
 		return -EPERM;
@@ -6694,7 +6739,16 @@ static int oplus_chg_wls_fastchg_restart_check(struct oplus_chg_wls *wls_dev)
 	rc = oplus_chg_wls_get_vbat(wls_dev, &vbat_mv);
 	if ((rc < 0) || vbat_mv >= dynamic_cfg->fastch_max_vbat_mv[temp_region]) {
 		chg_err("can't get vbat, or vbat is too high rc=%d\n", rc);
+		cnt = 0;
 		return -EPERM;
+	} else if (vbat_mv < dynamic_cfg->fastch_max_vbat_mv[temp_region] && cnt < 1) {
+		cnt++;
+		chg_err("vbat is lower than fastch_max_vbat_mv, vbat_mv=%d, cnt=%d,"
+			"fastch_max_vbat_mv=%d\n", vbat_mv, cnt,
+			dynamic_cfg->fastch_max_vbat_mv[temp_region]);
+		return -EPERM;
+	} else {
+		cnt = 0;
 	}
 
 	rc = oplus_chg_wls_get_ibat(wls_dev, &ibat_ma);
@@ -11790,6 +11844,13 @@ static int oplus_chg_wls_parse_dt(struct oplus_chg_wls *wls_dev)
 		chg_info("camera_icl_limit: %d\n", dynamic_cfg->camera_icl_limit);
 	}
 
+	rc = of_property_read_u32(node, "oplus,camera_handle_icl_limit", &dynamic_cfg->camera_handle_icl_limit);
+	if (rc < 0) {
+		chg_info("oplus,camera_handle_icl_limit reading failed, rc=%d\n", rc);
+		dynamic_cfg->camera_handle_icl_limit = 0;
+	} else {
+		chg_info("camera_handle_icl_limit: %d\n", dynamic_cfg->camera_handle_icl_limit);
+	}
 
 	return 0;
 }
@@ -12206,10 +12267,10 @@ static ssize_t oplus_chg_wls_proc_user_sleep_mode_write(struct file *file,
 		vote(wls_dev->nor_icl_votable, WLS_CAMERA_MODE_VOTER, false, 0, false);
 	} else if (pmw_pulse == WLS_CAMERA_MODE && wls_dev->rx_protocol_version >= WLS_RX_PROTOCOL_VERSION_30) {
 		wls_dev->wls_status.track_record.pmw_scenarios = pmw_pulse;
-		if (wls_dev->dynamic_config.camera_icl_limit > 0 && wls_dev->mms_info.rx_present == 1 &&
+		if (wls_dev->mms_info.rx_present == 1 &&
 		    wls_dev->wls_status.wls_type == OPLUS_CHG_WLS_BPP)
-			vote(wls_dev->nor_icl_votable, WLS_CAMERA_MODE_VOTER, true,
-			     wls_dev->dynamic_config.camera_icl_limit, false);
+			oplus_chg_wls_cam_scene_icl_limit(wls_dev);
+
 		if (wls_dev->force_rx_mode == OPLUS_CHG_WLS_RX_MODE_BPP) {
 			cancel_delayed_work(&wls_dev->rx_mode_check_work);
 			schedule_delayed_work(&wls_dev->rx_mode_check_work,
@@ -13319,6 +13380,13 @@ static int oplus_chg_wls_epp_force_to_bpp_loop_check(struct oplus_chg_wls *wls_d
 	int rc = 0;
 	enum oplus_chg_wls_rx_mode rx_mode;
 
+#ifndef CONFIG_DISABLE_OPLUS_FUNCTION
+	if (get_eng_version() == HIGH_TEMP_AGING || get_eng_version() == FACTORY) {
+		chg_err("factory/high temp version, skip epp force bpp\n");
+		return rc;
+	}
+#endif
+
 	oplus_chg_wls_rx_get_rx_mode(wls_dev->wls_rx->rx_ic, &rx_mode);
 	if (rc < 0) {
 		chg_err("get rx mode error, rc=%d\n", rc);
@@ -13365,8 +13433,8 @@ static void oplus_chg_wls_epp_force_to_bpp_check_handler(struct oplus_chg_wls *w
 		return;
 
 #ifndef CONFIG_DISABLE_OPLUS_FUNCTION
-	if (get_eng_version() != OEM_RELEASE) {
-		chg_err("get_eng_version is not OEM_RELEASE\n");
+	if (get_eng_version() == HIGH_TEMP_AGING || get_eng_version() == FACTORY) {
+		chg_err("factory/high temp version, skip epp force bpp\n");
 		return;
 	}
 #endif
@@ -13450,10 +13518,8 @@ static void oplus_chg_wls_present_handler_work(struct work_struct *work)
 	if (wls_dev->mms_info.rx_present == 1) {
 		if (wls_dev->force_rx_mode == OPLUS_CHG_WLS_RX_MODE_BPP) {
 			vote(wls_dev->rx_disable_votable, CONNECT_VOTER, false, 0, false);
-			if (wls_dev->dynamic_config.camera_icl_limit > 0 &&
-			    (get_client_vote(wls_dev->force_bpp_mode_votable, WLS_CAMERA_MODE_VOTER) > 0))
-				vote(wls_dev->nor_icl_votable, WLS_CAMERA_MODE_VOTER, true,
-				     wls_dev->dynamic_config.camera_icl_limit, false);
+			if (get_client_vote(wls_dev->force_bpp_mode_votable, WLS_CAMERA_MODE_VOTER) > 0)
+				oplus_chg_wls_cam_scene_icl_limit(wls_dev);
 		}
 		oplus_chg_wls_rx_set_rx_mode_safety(wls_dev, OPLUS_CHG_WLS_RX_MODE_UNKNOWN);
 		oplus_chg_wls_rx_get_vrect(wls_dev->wls_rx->rx_ic, &wls_dev->wls_status.track_record.max_vrect);

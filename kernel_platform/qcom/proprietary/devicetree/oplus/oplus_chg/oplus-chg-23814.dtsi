@@ -80,6 +80,9 @@
 		oplus,gauge_ic = <&oplus_virtual_gauge>;
 		oplus,topic-update-interval = <5000>;
 		oplus,support_subboard_ntc;
+		oplus,fcl_support;
+		oplus,fcl_index = <0>;
+		oplus,vb_offset = <0>;
 
 		oplus_virtual_gauge: oplus,virtual_gauge {
 			compatible = "oplus,virtual_gauge";
@@ -227,6 +230,7 @@
 					OPLUS_IC_FUNC_GAUGE_GET_DEEP_TERM_VOLT
 					OPLUS_IC_FUNC_GAUGE_SET_LAST_CC
 					OPLUS_IC_FUNC_GAUGE_GET_LAST_CC
+					OPLUS_IC_FUNC_GAUGE_GET_GAUGE_R_INFO
 				>;
 				virqs = <
 					OPLUS_IC_VIRQ_ERR
@@ -336,6 +340,9 @@
 
 	oplus_chg_comm: oplus,comm {
 		compatible = "oplus,common-charge";
+		oplus_spec,dec_step = <20>;
+		oplus_spec,dec-vol-cc-full-thr = <0 400 600 800 1000 1200>;
+		oplus_spec,dec-vol-fv-full-mv = <0 20 20 40 40 40>;
 		oplus_spec,batt-them-thr = <(-100) 0 50 120 160 350 450 530>;
 		oplus_spec,iterm-ma = <149>;
 		oplus_spec,fv-mv = <4470 4470 4470 4470 4470 4470 4470 4130 4130>;
@@ -374,6 +381,7 @@
 							10 20>;
 		oplus_spec,wired-aging-ffc-cycle-thr = <500 1000>;
 
+		oplus_spec,support_gauge_r_track;
 		oplus_spec,vbat_uv_thr_mv = <3300>;
 		oplus_spec,vbat_charging_uv_thr_mv = <3200>;
 
@@ -391,6 +399,7 @@
 		oplus,smooth_switch;
 		oplus,reserve_chg_soc = <3>;
 		oplus,reserve_dis_soc = <3>;
+		oplus_spec,batt_full_time = <300>;
 	};
 
 	oplus_vooc: oplus,vooc {
@@ -462,6 +471,15 @@
 		pinctrl-5 = <&dpdm_switch_ufcs>;
 	};
 
+	oplus_chg_quirks: oplus,chg_quirks {
+			compatible = "oplus,chg_quirks";
+	};
+	oplus_retention_charge: oplus,retention_charge {
+			compatible = "oplus,retention_charge";
+			oplus,topic-update-interval = <5000>;
+			oplus,support_retention_name = "oplus_retention_quirks";
+	};
+
 	oplus_smart_charge: oplus,smart_charge {
 		compatible = "oplus,smart_charge";
 		oplus,quick_mode_gain_support;
@@ -515,12 +533,12 @@
 	oplus_cpa: oplus,cpa {
 		compatible = "oplus,cpa";
 		oplus,protocol_list = <CHG_PROTOCOL_UFCS 33
-				       CHG_PROTOCOL_PD 18
 				       CHG_PROTOCOL_VOOC 100
+				       CHG_PROTOCOL_PD 18
 				       CHG_PROTOCOL_QC 18>;
 		oplus,default_protocol_list = <CHG_PROTOCOL_UFCS
-					       CHG_PROTOCOL_PD
-					       CHG_PROTOCOL_VOOC>;
+					       CHG_PROTOCOL_VOOC
+					       CHG_PROTOCOL_PD>;
 	};
 
 	oplus_ufcs_virtual_cp: oplus,ufcs_virtual_cp {
@@ -1468,6 +1486,17 @@
 		pinctrl-0 = <&bq27541_id_not_pull>;
 		pinctrl-1 = <&bq27541_id_pull_up>;
 		pinctrl-2 = <&bq27541_id_pull_down>;
+
+		oplus,bq28z610_afi_buf = /bits/ 8 <
+			/* checksum data_len data+ */
+			0x24 0x03 0x90 0x45 0x06 /* MIN_RES_POINTS 6 */
+			0x24 0x03 0x91 0x45 0x05 /* RA_MAX_DELTA 5 */
+			0xd8 0x03 0xe8 0x45 0xfa /* SOH_LOAD_RATE 250 */
+			0x2 0x04 0x94 0x45 0x25 0xff /* RES_PARA_FILTER 65317 */
+			0x3d 0x04 0x96 0x45 0xed 0xfa /* RA_PARA_FILTER 64237 */
+			0xeb 0x03 0x89 0x45 0x46 /* MIN_DOD_RES 70 */
+			0x73 0x04 0x8e 0x45 0xb6 0x3 /* RA_PARA_FILTER 950 */
+			>;
 	};
 };
 

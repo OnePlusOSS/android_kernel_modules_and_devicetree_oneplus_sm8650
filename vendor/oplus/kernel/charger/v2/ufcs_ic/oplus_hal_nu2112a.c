@@ -2575,7 +2575,7 @@ static const struct dev_pm_ops nu2112a_pm_ops = {
 	.suspend = nu2112a_pm_suspend,
 };
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 static void nu2112a_driver_remove(struct i2c_client *client)
 {
 	struct oplus_voocphy_manager *chip = i2c_get_clientdata(client);

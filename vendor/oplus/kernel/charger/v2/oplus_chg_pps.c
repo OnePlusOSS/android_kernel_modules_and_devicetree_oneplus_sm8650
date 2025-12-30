@@ -396,6 +396,7 @@ struct oplus_pps {
 	bool support_cp_ibus;
 	bool support_pps_status;
 	int pps_curr_ma_from_pps_status;
+	atomic_t cp_offline;
 
 	int ui_soc;
 	int shell_temp;
@@ -403,6 +404,7 @@ struct oplus_pps {
 	bool shell_temp_ready;
 	int adapter_max_curr;
 	int boot_time;
+	int allow_check_soc;
 
 	int pps_fastchg_batt_temp_status;
 	int pps_temp_cur_range;
@@ -1552,10 +1554,12 @@ static bool oplus_pps_charge_allow_check(struct oplus_pps *chip)
 	}
 
 	if (chip->ui_soc < chip->limits.pps_strategy_soc_over_low ||
-	    chip->ui_soc > chip->limits.pps_strategy_soc_high)
+	    chip->ui_soc > chip->limits.pps_strategy_soc_high) {
 		vote(chip->pps_not_allow_votable, BATT_SOC_VOTER, true, 1, false);
-	else
+	} else {
 		vote(chip->pps_not_allow_votable, BATT_SOC_VOTER, false, 0, false);
+		chip->allow_check_soc = chip->ui_soc;
+	}
 
 	oplus_pps_charge_btb_allow_check(chip);
 
@@ -1659,6 +1663,7 @@ static void oplus_pps_variables_init(struct oplus_pps *chip)
 	chip->request_vbus_too_low_flag = false;
 	chip->ss_check = false;
 	chip->fcl_trigger = false;
+	chip->allow_check_soc = chip->ui_soc;
 
 	chip->timer.fastchg_timer = oplus_current_kernel_time();
 	chip->timer.temp_timer = oplus_current_kernel_time();
@@ -1975,6 +1980,7 @@ static int oplus_pps_charge_start(struct oplus_pps *chip)
 	int batt_num;
 	int soc;
 	const char temp_region[] = "temp_region";
+	const char allow_soc[] = "allow_soc";
 
 #define PPS_START_VOL_THR_4_TO_1_600MV	600
 #define PPS_START_VOL_THR_3_TO_1_400MV	400
@@ -2064,6 +2070,7 @@ static int oplus_pps_charge_start(struct oplus_pps *chip)
 					else
 						chip->strategy = chip->third_curve_strategy;
 					oplus_chg_strategy_set_process_data(chip->strategy, temp_region, chip->pps_temp_cur_range);
+					oplus_chg_strategy_set_process_data(chip->strategy, allow_soc, chip->allow_check_soc);
 					rc = oplus_chg_strategy_init(chip->strategy);
 					if (rc < 0) {
 						chg_err("strategy_init error, not support pps fast charge\n");
@@ -3351,7 +3358,8 @@ static int oplus_pps_set_fcl_curr(struct oplus_pps *chip)
 
 		fcl_limit = ROUND_DOWN(fcl_limit, 50);
 		if (fcl_limit)
-			vote(chip->pps_curr_votable, LIMIT_FCL_VOTER, true, fcl_limit, false);
+			vote(chip->pps_curr_votable, LIMIT_FCL_VOTER, true,
+				max(fcl_limit, oplus_pps_get_start_curr_min(chip)), false);
 		else
 			vote(chip->pps_curr_votable, LIMIT_FCL_VOTER, false, 0, false);
 	}
@@ -3526,7 +3534,11 @@ static int oplus_third_pps_target_voltage_check(struct oplus_pps *chip)
 	} else {
 		allowed_vbus_min = msg_data.intval * batt_num * chip->cp_ratio;
 	}
-
+	if (chip->curr_set_ma != chip->target_curr_ma) {
+		chg_info("Now current is %d, Adapter Request current is %d, Now voltage is %d\n",
+			chip->curr_set_ma, chip->target_curr_ma, chip->vol_set_mv);
+		return chip->vol_set_mv;
+	}
 	if (!chip->support_cp_ibus) {
 		/* default common resistor 0.35ohm, calculate the best request-vbus */
 		vtarget_mv = allowed_vbus_min + chip->target_curr_ma * 35 / 100;
@@ -3783,23 +3795,22 @@ static void oplus_pps_current_work(struct work_struct *work)
 #define PPS_CURR_CHANGE_UPDATE_DELAY	500
 #define PPS_CURR_NO_CHANGE_UPDATE_DELAY	500
 
-	if (chip->oplus_pps_adapter) {
-		if (abs(chip->curr_set_ma - chip->target_curr_ma) >= OPLUS_PPS_CURR_UPDATE_300MA)
-			update_size = OPLUS_PPS_CURR_UPDATE_300MA;
-		else
-			update_size = OPLUS_PPS_CURR_UPDATE_100MA;
-		curr_set = chip->curr_set_ma;
+	if (abs(chip->curr_set_ma - chip->target_curr_ma) >= OPLUS_PPS_CURR_UPDATE_500MA)
+		update_size = OPLUS_PPS_CURR_UPDATE_500MA;
+	else if (abs(chip->curr_set_ma - chip->target_curr_ma) >= OPLUS_PPS_CURR_UPDATE_300MA)
+		update_size = OPLUS_PPS_CURR_UPDATE_300MA;
+	else if (abs(chip->curr_set_ma - chip->target_curr_ma) >= OPLUS_PPS_CURR_UPDATE_100MA)
+		update_size = OPLUS_PPS_CURR_UPDATE_100MA;
+	else
+		update_size = OPLUS_PPS_CURR_UPDATE_50MA;
+	curr_set = chip->curr_set_ma;
 
-		if ((curr_set > chip->target_curr_ma) && ((curr_set - chip->target_curr_ma) >= update_size))
-			curr_set -= update_size;
-		else if ((chip->target_curr_ma > curr_set) && ((chip->target_curr_ma - curr_set) >= update_size))
-			curr_set += update_size;
-		else
-			curr_set = chip->target_curr_ma;
-	} else {
-		/* third pps adapter */
+	if ((curr_set > chip->target_curr_ma) && ((curr_set - chip->target_curr_ma) >= update_size))
+		curr_set -= update_size;
+	else if ((chip->target_curr_ma > curr_set) && ((chip->target_curr_ma - curr_set) >= update_size))
+		curr_set += update_size;
+	else
 		curr_set = chip->target_curr_ma;
-	}
 
 #define OPLUS_PPS_STATUS_ABNORMAL (7000)
 	if (chip->enable_pps_status && !chip->support_cp_ibus && chip->support_pps_status) {
@@ -3940,8 +3951,8 @@ static void oplus_pps_gauge_update_work(struct work_struct *work)
 	struct oplus_pps *chip =
 		container_of(work, struct oplus_pps, gauge_update_work);
 
-#define PPS_RECOVERY_IBAT_THD (-1000)
-#define PPS_RECOVERY_IBAT_TIMES (5)
+#define PPS_RECOVERY_IBAT_THD (-600)
+#define PPS_RECOVERY_IBAT_TIMES (3)
 
 	if (chip->pps_not_allow)
 		oplus_pps_charge_allow_check(chip);
@@ -3952,15 +3963,17 @@ static void oplus_pps_gauge_update_work(struct work_struct *work)
 	else
 		wired_type = msg_data.intval;
 
-
 	if ((wired_type == OPLUS_CHG_USB_TYPE_PD_PPS) &&
 	    is_client_vote_enabled(chip->pps_disable_votable, PPS_IBAT_ABNOR_VOTER)) {
 		rc = oplus_mms_get_item_data(chip->gauge_topic, GAUGE_ITEM_CURR, &msg_data, true);
 		if (unlikely(rc < 0)) {
 			chg_err("can't get ibat, rc=%d\n", rc);
 		} else {
+			chg_info("current = %d, recovery=%d, pd_pps is disable by the PPS_IBAT_ABNOR_VOTER\n",
+				 msg_data.intval, chip->count.pps_recovery);
 			if (msg_data.intval < PPS_RECOVERY_IBAT_THD) {
-				if (chip->count.pps_recovery > PPS_RECOVERY_IBAT_TIMES) {
+				if (chip->count.pps_recovery >= PPS_RECOVERY_IBAT_TIMES) {
+					chg_info("retry to recovery the pps charging!\n");
 					vote(chip->pps_disable_votable, PPS_IBAT_ABNOR_VOTER, false, 0, false);
 					oplus_cpa_request(chip->cpa_topic, CHG_PROTOCOL_PPS);
 				}
@@ -4489,10 +4502,8 @@ static void oplus_pps_subscribe_gauge_topic(struct oplus_mms *topic,
 		chip->batt_auth = !!data.intval;
 	}
 
-	if (!chip->batt_hmac || !chip->batt_auth) {
-		vote(chip->pps_disable_votable, NON_STANDARD_VOTER, true, 1,
-		     false);
-	}
+	chg_info("hmac=%d, authenticate=%d\n", chip->batt_hmac, chip->batt_auth);
+	vote(chip->pps_disable_votable, NON_STANDARD_VOTER, !chip->batt_hmac || !chip->batt_auth, 0, false);
 
 	oplus_gauge_get_fcl_support(chip->gauge_topic, &chip->fcl_support);
 
@@ -5146,14 +5157,16 @@ static void oplus_pps_cp_online_handler_work(struct work_struct *work)
 {
 	struct oplus_pps *chip =
 		container_of(work, struct oplus_pps, cp_online_handler_work);
-	vote(chip->pps_disable_votable, CP_OFFLINE_VOTER, false, false, false);
+	bool cp_offline = !!atomic_read(&chip->cp_offline);
+	vote(chip->pps_disable_votable, CP_OFFLINE_VOTER, cp_offline, cp_offline, false);
 }
 
 static void oplus_pps_cp_offline_handler_work(struct work_struct *work)
 {
 	struct oplus_pps *chip =
 		container_of(work, struct oplus_pps, cp_offline_handler_work);
-	vote(chip->pps_disable_votable, CP_OFFLINE_VOTER, true, true, false);
+	bool cp_offline = !!atomic_read(&chip->cp_offline);
+	vote(chip->pps_disable_votable, CP_OFFLINE_VOTER, cp_offline, cp_offline, false);
 }
 
 static void oplus_pps_cp_err_handler(struct oplus_chg_ic_dev *ic_dev, void *virq_data)
@@ -5168,6 +5181,7 @@ static void oplus_pps_cp_online_handler(struct oplus_chg_ic_dev *ic_dev, void *v
 	struct oplus_pps *chip = virq_data;
 
 	chg_info("%s online\n", ic_dev->manu_name);
+	atomic_set(&chip->cp_offline, 0);
 	schedule_work(&chip->cp_online_handler_work);
 }
 
@@ -5176,6 +5190,7 @@ static void oplus_pps_cp_offline_handler(struct oplus_chg_ic_dev *ic_dev, void *
 	struct oplus_pps *chip = virq_data;
 
 	chg_err("%s offline\n", ic_dev->manu_name);
+	atomic_set(&chip->cp_offline, 1);
 	schedule_work(&chip->cp_offline_handler_work);
 }
 
@@ -6052,6 +6067,7 @@ static int oplus_pps_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, chip);
 
 	oplus_pps_parse_dt(chip);
+	atomic_set(&chip->cp_offline, 0);
 	INIT_DELAYED_WORK(&chip->switch_check_work, oplus_pps_switch_check_work);
 	INIT_DELAYED_WORK(&chip->monitor_work, oplus_pps_monitor_work);
 	INIT_DELAYED_WORK(&chip->current_work, oplus_pps_current_work);

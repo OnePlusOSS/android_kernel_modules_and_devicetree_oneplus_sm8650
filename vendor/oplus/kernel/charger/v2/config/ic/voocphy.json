@@ -377,8 +377,30 @@
                     }
                 }
             }
+        },
+       {
+            "lable": "OPLUS_IC_FUNC_VOOCPHY_GET_FASTCHG_COMMU_ING",
+            "desc": {
+                "zh": "获取快充通讯状态"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["bool *"],
+            "parameter_desc": [
+                {
+                    "range": "0-1",
+                    "type": "out",
+                    "desc": {
+                        "zh": "1: 通讯中, 0: 非通讯"
+                    }
+                }
+            ],
+            "vict": {
+                "read": false,
+                "write": false,
+                "overwrite": false
+            }
         }
     ],
 
-    "version": "V3.3:17:2498c325612c5e7fe05a81d386cd1133f1698669f3a96a32c390d8753959ba8e"
+    "version": "V4.0:18:db9aeec608c5e38b0647e983591261d524739cec54237cf176c42dbe78b09224"
 }

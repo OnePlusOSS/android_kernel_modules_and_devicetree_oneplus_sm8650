@@ -704,3 +704,18 @@ int oplus_vooc_get_frame_head(struct oplus_chg_ic_dev *vooc_ic, int *head)
 	return rc;
 }
 
+int oplus_vooc_get_fastchg_commu_ing(struct oplus_chg_ic_dev *vooc_ic, bool *fastchg_commu_ing)
+{
+	int rc;
+
+	if (vooc_ic == NULL) {
+		chg_err("vooc_ic is NULL\n");
+		return -ENODEV;
+	}
+
+	rc = oplus_chg_ic_func(vooc_ic, OPLUS_IC_FUNC_VOOCPHY_GET_FASTCHG_COMMU_ING,
+				   fastchg_commu_ing);
+
+	return rc;
+}
+

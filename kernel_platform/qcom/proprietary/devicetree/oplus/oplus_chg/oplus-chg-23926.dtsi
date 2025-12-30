@@ -366,7 +366,7 @@
 		oplus,smooth_switch;
 		oplus,reserve_chg_soc = <3>;
 
-		oplus_spec,batt_full_time = <180>;
+		oplus_spec,batt_full_time = <300>;
 	};
 
 	oplus_monitor: oplus,monitor {

@@ -69,6 +69,9 @@ static const struct mtk_chip_config spi_ctrdata = {
 	.tick_delay = 0,
 };
 #endif
+#define SYNA_CMD_GAME_AIUINIT_EN            0xF4
+#define SYNA_CMD_GAME_AIUINIT               0xFF
+#define AIUNIT_LONG_NUM         MAX_AIUNIT_SET_NUM*10
 
 
 static int syna_tcm_spi_alloc_mem(struct syna_tcm_hcd *tcm_hcd,
@@ -2839,6 +2842,46 @@ exit:
 	return retval;
 }
 
+static int syna_tcm_set_long_config(struct syna_tcm_hcd *tcm_hcd, unsigned char*buf)
+{
+	int retval = 0;
+	char *report = NULL;
+	unsigned char out_buf[AIUNIT_LONG_NUM + 1] = {0};
+	unsigned char *resp_buf = NULL;
+	unsigned int resp_buf_size = 0, resp_length = 0;
+	unsigned int i = 0;
+
+	TPD_DEBUG("%s:config 0x%x\n", __func__, buf[0]);
+
+	for (i = 0; i < (AIUNIT_LONG_NUM+1); i++) {
+	   out_buf[i] = buf[i];
+	}
+
+	retval = syna_tcm_write_message(tcm_hcd,
+					CMD_SET_LONG_CONFIG,
+					out_buf,
+					sizeof(out_buf),
+					&resp_buf,
+					&resp_buf_size,
+					&resp_length,
+					RESPONSE_TIMEOUT_MS_SHORT);
+
+	if (retval < 0) {
+		TP_INFO(tcm_hcd->tp_index, "Failed to write command %s\n", STR(CMD_SET_LONG_CONFIG));
+		report = tp_kzalloc(30, GFP_KERNEL);
+		if (report) {
+			tp_healthinfo_report(tcm_hcd->monitor_data, HEALTH_REPORT, report);
+			tp_kfree((void **)&report);
+		}
+		goto exit;
+	}
+
+exit:
+	tp_kfree((void **)&resp_buf);
+
+	return retval;
+}
+
 static int syna_tcm_sleep(struct syna_tcm_hcd *tcm_hcd, bool en)
 {
 	int retval = 0;
@@ -3093,7 +3136,12 @@ static int syna_tcm_set_aod_mode(struct syna_tcm_hcd *tcm_hcd, bool enable)
 {
 	int retval = 0;
 	unsigned short config;
+	struct touchpanel_data *ts = spi_get_drvdata(tcm_hcd->s_client);
 
+	if (ts != NULL && ts->lpwg_fw_support) {
+		/*request lpwg firmware*/
+		syna_tcm_before_switch_to_gesture_mode(tcm_hcd, enable);
+	}
 
 	retval = syna_tcm_get_dynamic_config(tcm_hcd, DC_IN_WAKEUP_GESTURE_MODE, &config);
 	if (retval < 0) {
@@ -3317,6 +3365,69 @@ static int synaptics_enable_headset_mode(struct syna_tcm_hcd *tcm_hcd, bool enab
 	return ret;
 }
 
+static void syna_aiunit_game_info(void *chip_data)
+{
+	struct syna_tcm_hcd *tcm_hcd = (struct syna_tcm_hcd *)chip_data;
+	struct touchpanel_data *ts = NULL;
+	u8 cmd[MAX_AIUNIT_SET_NUM * 10 + 1] = { 0 };
+	int i = 0;
+	int ret = 0;
+	unsigned short regval = 0;
+
+	if (tcm_hcd == NULL || tcm_hcd->s_client == NULL) {
+		TPD_INFO("%s: tcm_hcd == NULL.\n", __func__);
+		return;
+	}
+	ts = spi_get_drvdata(tcm_hcd->s_client);
+
+	if (ts->is_suspended) {
+		return;
+	}
+	if (ts->aiunit_game_enable) {
+		ret = syna_tcm_set_dynamic_config(tcm_hcd, SYNA_CMD_GAME_AIUINIT_EN, 1);
+		ret = syna_tcm_get_dynamic_config(tcm_hcd, SYNA_CMD_GAME_AIUINIT_EN, &regval);
+		if (regval == 1) {
+			TPD_INFO("%s: aiunit game info enter suc.\n", __func__);
+		} else {
+			TPD_INFO("%s: aiunit game info enter fail.\n", __func__);
+		}
+	} else {
+		ret = syna_tcm_set_dynamic_config(tcm_hcd, SYNA_CMD_GAME_AIUINIT_EN, 0);
+		msleep(3);
+		ret = syna_tcm_get_dynamic_config(tcm_hcd, SYNA_CMD_GAME_AIUINIT_EN, &regval);
+		if (regval == 0) {
+			TPD_INFO("%s: aiunit game info exit suc.\n", __func__);
+		} else {
+			TPD_INFO("%s: aiunit game info exit fail.\n", __func__);
+		}
+	}
+
+	cmd[0] = SYNA_CMD_GAME_AIUINIT;
+	for (i = 0; i < MAX_AIUNIT_SET_NUM; i++) {
+		cmd[10 * i + 1] = ts->tp_ic_aiunit_game_info[i].gametype;
+		cmd[10 * i + 2] = ts->tp_ic_aiunit_game_info[i].aiunit_game_type;
+		cmd[10 * i + 3] = ts->tp_ic_aiunit_game_info[i].left & 0xff;
+		cmd[10 * i + 4] = (ts->tp_ic_aiunit_game_info[i].left >> 8) & 0xff;
+		cmd[10 * i + 5] = ts->tp_ic_aiunit_game_info[i].top & 0xff;
+		cmd[10 * i + 6] = (ts->tp_ic_aiunit_game_info[i].top >> 8) & 0xff;
+		cmd[10 * i + 7] = ts->tp_ic_aiunit_game_info[i].right & 0xff;
+		cmd[10 * i + 8] = (ts->tp_ic_aiunit_game_info[i].right >> 8) & 0xff;
+		cmd[10 * i + 9] = ts->tp_ic_aiunit_game_info[i].bottom & 0xff;
+		cmd[10 * i + 10] = (ts->tp_ic_aiunit_game_info[i].bottom >> 8) & 0xff;
+		TPD_INFO("type:%x,%x left:%x,%x top:%x,%x right:%x,%x bottom:%x,%x.", \
+				cmd[10 * i + 1], cmd[10 * i + 2], \
+				cmd[10 * i + 3], cmd[10 * i + 4], \
+				cmd[10 * i + 5], cmd[10 * i + 6], \
+				cmd[10 * i + 7], cmd[10 * i + 8], \
+				cmd[10 * i + 9], cmd[10 * i + 10]);
+	}
+
+	ret = syna_tcm_set_long_config(tcm_hcd, cmd);
+	if (ret < 0) {
+		TPD_INFO("fts tp aiunit game write fail");
+	}
+}
+
 static int synaptics_enable_game_mode(struct syna_tcm_hcd *tcm_hcd, bool enable)
 {
 	int8_t ret = -1;
@@ -3339,20 +3450,55 @@ static int synaptics_enable_game_mode(struct syna_tcm_hcd *tcm_hcd, bool enable)
 
 	return ret;
 }
+
+static int synaptics_enable_waterproof_mode(struct syna_tcm_hcd *tcm_hcd, bool enable)
+{
+	int8_t ret = -1;
+
+	TPD_DEBUG("%s:enable = %d\n", __func__, enable);
+
+	if (enable) {
+		ret = syna_tcm_set_dynamic_config(tcm_hcd, DC_WATERPROOF_ENABLE, 1);
+		if (ret < 0) {
+			TPD_INFO("%s:failed to enable waterproof mode\n", __func__);
+			return ret;
+		}
+	} else {
+		ret = syna_tcm_set_dynamic_config(tcm_hcd, DC_WATERPROOF_ENABLE, 0);
+		if (ret < 0) {
+			TPD_INFO("%s:failed to disable waterproof mode\n", __func__);
+			return ret;
+		}
+	}
+
+	return ret;
+}
+
 /* void tp_wait_hdl_finished(void); */
 
 static int syna_mode_switch(void *chip_data, work_mode mode, int flag)
 {
 	int ret = 0;
 	struct syna_tcm_hcd *tcm_hcd = (struct syna_tcm_hcd *)chip_data;
-
+	struct touchpanel_data *ts = spi_get_drvdata(tcm_hcd->s_client);
 	if(!tcm_hcd->tp_irq_state) {
 		TPD_INFO("tp irq disabled, skip switch mode.\n");
 		return 0;
 	}
-
-	msleep(100);
-	tp_wait_hdl_finished();
+	if (ts != NULL) {
+		if (ts->is_suspended == 0) {
+			if (ts->incell_aod_gesture_support && MODE_INCELL_AOD == mode) {
+					TPD_INFO("enter aod mode switch\n");
+					atomic_set(&tcm_hcd->host_downloading, 0);
+					/*syna_tcm_hdl_done(tcm_hcd);*/
+					enable_irq(tcm_hcd->s_client->irq);
+					/*g_tcm_hcd->hdl_finished_flag = 1;*/
+					complete(&tcm_hcd->config_complete);
+			}
+			msleep(100);
+			tp_wait_hdl_finished();
+		}
+	}
 
 	TPD_INFO("syna_mode_switch begin, mode = %d\n", mode);
 	switch (mode) {
@@ -3376,10 +3522,13 @@ static int syna_mode_switch(void *chip_data, work_mode mode, int flag)
 		}
 		break;
 	case MODE_GLOVE:
-		TPD_INFO("%s: %s force glove_mode.\n", __func__, flag ? "1" : "0");
-		ret = syna_tcm_set_glove_mode(tcm_hcd, flag);
-		if (ret < 0) {
-			TPD_INFO("%s:Failed to set glove mode\n", __func__);
+		TPD_INFO("%s: force glove_mode.\n", __func__);
+		if (ts != NULL && !ts->is_suspended) {
+			TPD_INFO("%s: %s force glove_mode.\n", __func__, flag ? "1" : "0");
+			ret = syna_tcm_set_glove_mode(tcm_hcd, flag);
+			if (ret < 0) {
+				TPD_INFO("%s:Failed to set glove mode\n", __func__);
+			}
 		}
 		break;
 	case MODE_SLEEP:
@@ -3406,6 +3555,13 @@ static int syna_mode_switch(void *chip_data, work_mode mode, int flag)
 		ret = synaptics_enable_game_mode(tcm_hcd, flag);
 		if (ret < 0) {
 			TPD_INFO("%s: enable game mode : %d failed\n", __func__, flag);
+		}
+		break;
+
+	case MODE_WATERPROOF:
+		ret = synaptics_enable_waterproof_mode(tcm_hcd, flag);
+		if (ret < 0) {
+			TPD_INFO("%s: enable waterproof mode : %d failed\n", __func__, flag);
 		}
 		break;
 
@@ -5182,6 +5338,54 @@ static void syna_read_water_flag(void *chip_data)
 	}
 }
 
+static int syna_tcm_diaphragm_touch_lv_set(void *chip_data, int level)
+{
+	struct syna_tcm_hcd *tcm_info = (struct syna_tcm_hcd *)chip_data;
+	unsigned short regval = 0;
+	int retval = 0;
+	retval = syna_tcm_get_dynamic_config(tcm_info, DC_LOW_TEMP_ENABLE, &regval);
+	if (retval < 0) {
+		TPD_INFO("Failed to get diaphragm_touch config\n");
+		return 0;
+	}
+
+	switch (level) {
+	case DIAPHRAGM_DEFAULT_MODE:
+		regval = 0xfffc & regval;
+		break;
+	case DIAPHRAGM_FILM_MODE:
+		regval = 0xfffc & regval;
+		regval = 0x0001 | regval;
+		break;
+	case DIAPHRAGM_WATERPROO_MODE:
+		regval = 0xfffc & regval;
+		regval = 0x0002 | regval;
+		break;
+	case DIAPHRAGM_FILM_WATERPROO_MODE:
+		regval = 0xfffc & regval;
+		regval = 0x0003 | regval;
+		break;
+	default:
+		TPD_INFO("error, level = %d", level);
+		return 0;
+	}
+
+	retval = syna_tcm_set_dynamic_config(tcm_info, DC_LOW_TEMP_ENABLE, regval);
+	if (retval < 0) {
+		TPD_INFO("Failed to set diaphragm_touch config\n");
+		return 0;
+	}
+
+	retval = syna_tcm_get_dynamic_config(tcm_info, DC_LOW_TEMP_ENABLE, &regval);
+	if (retval < 0) {
+		TPD_INFO("Failed to get diaphragm_touch config\n");
+		return 0;
+	}
+	TPD_INFO("diaphragm_touch_lv_set level = %d regval = %d", level, regval);
+
+	return 0;
+}
+
 static struct oplus_touchpanel_operations syna_tcm_ops = {
 	.ftm_process       = syna_ftm_process,
 	.get_vendor        = syna_get_vendor,
@@ -5210,6 +5414,8 @@ static struct oplus_touchpanel_operations syna_tcm_ops = {
 	.get_glove_mode         = syna_getglove_mode_status,
 	.get_water_mode         = syna_read_water_flag,
 	.force_water_mode       = syna_force_water_mode,
+	.diaphragm_touch_lv_set    = syna_tcm_diaphragm_touch_lv_set,
+	.aiunit_game_info       = syna_aiunit_game_info,
 };
 
 /*
@@ -5415,11 +5621,14 @@ static void syna_tcm_parse_dts(struct syna_tcm_hcd *tcm_hcd, struct spi_device *
 static int syna_tcm_spi_probe(struct spi_device *spi)
 {
 	int retval = 0;
+	u64 time_counter = 0;
 	struct syna_tcm_hcd *tcm_hcd;
 	struct touchpanel_data *ts = NULL;
 	struct device_hcd *device_hcd;
 
 	TPD_INFO("%s: enter\n", __func__);
+
+	reset_healthinfo_time_counter(&time_counter);
 
 	tcm_hcd = kzalloc(sizeof(*tcm_hcd), GFP_KERNEL);
 	if (!tcm_hcd) {
@@ -5534,6 +5743,10 @@ static int syna_tcm_spi_probe(struct spi_device *spi)
 
 	tcm_hcd->init_okay = true;
 	syna_remote_zeroflash_init(tcm_hcd);
+
+	if (ts->health_monitor_support) {
+		tp_healthinfo_report(&ts->monitor_data, HEALTH_PROBE, &time_counter);
+	}
 /*#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
     if (ts->boot_mode == RECOVERY_BOOT)
 #else

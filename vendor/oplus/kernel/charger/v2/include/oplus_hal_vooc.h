@@ -53,4 +53,5 @@ int oplus_vooc_get_real_curve_curr(struct oplus_chg_ic_dev *vooc_ic, int *curr);
 int oplus_vooc_get_retry_flag(struct oplus_chg_ic_dev *vooc_ic, bool *retry_flag);
 int oplus_vooc_set_ap_fastchg_allow(struct oplus_chg_ic_dev *vooc_ic, int allow, bool dummy);
 int oplus_vooc_get_frame_head(struct oplus_chg_ic_dev *vooc_ic, int *head);
+int oplus_vooc_get_fastchg_commu_ing(struct oplus_chg_ic_dev *vooc_ic, bool *fastchg_commu_ing);
 #endif /* __OPLUS_HAL_VOOC_H__ */

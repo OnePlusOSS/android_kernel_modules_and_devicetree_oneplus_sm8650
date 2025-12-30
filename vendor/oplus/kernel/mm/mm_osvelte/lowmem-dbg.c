@@ -615,6 +615,8 @@ int osvelte_lowmem_dbg_init(struct proc_dir_entry *root)
 
 	if (total_ram >= PAGES(SZ_4G + SZ_8G))
 		cfg->watermark_low = PAGES(SZ_1G + SZ_512M);
+	else if (total_ram >= PAGES(SZ_4G + SZ_4G))
+		cfg->watermark_low = PAGES(SZ_1G + SZ_256M);
 	else if (total_ram >= PAGES(SZ_2G + SZ_2G))
 		cfg->watermark_low = PAGES(SZ_1G);
 	else if (total_ram >= PAGES(SZ_2G + SZ_1G))

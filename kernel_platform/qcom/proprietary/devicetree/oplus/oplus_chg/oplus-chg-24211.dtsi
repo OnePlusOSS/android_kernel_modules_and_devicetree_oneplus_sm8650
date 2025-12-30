@@ -132,6 +132,8 @@
 					OPLUS_IC_FUNC_BUCK_GET_BATT_BTB_TEMP
 					OPLUS_IC_FUNC_SET_TYPEC_MODE
 					OPLUS_IC_FUNC_GET_TYPEC_ROLE
+					OPLUS_IC_FUNC_BUCK_GET_USB_AICL_ENHANCE
+					OPLUS_IC_FUNC_BUCK_SET_AICL_POINT
 				>;
 				virqs = <
 					OPLUS_IC_VIRQ_ERR
@@ -415,6 +417,9 @@
 						410 430 CURR_LIMIT_7BIT_4_0A 4 2
 						420 440 CURR_LIMIT_7BIT_3_0A 4 3 >;
 
+		oplus,plc_strategy-data = <&buck_simple_strategy &svooc_simple_strategy &vooc_simple_strategy>;
+		oplus,plc_strategy-names = "default", "svooc", "vooc";
+
 		oplus_virtual_vphy: oplus,virtual_vphy {
 			compatible = "oplus,virtual_vphy";
 			oplus,vphy_ic = <&master_vphy_sc8517>;
@@ -483,6 +488,7 @@
 
 	oplus,voocphy_bidirect_cp_support;
 	oplus,voocphy_support;
+	oplus,usb_aicl_enhance;
 	oplus,chg_ops = "plat-pmic";
 	qcom,otg_boost_src = <0>; /* 0:plat_pmic 1:external */
 	oplus,batt_num = <2>;
@@ -1332,6 +1338,9 @@
 		oplus,ufcs_charge_strategy_temp = <0 50 120 200 350 440 530>;
 		oplus,ufcs_low_curr_full_strategy_temp = <0 200 350 440>;
 
+		oplus,plc_strategy-data = <&oplus_ufcs_step_strategy &third_ufcs_simple_strategy>;
+		oplus,plc_strategy-names = "default", "third";
+
 		ufcs_charge_low_curr_full {
 			strategy_temp_little_cool =	<1600 4540 0
 							 1500 4535 0
@@ -1698,6 +1707,51 @@
 	};
 };
 
+&soc {
+	oplus_chg_plc: oplus,plc_charge {
+		compatible = "oplus,plc_charge";
+		oplus,plc_soc = <90>;
+		oplus,plc_strategy-data = <&buck_simple_strategy>;
+		oplus,plc_strategy-names = "default";
+
+		oplus_ufcs_step_strategy: oplus_ufcs_step_strategy {
+			oplus,strategy_type = <PLC_STRATEGY_STEP>;
+		};
+
+		third_ufcs_simple_strategy: third_ufcs_simple_strategy {
+			oplus,strategy_type = <PLC_STRATEGY_SIMPLE>;
+			oplus,strategy_data {
+				strategy_curr_ma = <1000 1500>;
+			};
+		};
+
+		pps_simple_strategy: pps_simple_strategy {
+			oplus,strategy_type = <PLC_STRATEGY_SIMPLE>;
+			oplus,strategy_data {
+				strategy_curr_ma = <1000 1500>;
+			};
+		};
+
+		svooc_simple_strategy: svooc_simple_strategy {
+			oplus,strategy_type = <PLC_STRATEGY_SIMPLE>;
+			oplus,strategy_data {
+				strategy_curr_ma = <1000 1500>;
+			};
+		};
+
+		vooc_simple_strategy: vooc_simple_strategy {
+			oplus,strategy_type = <PLC_STRATEGY_SIMPLE>;
+			oplus,strategy_data {
+				strategy_curr_ma = <2000 3000>;
+			};
+		};
+
+
+		buck_simple_strategy: buck_simple_strategy {
+			oplus,strategy_type = <PLC_STRATEGY_SIMPLE>;
+		};
+	};
+};
 /*
 &qupv3_se4_i2c {
 	status = "disabled";

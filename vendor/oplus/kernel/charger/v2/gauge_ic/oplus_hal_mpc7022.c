@@ -79,6 +79,8 @@
 #define QMAX_MAX				12000
 #define SOC_MIN					0
 #define SOC_MAX					100
+#define SOC_CENTI_MIN				0
+#define SOC_CENTI_MAX				10000
 #define RETRY_CNT				3
 #define I2C_ERR_MAX				2
 #define CALIB_TIME_CHECK_ARGS			6
@@ -168,6 +170,7 @@ struct mpc7022_cmd_address {
 	u8 reg_soc;
 	u8 reg_soh;
 	u8 reg_cc;
+	u8 reg_soc_centi;
 };
 
 struct chip_mpc7022 {
@@ -194,6 +197,7 @@ struct chip_mpc7022 {
 	bool i2c_err;
 
 	int soc_pre;
+	int soc_centi_pre;
 	int temp_pre;
 	int current_pre;
 	int cc_pre;
@@ -1274,6 +1278,35 @@ static int mpc7022_get_battery_soc(struct chip_mpc7022 *chip)
 	return soc;
 }
 
+static int mpc7022_get_battery_soc_centi(struct chip_mpc7022 *chip)
+{
+	int ret;
+	int soc_centi = 0;
+	int retry = RETRY_CNT;
+
+	if (is_chip_suspended_or_locked(chip))
+		return chip->soc_centi_pre;
+
+	do {
+		ret = mpc7022_read_i2c(chip, chip->cmd_addr.reg_soc_centi, &soc_centi);
+		if (ret) {
+			dev_err(chip->dev, "error reading soc_centi.\n");
+			return chip->soc_centi_pre;
+		}
+		if (normal_range_judge(SOC_CENTI_MAX, SOC_CENTI_MIN, soc_centi))
+			break;
+		else
+			usleep_range(10000, 10000);
+		chg_err("soc_centi abnormal, retry:%d, soc_centi:%d\n", retry, soc_centi);
+	} while (retry-- > 0);
+
+	if (retry < 0)
+		return chip->soc_centi_pre;
+
+	chip->soc_centi_pre = soc_centi;
+	return soc_centi;
+}
+
 static int mpc7022_get_real_current(struct chip_mpc7022 *chip)
 {
 	int ret;
@@ -1636,6 +1669,7 @@ static void mpc7022_set_cmd_addr(struct chip_mpc7022 *chip)
 	chip->cmd_addr.reg_soc = MPC7022_REG_SOC;
 	chip->cmd_addr.reg_soh = MPC7022_REG_SOH;
 	chip->cmd_addr.reg_cc = MPC7022_REG_CC;
+	chip->cmd_addr.reg_soc_centi = MPC7022_REG_SOC_CENTI;
 }
 
 static int mpc7022_get_device_type(struct chip_mpc7022 *chip, int *device_type)
@@ -2362,6 +2396,21 @@ static int oplus_mpc7022_get_batt_soc(
 
 	chip = oplus_chg_ic_get_drvdata(ic_dev);
 	*soc = mpc7022_get_battery_soc(chip);
+
+	return 0;
+}
+
+static int oplus_mpc7022_get_batt_soc_centi(struct oplus_chg_ic_dev *ic_dev, int *soc_centi)
+{
+	struct chip_mpc7022 *chip;
+
+	if (ic_dev == NULL || soc_centi == NULL) {
+		chg_err("oplus_chg_ic_dev or soc_centi is NULL\n");
+		return -ENODEV;
+	}
+
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+	*soc_centi = mpc7022_get_battery_soc_centi(chip);
 
 	return 0;
 }
@@ -3409,6 +3458,10 @@ static void *oplus_chg_get_func(
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_BATT_SOC,
 			oplus_mpc7022_get_batt_soc);
 		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_BATT_SOC_CENTI:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_BATT_SOC_CENTI,
+			oplus_mpc7022_get_batt_soc_centi);
+		break;
 	case OPLUS_IC_FUNC_GAUGE_GET_BATT_FCC:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_BATT_FCC,
 			oplus_mpc7022_get_batt_fcc);
@@ -3638,7 +3691,7 @@ static int mpc7022_vars_init(struct chip_mpc7022 *chip)
 
 	 /* soc default set 50% */
 	chip->soc_pre = 50;
-
+	chip->soc_centi_pre = -EINVAL;
 	/* current default set 999ma */
 	chip->current_pre = 999;
 

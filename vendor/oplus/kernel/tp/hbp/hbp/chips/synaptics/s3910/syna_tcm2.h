@@ -4,6 +4,7 @@
 #include <linux/sched.h>
 #include "../../../hbp_core.h"
 #include "../../../hbp_spi.h"
+#include "../../../hbp_healthinfo.h"
 #include "../../../utils/debug.h"
 #include "tcm/synaptics_touchcom_core_dev.h"
 #include "tcm/synaptics_touchcom_func_base.h"

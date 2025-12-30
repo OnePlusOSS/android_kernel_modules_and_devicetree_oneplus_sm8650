@@ -54,6 +54,7 @@ struct puc_strategy {
 	unsigned long timeout;
 	unsigned long over_time;
 	int temp_region;
+	int allow_soc;
 };
 
 #define PUC_DATA_SIZE	sizeof(struct puc_strategy_data)
@@ -265,6 +266,34 @@ puc_get_soc_region(struct puc_strategy *puc)
 		}
 	}
 
+	return soc_region;
+}
+
+static enum puc_soc_range
+puc_get_fastchg_allow_soc_region(struct puc_strategy *puc)
+{
+	int soc;
+	enum puc_soc_range soc_region = PUC_BATT_CURVE_SOC_RANGE_INVALID;
+	int i;
+	int rc;
+
+	rc = puc_strategy_get_soc(puc, &soc);
+	if (rc < 0) {
+		chg_err("can't get soc, rc=%d\n", rc);
+		return PUC_BATT_CURVE_SOC_RANGE_INVALID;
+	}
+
+	/* To prevent the issue of SOC_RANGE_INVALID error when ui_soc suddenly rise, use soc_region of allow_soc */
+	if (abs(puc->allow_soc - soc) > 1)
+		return PUC_BATT_CURVE_SOC_RANGE_INVALID;
+
+	for (i = 1; i < PUC_BATT_CURVE_SOC_RANGE_MAX + 1; i++) {
+		if (puc->allow_soc <= puc->soc_range_data[i]) {
+			soc_region = i - 1;
+			break;
+		}
+	}
+	chg_err("use allow_soc=%d soc_region=%d\n", puc->allow_soc, soc_region);
 	return soc_region;
 }
 
@@ -623,7 +652,10 @@ static int puc_strategy_init(struct oplus_chg_strategy *strategy)
 
 	soc_range = puc_get_soc_region(puc);
 	if (soc_range == PUC_BATT_CURVE_SOC_RANGE_INVALID)
+		soc_range = puc_get_fastchg_allow_soc_region(puc);
+	if (soc_range == PUC_BATT_CURVE_SOC_RANGE_INVALID)
 		return -EFAULT;
+
 	temp_range = puc_get_temp_region(puc);
 	if (temp_range == PUC_BATT_CURVE_TEMP_RANGE_INVALID)
 		return -EFAULT;
@@ -643,8 +675,8 @@ static int puc_strategy_init(struct oplus_chg_strategy *strategy)
 		}
 	}
 	if (i >= puc->curve->num) {
+		puc->curr_level = puc->curve->num - 1;
 		chg_err("The battery voltage is too high, there is no suitable range, vbat=%d\n", vbat);
-		return -EINVAL;
 	}
 	if (puc->curve->data[puc->curr_level].target_time > 0)
 		puc->timeout = jiffies + msecs_to_jiffies(puc->curve->data[puc->curr_level].target_time * 1000);
@@ -662,21 +694,38 @@ static int puc_strategy_set_process_data(struct oplus_chg_strategy *strategy, co
 		chg_err("strategy is NULL\n");
 		return -EINVAL;
 	}
-	if(strcmp(type, "temp_region") != 0)
-		return -ENOTSUPP;
-	puc = (struct puc_strategy *)strategy;
-	chg_info("type = %s", type);
-	chg_info("arg = %lu", arg);
-	if((arg < PUC_BATT_CURVE_TEMP_RANGE_COOL) || (arg > PUC_BATT_CURVE_TEMP_RANGE_MAX)) {
-		chg_info("puc->temp_region out of range");
-		puc->temp_region = PUC_BATT_CURVE_TEMP_RANGE_INVALID;
-		return -EINVAL;
+	if(strcmp(type, "temp_region") == 0) {
+		puc = (struct puc_strategy *)strategy;
+		chg_info("type = %s", type);
+		chg_info("arg = %lu", arg);
+		if((arg < PUC_BATT_CURVE_TEMP_RANGE_COOL) || (arg > PUC_BATT_CURVE_TEMP_RANGE_MAX)) {
+			chg_info("puc->temp_region out of range");
+			puc->temp_region = PUC_BATT_CURVE_TEMP_RANGE_INVALID;
+			return -EINVAL;
+		}
+
+		puc->temp_region = arg - 1;
+
+		chg_info("puc->temp_region = %d", puc->temp_region);
+		return 0;
 	}
 
-	puc->temp_region = arg - 1;
+	if(strcmp(type, "allow_soc") == 0) {
+		puc = (struct puc_strategy *)strategy;
+		chg_info("type = %s", type);
+		chg_info("arg = %lu", arg);
 
-	chg_info("puc->temp_region = %d", puc->temp_region);
-	return 0;
+		if((arg < puc->soc_range_data[PUC_BATT_CURVE_SOC_RANGE_MIN]) ||
+		   (arg > puc->soc_range_data[PUC_BATT_CURVE_SOC_RANGE_MAX])) {
+			chg_info("puc->allow_soc out of range");
+			puc->allow_soc = PUC_BATT_CURVE_SOC_RANGE_INVALID;
+			return -EINVAL;
+		}
+		puc->allow_soc = (int)arg;
+		chg_info("puc->allow_soc = %d", puc->allow_soc);
+		return 0;
+	}
+	return -ENOTSUPP;
 }
 
 static int puc_strategy_get_data(struct oplus_chg_strategy *strategy, void *ret)

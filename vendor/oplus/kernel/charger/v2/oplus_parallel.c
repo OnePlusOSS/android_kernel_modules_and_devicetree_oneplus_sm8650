@@ -2380,7 +2380,9 @@ static void oplus_chg_parallel_init_work(struct work_struct *work)
 	g_parallel_chip = chip;
 
 	(void)oplus_chg_parallel_topic_init(chip);
-	misc_register(&oplus_chg_device);
+	rc = misc_register(&oplus_chg_device);
+        if (rc < 0)
+                chg_err("misc_register fail\n");
 	rc = mos_track_debugfs_init(chip);
 	if (rc < 0)
 		chg_err("track debugfs init fail\n");

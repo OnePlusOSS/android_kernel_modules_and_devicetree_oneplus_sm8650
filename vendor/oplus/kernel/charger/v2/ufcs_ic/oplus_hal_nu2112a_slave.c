@@ -42,6 +42,8 @@
 #include <oplus_chg_monitor.h>
 #include "../voocphy/oplus_voocphy.h"
 #include "oplus_hal_nu2112a.h"
+#include <oplus_mms_wired.h>
+#include <oplus_chg_vooc.h>
 #define DEFAULT_OVP_REG_CONFIG	0x5C
 #define DEFAULT_OCP_REG_CONFIG	0x24
 #define TRACK_REG_ADDR_START	NU2112A_REG_07
@@ -214,12 +216,38 @@ static void nu2112a_slave_update_data(struct oplus_voocphy_manager *chip)
 		pr_info("data_block[%d] = %u\n", i, data_block[i]);
 	}
 	chip->slave_cp_ichg = ((data_block[0] << 8) | data_block[1]) * NU2112A_IBUS_ADC_LSB;
+	if (oplus_voocphy_mg)
+		oplus_voocphy_mg->slave_cp_ichg = chip->slave_cp_ichg;
 	pr_info("slave cp_ichg = %d int_flag = %d", chip->slave_cp_ichg, int_flag);
 }
 /*********************************************************************/
+static int oplus_chg_get_vooc_charging(void)
+{
+	int vooc_charging_status = 0;
+	struct oplus_mms *vooc_topic;
+	union mms_msg_data data = { 0 };
+	int rc;
+
+	vooc_topic = oplus_mms_get_by_name("vooc");
+	if (!vooc_topic)
+		return 0;
+
+	rc = oplus_mms_get_item_data(vooc_topic, VOOC_ITEM_VOOC_CHARGING, &data, true);
+	if (!rc)
+		vooc_charging_status = data.intval;
+
+	return vooc_charging_status;
+}
+
 int nu2112a_slave_get_ichg(struct oplus_voocphy_manager *chip)
 {
 	u8 slave_cp_enable;
+
+	if (oplus_chg_get_vooc_charging()) {
+		if (oplus_voocphy_mg)
+			return oplus_voocphy_mg->slave_cp_ichg;
+	}
+
 	nu2112a_slave_update_data(chip);
 
 	nu2112a_slave_get_chg_enable(chip, &slave_cp_enable);

@@ -303,9 +303,9 @@ void operate_mode_switch(struct touchpanel_data *ts)
 				TP_INFO(ts->tp_index, "%s : incell_aod_flag = %d", __func__, ts->incell_aod_flag);
 				if (ts->incell_aod_flag) {
 					TP_INFO(ts->tp_index, "TP in mode aod start\n");
-					ts->is_suspended = 1;
 					ts->incell_aod_flag = false;
 					mode_switch_health(ts,  MODE_INCELL_AOD, true);
+					ts->is_suspended = 1;
 				} else {
 					TP_INFO(ts->tp_index, "TP out mode aod start\n");
 					mode_switch_health(ts,  MODE_INCELL_AOD, false);
@@ -4990,6 +4990,10 @@ static void speedup_resume(struct work_struct *work)
 		ts->fp_enable = 0;
 	}
 
+	if (ts->incell_aod_gesture_support) {
+		ts->is_suspended = 0;
+	}
+
 	operate_mode_switch(ts);
 
 	if (ts->esd_handle_support) {
@@ -5140,6 +5144,8 @@ static void lcd_other_event(int *blank, struct touchpanel_data *ts)
 		tp_control_irq_state(0, ts->tp_index);
 	} else if (*blank == LCD_CTL_AOD_OFF) {
 		ts->incell_aod_flag = false;
+	} else if (*blank == LCD_CTL_AOD_ON) {
+		ts->incell_aod_flag = true;
 	}
 };
 
@@ -5182,6 +5188,9 @@ static void ts_panel_notifier_callback(enum panel_event_notifier_tag tag,
 		break;
 	case DRM_PANEL_EVENT_BLANK:
 		if (notification->notif_data.early_trigger) {
+			if (ts->incell_aod_gesture_support) {
+				ts->is_suspended = 0;
+			}
 			if (ts->speedup_resume_wq) {
 				flush_workqueue(ts->speedup_resume_wq);        /*wait speedup_resume_wq done*/
 			}
@@ -5252,8 +5261,6 @@ static int ts_mtk_drm_notifier_callback(struct notifier_block *nb,
 			lcd_on_event(ts);
 		} else if (*blank == MTK_DISP_BLANK_POWERDOWN) {
 			lcd_off_event(ts);
-		} else if (*blank == LCD_CTL_AOD_ON) {
-			ts->incell_aod_flag = true;
 		}
 	break;
 	default:

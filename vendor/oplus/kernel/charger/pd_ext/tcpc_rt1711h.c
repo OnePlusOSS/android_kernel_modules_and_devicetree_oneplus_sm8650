@@ -56,6 +56,7 @@
 #define SC6607_PID		0x6600
 #define PD_MSG_CRC_LEN 4
 #define PD_MSG_LEN_OVER_TOTAL_LENGTH 3
+#define PD_CCOPEN_TIMER	500 /* ms */
 
 #define CPS8851_VID     0x315C
 #define CPS8851_PID     0x8851
@@ -1202,7 +1203,7 @@ static int rt1711_tcpc_deinit(struct tcpc_device *tcpc)
 #endif
 
 	if (chip->chip_id == SC2150A_DID) {
-		mdelay(150);
+		msleep(PD_CCOPEN_TIMER);
 		rt1711_i2c_write8(tcpc, RT1711H_REG_SWRESET, 1);
 	}
 #else

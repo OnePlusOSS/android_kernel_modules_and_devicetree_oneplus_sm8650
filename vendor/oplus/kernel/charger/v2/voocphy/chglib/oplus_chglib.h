@@ -64,6 +64,7 @@ struct hw_vphy_info {
 	void (*vphy_set_bal_curr_limit)(struct device *dev, int curr);
 	int (*vphy_get_frame_head)(struct device *dev, int *head);
 	void (*vphy_set_wired_online)(struct device *dev, int online);
+	bool (*vphy_get_fastchg_commu_ing)(struct device *dev);
 };
 
 struct vphy_chip {
@@ -150,4 +151,5 @@ int oplus_chglib_get_cc_detect(struct device *dev);
 int oplus_chglib_upload_fcl_info(struct device *dev, int batt_volt, int batt_curr, int batt_temp);
 bool oplus_chglib_check_dchg(struct device *dev, int adapter_type);
 int oplus_chglib_fcl_vbatt(struct device *dev);
+void oplus_chglib_set_vooc_startup(struct device *dev, int status);
 #endif /*__OPLUS_CHGLIB_H__*/

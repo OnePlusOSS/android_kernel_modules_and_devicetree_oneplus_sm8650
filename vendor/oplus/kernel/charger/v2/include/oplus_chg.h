@@ -371,6 +371,7 @@ uint8_t oplus_chg_get_region_id(void);
 unsigned int oplus_chg_get_nvid_support_flags(void);
 bool oplus_chg_get_common_charge_icl_support_flags(void);
 bool oplus_chg_get_boot_reset_adapter_support_flags(void);
+bool battery_sn_match(struct device_node *node, const char *actual_sn);
 
 void oplus_power_supply_changed_gp(struct power_supply *psy, unsigned int grace_period_ms);
 void oplus_power_supply_changed(struct power_supply *psy);

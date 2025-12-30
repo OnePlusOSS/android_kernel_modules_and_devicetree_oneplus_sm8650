@@ -171,6 +171,7 @@ extern bool ili_debug_en;
 #define CORE_VER_1430               0x01040300
 #define CORE_VER_1460               0x01040600
 #define CORE_VER_1470               0x01040700
+#define CORE_VER_1700               0x01070000
 
 #define MAX_HEX_FILE_SIZE           (256*K)
 #define ILI_FILE_HEADER             256
@@ -330,6 +331,10 @@ extern bool ili_debug_en;
 #define P5_X_DEMO_HIGH_RESOLUTION_PACKET_ID		0x5B
 #define P5_X_DEBUG_HIGH_RESOLUTION_PACKET_ID	0xA8
 #define P5_X_DEMO_PALM_PACKET_ID                0xBB
+
+/*game_hot_cmd*/
+#define GAME_AIUINIT_CMD                    0x01
+#define GAME_AIUINIT_SUBCMD                 0x14
 
 /*differ_mode*/
 #define POSITION_DIFFER_LOW_RESOLUTION		0x03

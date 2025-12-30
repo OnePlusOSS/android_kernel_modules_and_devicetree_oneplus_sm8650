@@ -1633,7 +1633,9 @@ int ili_aod_control(bool ctrl)
 		}
 	} else {
 		ILI_INFO("Doing actual ap mode \n");
-		ili_sleep_handler(TP_RESUME);
+		if (ilits->aod_in) {
+			ili_sleep_handler(TP_RESUME);
+		}
 		ilits->aod_in = 0;
 	}
 	ILI_INFO("AOD control end\n");
@@ -2980,6 +2982,27 @@ static int ilitek_get_chip_info(void *chip_data)
 	return 0;
 }
 
+static int ilitek_waterproof_control(bool enable)
+{
+	int ret;
+	u8 cmd[4] = {0xDA, 0x00, 0x01, 0x00};
+
+	ILI_DBG("ENTER waterproof mode = %d\n", enable);
+
+	cmd[3] = enable ? 0x00 : 0x02;
+
+	ret = ilits->wrapper(cmd, sizeof(cmd), NULL, 0, OFF, OFF);
+	if (ret < 0) {
+		ILI_ERR("Failed to %s waterproof mode, ret=%d\n",
+				enable ? "enable" : "disable", ret);
+		return ret;
+	}
+
+	ILI_INFO("Waterproof mode %s successfully\n",
+			enable ? "enabled" : "disabled");
+	return 0;
+}
+
 static u32 ilitek_trigger_reason(void *chip_data, int gesture_enable,
 				 int is_suspended)
 {
@@ -3118,6 +3141,7 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, int flag)
 
 	case MODE_INCELL_AOD:
 		ILI_INFO("MODE_INCELL_AOD flag = %d\n", flag);
+		chip_info->gesture = flag;
 		ret = ili_aod_control(flag);
 		break;
 
@@ -3151,6 +3175,14 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, int flag)
 			chip_info->actual_tp_mode = P5_X_FW_GESTURE_MODE;
 		}
 
+		break;
+
+	case MODE_WATERPROOF:
+		ILI_INFO("MODE_WATERPROOF flag = %d\n", flag);
+		ret = ilitek_waterproof_control(flag);
+		if (ret < 0) {
+			TPD_INFO("%s: enable waterproof: %d failed\n", __func__, flag);
+		}
 		break;
 
 	case MODE_EDGE:
@@ -3569,6 +3601,89 @@ out:
 	mutex_unlock(&chip_info->touch_mutex);
 }
 
+/*game_hot_ilitek*/
+static void ilitek_aiunit_game_info(void *chip_data)
+{
+	struct ilitek_ts_data *chip_info = (struct ilitek_ts_data *)chip_data;
+	u8 cmd[105];
+	int index = 0;
+	int i;
+	int ret = 0;
+	if (chip_info == NULL || chip_info->ts == NULL) {
+		ILI_ERR("chip_info=NULL\n");
+		return;
+	}
+
+	if (chip_info->ts->is_suspended) {
+		ILI_ERR("TP in suspend\n");
+		return;
+	}
+	mutex_lock(&chip_info->touch_mutex);
+	memset(cmd, 0xFF, sizeof(cmd));
+	/*CMD and SubCMD*/
+	cmd[index++] = GAME_AIUINIT_CMD;
+	cmd[index++] = GAME_AIUINIT_SUBCMD;
+	if (chip_info->ts->aiunit_game_enable) {
+	/*Gaming Zone On/Off*/
+	cmd[index++] = 0x01;
+	} else {
+	cmd[index++] = 0x00;
+	}
+	/*Reserved*/
+	cmd[index++] = 0xFF;
+	cmd[index++] = 0xFF;
+
+	for (i = 0 ; i < MAX_AIUNIT_SET_NUM; i++) {
+			/*gameType*/
+			cmd[index++] = chip_info->ts->tp_ic_aiunit_game_info[i].gametype;
+			/*aiUnitGameType*/
+			cmd[index++] = chip_info->ts->tp_ic_aiunit_game_info[i].aiunit_game_type;
+
+			/*Left-Up X-coordinate (High Byte)*/
+			cmd[index++] = chip_info->ts->tp_ic_aiunit_game_info[i].left >> 8;
+			/*Left-Up X-coordinate (Low Byte)*/
+			cmd[index++] = chip_info->ts->tp_ic_aiunit_game_info[i].left & 0xFF;
+
+			/*Left-Up Y-coordinate (High Byte)*/
+			cmd[index++] = chip_info->ts->tp_ic_aiunit_game_info[i].top >> 8;
+			/*Left-Up Y-coordinate (Low Byte)*/
+			cmd[index++] = chip_info->ts->tp_ic_aiunit_game_info[i].top & 0xFF;
+
+			/*Right-Bottom X-coordinate (High Byte)*/
+			cmd[index++] = chip_info->ts->tp_ic_aiunit_game_info[i].right >> 8;
+			/*Right-Bottom X-coordinate (Low Byte)*/
+			cmd[index++] = chip_info->ts->tp_ic_aiunit_game_info[i].right & 0xFF;
+
+			/*Right-Bottom Y-coordinate (High Byte)*/
+			cmd[index++] = chip_info->ts->tp_ic_aiunit_game_info[i].bottom >> 8;
+			/*Right-Bottom Y-coordinate (Low Byte)*/
+			cmd[index++] = chip_info->ts->tp_ic_aiunit_game_info[i].bottom & 0xFF;
+	}
+	ILI_DBG("\n");
+
+	ILI_DBG("Cmd ID:              %02X\n", cmd[0]);
+	ILI_DBG("SubCmd:              %02X\n", cmd[1]);
+	ILI_DBG("Gaming Zone On/Off:  %02X\n", cmd[2]);
+	ILI_DBG("Reserved:            %02X\n", cmd[3]);
+	ILI_DBG("Reserved:            %02X\n", cmd[4]);
+	ILI_DBG("\n");
+	for (i = 5; i < sizeof(cmd); i += 10) {
+		ILI_DBG("Game Type:         %02X\n", cmd[i]);
+		ILI_DBG("AiunitGameType:    %02X\n", cmd[i + 1]);
+		ILI_DBG("Left-Up X:         %04X\n", ((cmd[i + 2] << 8) | cmd[i + 3]));
+		ILI_DBG("Left-Up Y:         %04X\n", ((cmd[i + 4] << 8) | cmd[i + 5]));
+		ILI_DBG("Right-Bottom X:    %04X\n", ((cmd[i + 6] << 8) | cmd[i + 7]));
+		ILI_DBG("Right-Bottom Y:    %04X\n", ((cmd[i + 8] << 8) | cmd[i + 9]));
+		ILI_DBG("\n");
+	}
+	ret = ilits->wrapper(cmd, sizeof(cmd), NULL, 0, OFF, OFF);
+
+	if (ret < 0) {
+		ILI_ERR("cmd fail\n");
+	}
+	mutex_unlock(&chip_info->touch_mutex);
+}
+
 static struct oplus_touchpanel_operations ilitek_ops = {
 	.ftm_process                = ilitek_ftm_process,
 	.ftm_process_extra          = ilitek_ftm_process_extra,
@@ -3594,6 +3709,7 @@ static struct oplus_touchpanel_operations ilitek_ops = {
 	.get_glove_mode             = ilitek_getglove_mode_status,
 	.get_water_mode             = ilitek_read_water_flag,
 	.force_water_mode           = ilitek_force_water_mode,
+	.aiunit_game_info           = ilitek_aiunit_game_info,
 };
 
 static int ilitek_read_debug_data(struct seq_file *s,

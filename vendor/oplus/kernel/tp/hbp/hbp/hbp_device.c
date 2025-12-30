@@ -10,6 +10,8 @@
 #include <linux/platform_device.h>
 #include <linux/input.h>
 #include <linux/input/mt.h>
+#include <linux/clk.h>
+#include <linux/clk-provider.h>
 
 #include "hbp_core.h"
 #include "hbp_tui.h"
@@ -40,6 +42,10 @@
 #define HBP_IOCTRL_SPI_GET_PARA            _IO(HBP_IOCTRL_GROUP, 0x17)
 #define HBP_IOCTRL_SYNC_INPUT_TIME         _IO(HBP_IOCTRL_GROUP, 0x18)
 #define HBP_IOCTRL_UPDATE_FILM_INFO        _IO(HBP_IOCTRL_GROUP, 0x19)
+#define HBP_IOCTRL_GET_HEALTH_INFO         _IO(HBP_IOCTRL_GROUP, 0x1A)
+#define HBP_IOCTRL_SET_HEALTH_INFO         _IO(HBP_IOCTRL_GROUP, 0x1B)
+
+#define HBP_IOCTRL_PEN_STATUS              _IO(HBP_IOCTRL_GROUP, 0x21)
 
 extern void hbp_state_notify(struct hbp_core *hbp, int id, hbp_panel_event event);
 extern int hbp_register_notify_cb(struct hbp_device *hbp_dev, struct device *dev);
@@ -74,9 +80,7 @@ static int init_input_device(struct hbp_device *hbp_dev, int id)
 		return -ENODEV;
 	}
 
-	if (id == 0) {
-		hbp_dev->i_dev->name = TOUCH_NAME;
-	} else if (id == 1) {
+	if (id == 1) {
 		hbp_dev->i_dev->name = TOUCH_NAME"1";
 	} else {
 		hbp_dev->i_dev->name = TOUCH_NAME;
@@ -126,14 +130,10 @@ static int init_input_device(struct hbp_device *hbp_dev, int id)
 			return ret;
 		}
 
-		if (id == 0) {
-			hbp_dev->p_dev->name = TOUCH_NAME"_pen";
-			hbp_dev->p_dev->phys = TOUCH_NAME"_pen_phys_main";
-		} else if (id == 1) {
+		if (id == 1) {
 			hbp_dev->p_dev->name = TOUCH_NAME"_pen1";
 			hbp_dev->p_dev->phys =  TOUCH_NAME"_pen_phys_secondary";
 		} else {
-			hbp_err("invaild ID!! %d\n", id);
 			hbp_dev->p_dev->name = TOUCH_NAME"_pen";
 			hbp_dev->p_dev->phys = TOUCH_NAME"_pen_phys_main";
 		}
@@ -173,6 +173,7 @@ static int hbp_device_dt_parse(struct hbp_core *hbp, struct hbp_device *hbp_dev)
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
 	int buf[3] = {0, 0, 0};
 #endif
+	const char *clock_name;
 
 	hbp_info("%s start.\n", dev->of_node->name);
 
@@ -204,6 +205,15 @@ static int hbp_device_dt_parse(struct hbp_core *hbp, struct hbp_device *hbp_dev)
 
 	hbp_dev->create_with_power_on_support = of_property_read_bool(np, "create_with_power_on_support");
 	hbp_info("create_with_power_on_support:%d\n", hbp_dev->create_with_power_on_support);
+	memset(hbp_dev->clk_name, 0, 16);
+	ret = of_property_read_string(np, "clock-names", &clock_name);
+	if (ret < 0) {
+		hbp_err("clock-names not defined, use default\n");
+		strncpy(hbp_dev->clk_name, "bb_clk4", 16);
+	} else {
+		hbp_err("got clk name : %s.\n", clock_name);
+		strncpy(hbp_dev->clk_name, clock_name, 16);
+	}
 	/*for interrupts*/
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
 	hbp_dev->hw.irq_gpio = of_get_named_gpio(np, "irq-gpio", 0);
@@ -310,7 +320,8 @@ struct hbp_device *hbp_device_create(void *priv,
 		goto exit;
 	}
 
-	hbp_dev->state = HBP_PANEL_EVENT_RESUME;
+	hbp_dev->state = HBP_PANEL_EVENT_EARLY_RESUME;
+	hbp->states[id].state = hbp_dev->state;
 	hbp_dev->priv = priv;
 	hbp_dev->dev_ops = dev_ops;
 	hbp_dev->dev = dev;
@@ -340,6 +351,8 @@ struct hbp_device *hbp_device_create(void *priv,
 	init_waitqueue_head(&hbp_dev->drv_event);
 
 	hbp_queue_init(&hbp_dev->frame_queue);
+
+	hbp_healthinfo_init(&hbp_dev->monitor_data);
 
 	ret = hbp_device_dt_parse(hbp, hbp_dev);
 	if (ret < 0) {
@@ -379,6 +392,12 @@ struct hbp_device *hbp_device_create(void *priv,
 		/*some ic need to power on when created*/
 		hbp_info("power on when hbp device created\n");
 		hbp_power_ctrl(hbp_dev, power_on_default);
+	}
+
+	/*clk*/
+	hbp_dev->pen_ck = devm_clk_get(hbp_dev->dev, hbp_dev->clk_name);
+	if (IS_ERR(hbp_dev->pen_ck)) {
+		hbp_err("failed to get %s.\n", hbp_dev->clk_name);
 	}
 
 	return hbp_dev;
@@ -609,6 +628,21 @@ static inline void tp_touch_up(struct hbp_device *hbp_dev)
 	input_report_key(hbp_dev->i_dev, BTN_TOOL_FINGER, 0);
 }
 
+static void tp_all_touch_up(struct hbp_device *hbp_dev, int finger_num)
+{
+	int i = 0;
+
+	for (i = 0; i < MAX_TOUCH_POINTS; i++) {
+		input_mt_slot(hbp_dev->i_dev, i);
+		input_mt_report_slot_state(hbp_dev->i_dev, MT_TOOL_FINGER, 0);
+	}
+
+	tp_touch_up(hbp_dev);
+	hbp_dev->irq_slot = 0;
+	hbp_dev->up_status = true;
+	hbp_info("all touch up, finger_num=%d\n", finger_num);
+}
+
 static void hbp_touch_points_report(struct hbp_device *hbp_dev, struct point_info *points, int obj_attention)
 {
 	int i = 0;
@@ -649,15 +683,7 @@ static void hbp_touch_points_report(struct hbp_device *hbp_dev, struct point_inf
 			return;
 		}
 
-		for (i = 0; i < MAX_TOUCH_POINTS; i++) {
-			input_mt_slot(hbp_dev->i_dev, i);
-			input_mt_report_slot_state(hbp_dev->i_dev, MT_TOOL_FINGER, 0);
-		}
-
-		tp_touch_up(hbp_dev);
-		hbp_dev->irq_slot = 0;
-		hbp_dev->up_status = true;
-		hbp_info("all touch up, finger_num=%d\n", finger_num);
+		tp_all_touch_up(hbp_dev, finger_num);
 	}
 
 	input_sync(hbp_dev->i_dev);
@@ -796,7 +822,7 @@ static int hbp_register_irq_func(struct hbp_device *hbp_dev)
 		ret = request_threaded_irq(hbp_dev->irq,
 					   hbp_irq_handler,
 					   hbp_irq_threaded_fn,
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 					   hbp_dev->irq_flags | IRQF_ONESHOT,
 #else
 					   hbp_dev->irq_flags | IRQF_ONESHOT | IRQF_NO_SUSPEND,
@@ -953,6 +979,24 @@ static void hbp_queue_clear(struct frame_queue *queue)
 	frame_clear(queue);
 }
 
+void pen_resume(struct hbp_device *hbp_dev){
+	hbp_info("pen connect resume\n");
+
+	if (hbp_dev->pen_ck) {
+		hbp_info("enable pen clk.\n");
+		clk_prepare_enable(hbp_dev->pen_ck);
+	}
+}
+
+void pen_suspend(struct hbp_device *hbp_dev){
+	hbp_info("pen connect suspend\n");
+
+	if (hbp_dev->pen_ck) {
+		hbp_info("disable pen clk.\n");
+		clk_disable_unprepare(hbp_dev->pen_ck);
+	}
+}
+
 static long hbp_ctrl_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	int ret = 0;
@@ -1065,6 +1109,29 @@ static long hbp_ctrl_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigne
 		if (ret < 0) {
 			hbp_err("failed to write");
 			return ret;
+		}
+		break;
+	case HBP_IOCTRL_GET_HEALTH_INFO:
+		ret = hbp_healthinfo_read(usr.health_info.info, usr.health_info.info_size, &hbp_dev->monitor_data);
+		if (ret < 0) {
+			hbp_err("failed to get health info");
+			return -EFAULT;
+		}
+		break;
+	case HBP_IOCTRL_SET_HEALTH_INFO:
+		if (!usr.val) {
+			ret = hbp_healthinfo_clear(&hbp_dev->monitor_data);
+			if (ret < 0) {
+				hbp_err("failed to clear health info");
+				return -EFAULT;
+			}
+		}
+		break;
+	case HBP_IOCTRL_PEN_STATUS:
+		if (usr.val > 0) {
+			pen_resume(hbp_dev);
+		} else {
+			pen_suspend(hbp_dev);
 		}
 		break;
 	default:

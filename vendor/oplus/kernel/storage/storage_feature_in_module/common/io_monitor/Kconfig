@@ -1,0 +1,5 @@
+config OPLUS_FEATURE_IO_MONITOR
+    tristate "io monitor"
+    default n
+    help
+      Monitor Process file read/write.

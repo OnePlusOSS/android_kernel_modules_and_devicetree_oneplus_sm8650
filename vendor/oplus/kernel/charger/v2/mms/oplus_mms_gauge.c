@@ -826,6 +826,19 @@ int oplus_gauge_get_remaining_capacity(void)
 	return rm;
 }
 
+void oplus_gauge_set_plugin_status(void)
+{
+	int rc;
+	if (!g_mms_gauge)
+		return;
+
+	rc = oplus_chg_ic_func(g_mms_gauge->gauge_ic, OPLUS_IC_FUNC_GAUGE_SYNC_PLUGIN);
+	if (rc < 0)
+		chg_err("set gauge plugin status err, rc=%d\n", rc);
+
+	return;
+}
+
 int oplus_gauge_get_device_type(void)
 {
 	if (!g_mms_gauge)
@@ -2495,6 +2508,33 @@ static bool oplus_mms_gauge_get_batt_hmac(struct oplus_mms_gauge *chip)
 	return result;
 }
 
+static bool oplus_mms_gauge_get_sn_match(struct oplus_mms_gauge *chip)
+{
+	int rc = 0;
+	int i;
+	struct oplus_chg_ic_dev *ic;
+	bool match = false;
+	bool result = true;
+
+	if (!chip)
+		return true;
+
+	for (i = 0; i < chip->child_num; i++) {
+		ic = chip->child_list[i].ic_dev;
+		rc = oplus_chg_ic_func(ic, OPLUS_IC_FUNC_GAUGE_GET_SN_MATCH, &match);
+		if (rc == -ENOTSUPP)
+			return true;
+		if (rc < 0) {
+			result = false;
+			chg_err("gauge[%d](%s): can't get sm match, rc=%d\n", i, ic->manu_name, rc);
+			break;
+		}
+		result &= match;
+	}
+
+	return result;
+}
+
 int oplus_gauge_get_fcl_support(struct oplus_mms *mms, bool *fcl_support)
 {
 	int rc = 0;
@@ -2720,6 +2760,7 @@ static void oplus_mms_gauge_init_work(struct work_struct *work)
 		chip->device_type_for_vooc = 0;
 	}
 	chip->hmac = oplus_mms_gauge_get_batt_hmac(chip);
+	chip->sn_match = oplus_mms_gauge_get_sn_match(chip);
 	chip->parallel_hamc = true;
 
 	rc = of_property_read_u32(node, "oplus,sub_btb_curr_limit", &chip->sub_btb_curr_limit);
@@ -2727,8 +2768,8 @@ static void oplus_mms_gauge_init_work(struct work_struct *work)
 		chip->sub_btb_curr_limit = BATT_SUB_BTB_ABNORMAL_MAX_CURR;
 
 	chip->support_subboard_ntc = of_property_read_bool(node, "oplus,support_subboard_ntc");
-	chg_info("hmac=%d, support_subboard_ntc=%d, sub_btb_curr_limit=%d \n",
-		  chip->hmac, chip->support_subboard_ntc, chip->sub_btb_curr_limit);
+	chg_info("hmac=%d, support_subboard_ntc=%d, sub_btb_curr_limit=%d, sn_match=%d\n",
+		  chip->hmac, chip->support_subboard_ntc, chip->sub_btb_curr_limit, chip->sn_match);
 
 	chip->check_subboard_ntc_err = false;
 
@@ -2838,8 +2879,9 @@ static void oplus_mms_level_shift_fpga_rst_handler_work(struct work_struct *work
 	rc = oplus_mms_get_item_data(chip->gauge_topic, GAUGE_ITEM_HMAC, &data, false);
 	if (!rc && !!data.intval == false) {
 		chip->hmac = oplus_mms_gauge_get_batt_hmac(chip);
-		chg_info("retry hmac=%d\n", chip->hmac);
-		if (!!data.intval != chip->hmac)
+		chip->sn_match = oplus_mms_gauge_get_sn_match(chip);
+		chg_info("retry hmac=%d sn_match=%d\n", chip->hmac, chip->sn_match);
+		if (!!data.intval != (chip->hmac && chip->sn_match))
 			oplus_mms_gauge_push_hmac(chip);
 	}
 }
@@ -3050,9 +3092,10 @@ static void oplus_mms_gauge_hmac_update_handler_work(struct work_struct *work)
 	rc = oplus_mms_get_item_data(chip->gauge_topic, GAUGE_ITEM_HMAC, &data, false);
 	if (!rc) {
 		chip->hmac = oplus_mms_gauge_get_batt_hmac(chip);
-		chg_info("update hmac=%d\n", chip->hmac);
-		if (!!data.intval != chip->hmac)
-			oplus_mms_gauge_push_hmac(chip);
+			chip->sn_match = oplus_mms_gauge_get_sn_match(chip);
+			chg_info("update hmac=%d sn_match=%d\n", chip->hmac, chip->sn_match);
+			if (!!data.intval != (chip->hmac && chip->sn_match))
+				oplus_mms_gauge_push_hmac(chip);
 	}
 }
 
@@ -4427,7 +4470,7 @@ static int oplus_mms_gauge_update_hmac(struct oplus_mms *mms,
 	if (is_support_parallel(chip) && chip->connect_type != OPLUS_CHG_IC_CONNECT_SERIAL)
 		hmac = chip->parallel_hamc;
 
-	data->intval = hmac;
+	data->intval = hmac && chip->sn_match;
 	return 0;
 }
 
@@ -5179,8 +5222,9 @@ static void oplus_mms_gauge_update_change_work(struct work_struct *work)
 		if (!rc && !!data.intval == false) {
 			chg_info("retry hmac\n");
 			chip->hmac = oplus_mms_gauge_get_batt_hmac(chip);
-			chg_info("hmac=%d\n", chip->hmac);
-			if (!!data.intval != chip->hmac)
+			chip->sn_match = oplus_mms_gauge_get_sn_match(chip);
+			chg_info("hmac=%d sn_match=%d\n", chip->hmac, chip->sn_match);
+			if (!!data.intval != (chip->hmac && chip->sn_match))
 				oplus_mms_gauge_push_hmac(chip);
 		}
 	} else {

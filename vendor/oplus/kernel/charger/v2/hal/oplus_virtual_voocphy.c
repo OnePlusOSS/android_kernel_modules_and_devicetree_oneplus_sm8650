@@ -816,6 +816,25 @@ static int oplus_chg_vphy_get_frame_head(struct oplus_chg_ic_dev *ic_dev, int *h
 	return rc;
 }
 
+static int oplus_chg_vphy_get_fastchg_commu_ing(struct oplus_chg_ic_dev *ic_dev,
+				   bool *fastchg_commu_ing)
+{
+	struct oplus_virtual_vphy_ic *va;
+	int rc;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	va = oplus_chg_ic_get_drvdata(ic_dev);
+	rc = oplus_chg_ic_func(va->vphy, OPLUS_IC_FUNC_VOOCPHY_GET_FASTCHG_COMMU_ING,
+				   fastchg_commu_ing);
+	if (rc < 0)
+		chg_err("failed to get fastchg commu ing, rc=%d\n", rc);
+
+	return rc;
+}
+
 static void *oplus_chg_vphy_get_func(struct oplus_chg_ic_dev *ic_dev,
 				   enum oplus_chg_ic_func func_id)
 {
@@ -925,6 +944,10 @@ static void *oplus_chg_vphy_get_func(struct oplus_chg_ic_dev *ic_dev,
 	case OPLUS_IC_FUNC_VOOCPHY_GET_FRAME_HEAD:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_VOOCPHY_GET_FRAME_HEAD,
 					       oplus_chg_vphy_get_frame_head);
+		break;
+	case OPLUS_IC_FUNC_VOOCPHY_GET_FASTCHG_COMMU_ING:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_VOOCPHY_GET_FASTCHG_COMMU_ING,
+					       oplus_chg_vphy_get_fastchg_commu_ing);
 		break;
 	case OPLUS_IC_FUNC_VOOC_FW_UPGRADE:
 	case OPLUS_IC_FUNC_VOOC_USER_FW_UPGRADE:

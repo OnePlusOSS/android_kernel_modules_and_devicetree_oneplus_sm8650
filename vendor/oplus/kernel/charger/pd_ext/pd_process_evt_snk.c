@@ -311,6 +311,12 @@ static inline bool pd_process_hw_msg_sink_tx_change(
 		return false;
 
 	pe_data->pd_traffic_control = pd_traffic;
+#ifdef CONFIG_USB_PD_REV30_SNK_FLOW_DELAY_STARTUP
+	if (pe_data->pd_traffic_control == PD_SINK_TX_OK) {
+		pe_data->pd_traffic_control = PD_SINK_TX_START;
+		pd_restart_timer(pd_port, PD_TIMER_SNK_FLOW_DELAY);
+	}
+#endif
 	dpm_reaction_set_ready_once(pd_port);
 #endif	/* CONFIG_USB_PD_REV30_COLLISION_AVOID */
 

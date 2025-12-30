@@ -21,14 +21,66 @@
 #if IS_ENABLED(CONFIG_TOUCHPANEL_TRUSTED_TOUCH)
 #include <linux/pinctrl/qcom-pinctrl.h>
 
+int hbp_init_vm_mem_each(struct hbp_vm_mem *mem, struct device_node *tui_np, struct hbp_core *hbp)
+{
+	int ret = 0;
+	int i = 0, io_count = 0, gpio_count = 0;
+	int gpio;
+	struct resource res;
+
+	/*init vm memory info*/
+	ret = of_property_read_string(tui_np, "vm,env-type", &mem->env_type);
+	if (ret < 0) {
+		return ret;
+	}
+	ret = of_property_read_u32_array(tui_np, "vm,reset-reg", (int32_t *)&mem->reset_mem, 3);
+	if (ret < 0) {
+		return ret;
+	}
+	ret = of_property_read_u32_array(tui_np, "vm,intr-reg", (int32_t *)&mem->intr_mem, 3);
+	if (ret < 0) {
+		return ret;
+	}
+
+	io_count = of_property_count_u32_elems(tui_np, "vm,io-bases");
+	gpio_count = of_gpio_named_count(tui_np, "vm,gpio-list");
+
+	mem->iomem_size = io_count / 2 + gpio_count;
+	mem->iomem = kcalloc(mem->iomem_size, sizeof(struct vm_iomem), GFP_KERNEL);
+	if (!mem->iomem) {
+		return -ENOMEM;
+	}
+	for (i = 0; i < gpio_count; i++) {
+		gpio = of_get_named_gpio(tui_np, "vm,gpio-list", i);
+		if (gpio < 0 ||
+			!gpio_is_valid(gpio) ||
+			!msm_gpio_get_pin_address(gpio, &res)) {
+			hbp_err("failed to get valid gpio or res\n");
+			kfree(mem->iomem);
+			return -EINVAL;
+		}
+		mem->iomem[i].base = res.start;
+		mem->iomem[i].size = resource_size(&res);
+	}
+
+	ret = of_property_read_u32_array(tui_np, "vm,io-bases",
+						(uint32_t *)&mem->iomem[i],
+						io_count);
+	if (ret < 0) {
+		hbp_err("failed to read io bases\n");
+		kfree(mem->iomem);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 int hbp_init_vm_mem(struct device_node *np, struct hbp_core *hbp)
 {
 	int ret = 0;
 	struct device_node *tui_np;
 	struct hbp_vm_mem *mem;
-	int i = 0, j = 0, io_count = 0, gpio_count = 0;
-	int gpio;
-	struct resource res;
+	int i = 0;
 
 	/*init vm memory info*/
 	for_each_compatible_node(tui_np, NULL, "tui,environment") {
@@ -38,57 +90,15 @@ int hbp_init_vm_mem(struct device_node *np, struct hbp_core *hbp)
 			return -ENOMEM;
 		}
 
-		ret = of_property_read_string(tui_np, "vm,env-type", &mem->env_type);
+		ret = hbp_init_vm_mem_each(mem, tui_np, hbp);
 		if (ret < 0) {
-			kfree(mem);
-			continue;
-		}
-		ret = of_property_read_u32_array(tui_np, "vm,reset-reg", (int32_t *)&mem->reset_mem, 3);
-		if (ret < 0) {
-			kfree(mem);
-			continue;
-		}
-		ret = of_property_read_u32_array(tui_np, "vm,intr-reg", (int32_t *)&mem->intr_mem, 3);
-		if (ret < 0) {
+			hbp_err("failed to init vm memory %d\n", i);
 			kfree(mem);
 			continue;
 		}
 
-		io_count = of_property_count_u32_elems(tui_np, "vm,io-bases");
-		gpio_count = of_gpio_named_count(tui_np, "vm,gpio-list");
-
-		mem->iomem_size = io_count/2 + gpio_count;
-		mem->iomem = kcalloc(mem->iomem_size, sizeof(struct vm_iomem), GFP_KERNEL);
-		if (!mem->iomem) {
-			kfree(mem);
-			return -ENOMEM;
-		}
-		for (i = 0; i < gpio_count; i++) {
-			gpio = of_get_named_gpio(tui_np, "vm,gpio-list", i);
-			if (gpio < 0 ||
-			    !gpio_is_valid(gpio) ||
-			    !msm_gpio_get_pin_address(gpio, &res)) {
-				hbp_err("failed to get valid gpio or res\n");
-				kfree(mem->iomem);
-				kfree(mem);
-				return -EINVAL;
-			}
-			mem->iomem[i].base = res.start;
-			mem->iomem[i].size = resource_size(&res);
-		}
-
-		ret = of_property_read_u32_array(tui_np, "vm,io-bases",
-						 (uint32_t *)&mem->iomem[i],
-						 io_count);
-		if (ret < 0) {
-			hbp_err("failed to read io bases\n");
-			kfree(mem->iomem);
-			kfree(mem);
-			return -EINVAL;
-		}
-
-		if (j < 2*MAX_DEVICES) {
-			hbp->tui_mem[j++] = mem;
+		if (i < 2 * MAX_DEVICES) {
+			hbp->tui_mem[i++] = mem;
 		}
 	}
 

@@ -162,6 +162,22 @@ static int gt_chip_enable_hbp_mode(void *priv, bool en)
 
 static int gt_chip_get_irq_reason(void *priv, enum irq_reason *reason)
 {
+	struct gt_core *gt = (struct gt_core *)priv;
+	u32 ges_addr = gt->board_data.ges_addr;
+	u8 buf[sizeof(struct goodix_version_info)] = {0};
+	struct goodix_version_info *fw_ver = (struct goodix_version_info *)buf;
+
+	*reason = IRQ_REASON_NORMAL;
+
+	goodix_spi_read(gt, 0x10014, buf, sizeof(buf));
+
+	if (memcmp(fw_ver->patch_pid, "GEST", 4) == 0) {
+		goodix_spi_read(gt, ges_addr, buf, 1);
+		if (buf[0] & 0x20)
+			*reason = IRQ_REASON_NORMAL;
+		else
+			*reason = IRQ_REASON_GESTURE_DIFF;
+	}
 	return 0;
 }
 
@@ -175,6 +191,7 @@ static int gt_chip_get_gesture(void *priv, struct gesture_info *gesture)
 	u8 temp_data[GESTURE_KEY_DATA_LEN] = {0};
 	u8 ges_cmd[] = {0x00, 0x00, 0x06, 0xA6, 0x00, 0x00, 0xAC, 0x00};
 	u8 clean_data = 0;
+	u8 *ges_coor = &temp_data[GESTURE_DATA_HEAD_LEN];
 
 	/* read gesture data */
 	goodix_spi_read(gt, ges_addr, temp_data, sizeof(temp_data));
@@ -200,7 +217,7 @@ static int gt_chip_get_gesture(void *priv, struct gesture_info *gesture)
 		break;
 	case 0x63: // <
 		hbp_info("get gesture event: <\n");
-		gesture->type = LeftVee;
+		gesture->type = RightVee;
 		break;
 	case 0x65: // E
 		hbp_info("get gesture event: E\n");
@@ -219,7 +236,7 @@ static int gt_chip_get_gesture(void *priv, struct gesture_info *gesture)
 		break;
 	case 0x3E: // >
 		hbp_info("get gesture event: >\n");
-		gesture->type = RightVee;
+		gesture->type = LeftVee;
 		break;
 	case 0x77: // W
 		hbp_info("get gesture event: W\n");
@@ -271,6 +288,19 @@ static int gt_chip_get_gesture(void *priv, struct gesture_info *gesture)
 		hbp_err("not support gesture type 0x%02x\n", temp_data[4]);
 		break;
 	}
+
+	gesture->Point_start.x = le16_to_cpup((__le16 *)(ges_coor));
+	gesture->Point_start.y = le16_to_cpup((__le16 *)(ges_coor + 2));
+	gesture->Point_end.x = le16_to_cpup((__le16 *)(ges_coor + 4));
+	gesture->Point_end.y = le16_to_cpup((__le16 *)(ges_coor + 6));
+	gesture->Point_1st.x = le16_to_cpup((__le16 *)(ges_coor + 16));
+	gesture->Point_1st.y = le16_to_cpup((__le16 *)(ges_coor + 18));
+	gesture->Point_2nd.x = le16_to_cpup((__le16 *)(ges_coor + 20));
+	gesture->Point_2nd.y = le16_to_cpup((__le16 *)(ges_coor + 22));
+	gesture->Point_3rd.x = le16_to_cpup((__le16 *)(ges_coor + 24));
+	gesture->Point_3rd.y = le16_to_cpup((__le16 *)(ges_coor + 26));
+	gesture->Point_4th.x = le16_to_cpup((__le16 *)(ges_coor + 28));
+	gesture->Point_4th.y = le16_to_cpup((__le16 *)(ges_coor + 30));
 
 	goto exit;
 
@@ -331,11 +361,14 @@ static int goodix_spi_read(struct gt_core *ts_data, unsigned int addr, unsigned 
 	ret = ts_data->bus_ops->spi_sync(ts_data->bus_ops, tx_buf, rx_buf, SPI_READ_PREFIX_LEN + len);
 	if (ret < 0) {
 		hbp_err("spi transfer error:%d",ret);
+		if (ret == -110) {
+			hbp_err("BUG_ON at spiread sync ret = -110.\n");
+		}
 		goto exit;
 	}
 	memcpy(data, &rx_buf[SPI_READ_PREFIX_LEN - 1], len);
-exit:
 	mutex_unlock(&ts_data->bus_mutex);
+exit:
 	return ret;
 }
 
@@ -369,6 +402,9 @@ static int goodix_spi_write(struct gt_core *ts_data, unsigned int addr, unsigned
 
 	if (ret < 0) {
 		hbp_err("spi transfer error:%d",ret);
+		if (ret == -110) {
+			hbp_err("BUG_ON at spiwrite sync ret = -110.\n");
+		}
 		goto exit;
 	}
 	mutex_unlock(&ts_data->bus_mutex);

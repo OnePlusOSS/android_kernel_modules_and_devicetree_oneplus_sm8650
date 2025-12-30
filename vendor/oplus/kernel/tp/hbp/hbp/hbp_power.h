@@ -28,19 +28,4 @@ static struct power_sequeue power_on_default[] = {
     {0, 0, 0}
 };
 
-static struct power_sequeue power_reconfig[] = {
-    {POWER_VDDI, false, 10},
-    {POWER_AVDD, false, 100},
-    {POWER_AVDD, true, 10},
-    {POWER_VDDI, true, 10},
-    {POWER_RESET, false, 10},
-    {POWER_RESET, true, 100},
-    {0,0,0}
-};
-
-static struct power_sequeue hw_reset_config[] = {
-    {POWER_RESET, false, 10},
-    {POWER_RESET, true, 100},
-    {0,0,0}
-};
 #endif

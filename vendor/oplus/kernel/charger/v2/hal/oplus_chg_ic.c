@@ -335,7 +335,9 @@ bool oplus_chg_ic_debug_data_check(const void *buf, size_t len)
 {
 	struct oplus_chg_ic_func_arg *debug_data;
 	struct oplus_chg_ic_func_arg_item *item;
-	size_t item_size = 0;
+	size_t item_size_total = 0;
+	size_t item_size;
+	size_t remain_size = len;
 	int i;
 
 	if (buf == NULL) {
@@ -352,18 +354,30 @@ bool oplus_chg_ic_debug_data_check(const void *buf, size_t len)
 		chg_err("data buf magic error\n");
 		return false;
 	}
+	remain_size -= sizeof(struct oplus_chg_ic_func_arg);
 
 	for (i = 0; i < debug_data->item_num; i++) {
-		item = (struct oplus_chg_ic_func_arg_item *)(debug_data->buf + item_size);
+		if (remain_size < sizeof(struct oplus_chg_ic_func_arg_item)) {
+			chg_err("data buf too short, remain_size=%lu\n", remain_size);
+			return false;
+		}
+		item = (struct oplus_chg_ic_func_arg_item *)(debug_data->buf + item_size_total);
 		if (item->num != i) {
 			chg_err("item num error\n");
 			return false;
 		}
-		item_size += (item->size + sizeof(struct oplus_chg_ic_func_arg_item));
+		item_size = item->size + sizeof(struct oplus_chg_ic_func_arg_item);
+		item_size_total += item_size;
+		if (remain_size < item_size) {
+			chg_err("data buf too short, remain_size=%lu\n", remain_size);
+			return false;
+		}
+		remain_size -= item_size;
 	}
 
-	if (debug_data->size != item_size) {
-		chg_err("data size error, data_size=%d, item_size=%lu\n", debug_data->size, item_size);
+	if (debug_data->size != item_size_total) {
+		chg_err("data size error, data_size=%d, item_size_total=%lu\n",
+			debug_data->size, item_size_total);
 		return false;
 	}
 
@@ -399,6 +413,10 @@ u32 oplus_chg_ic_get_item_data_size(const void *buf, int index)
 	int i;
 
 	debug_data = (struct oplus_chg_ic_func_arg *)buf;
+	if (index >= debug_data->item_num) {
+		chg_err("index out of range, index=%d, item_num=%d\n", index, debug_data->item_num);
+		return 0;
+	}
 	for (i = 0; i <= index; i++) {
 		item = (struct oplus_chg_ic_func_arg_item *)(debug_data->buf + item_size);
 		item_size += (item->size + sizeof(struct oplus_chg_ic_func_arg_item));
@@ -415,6 +433,10 @@ s64 oplus_chg_ic_get_item_data(const void *buf, int index)
 	int i;
 
 	debug_data = (struct oplus_chg_ic_func_arg *)buf;
+	if (index >= debug_data->item_num) {
+		chg_err("index out of range, index=%d, item_num=%d\n", index, debug_data->item_num);
+		return 0;
+	}
 	for (i = 0; i <= index; i++) {
 		item = (struct oplus_chg_ic_func_arg_item *)(debug_data->buf + item_size);
 		item_size += (item->size + sizeof(struct oplus_chg_ic_func_arg_item));
@@ -431,6 +453,10 @@ void *oplus_chg_ic_get_item_data_addr(void *buf, int index)
 	int i;
 
 	debug_data = (struct oplus_chg_ic_func_arg *)buf;
+	if (index >= debug_data->item_num) {
+		chg_err("index out of range, index=%d, item_num=%d\n", index, debug_data->item_num);
+		return 0;
+	}
 	for (i = 0; i <= index; i++) {
 		item = (struct oplus_chg_ic_func_arg_item *)(debug_data->buf + item_size);
 		item_size += (item->size + sizeof(struct oplus_chg_ic_func_arg_item));

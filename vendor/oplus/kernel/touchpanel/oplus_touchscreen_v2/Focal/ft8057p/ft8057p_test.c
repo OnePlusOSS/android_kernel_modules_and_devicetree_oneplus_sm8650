@@ -882,7 +882,9 @@ static int fts_enter_test_environment(struct touchpanel_data *ts, bool test_stat
 			return -ENODATA;
 		}
 	} else {
-		memcpy(ts->panel_data.fw_name, FTS_TEST_FW_NAME, MAX_FW_NAME_LENGTH);
+		/*memcpy(ts->panel_data.fw_name, FTS_TEST_FW_NAME, MAX_FW_NAME_LENGTH);*/
+		strncpy(ts->panel_data.fw_name, FTS_TEST_FW_NAME, MAX_FW_NAME_LENGTH - 1);
+		ts->panel_data.fw_name[MAX_FW_NAME_LENGTH - 1] = '\0';
 		/*write normal firmware.bin*/
 		ret = request_firmware(&fw, ts->panel_data.fw_name, ts->dev);
 	}

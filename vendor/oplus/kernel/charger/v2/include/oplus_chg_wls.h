@@ -543,6 +543,12 @@ enum {
 	FORCE_UPGRADE_TX,
 };
 
+enum oplus_bt_type {
+	BT_UNKNOWN_TYPE = 0,
+	BT_CAR,
+	BT_MAG_HANDLE,
+};
+
 #ifdef OPLUS_CHG_DEBUG
 ssize_t oplus_chg_wls_upgrade_fw_show(struct oplus_mms *mms, char *buf);
 ssize_t oplus_chg_wls_upgrade_fw_store(struct oplus_mms *mms, const char *buf, size_t count);

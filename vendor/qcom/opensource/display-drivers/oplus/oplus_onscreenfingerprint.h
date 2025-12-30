@@ -9,6 +9,7 @@
 
 #ifndef _OPLUS_ONSCREENFINGERPRINT_H_
 #define _OPLUS_ONSCREENFINGERPRINT_H_
+#define VIDEO_AOD_BRIGHTNESS_VALUE_COUNT 4
 
 /* please just only include linux common head file to keep me pure */
 #include "oplus_display_private_api.h"
@@ -141,6 +142,12 @@ struct oplus_ofp_params {
 	struct workqueue_struct *aod_off_set_wq;		/* a workqueue used to send aod off cmds to speed up aod unlocking */
 	struct work_struct aod_off_set_work;			/* a work struct used to send aod off cmds to speed up aod unlocking */
 	struct notifier_block touchpanel_event_notifier;/* add for touchpanel event notifier */
+	bool ilitek_write_cmd_before_refresh_rate30hz;	/* ILITEK ramless IC aod on reg needs to be issued before 30hz frame rate */
+	/* add for enter aod change brightness by light sensor*/
+	bool video_mode_aod_brightness_change_enable;
+	u32 video_mode_aod_brightness_value_count;
+	u8 video_mode_aod_high_brightness_values[VIDEO_AOD_BRIGHTNESS_VALUE_COUNT];
+	u8 video_mode_aod_low_brightness_values[VIDEO_AOD_BRIGHTNESS_VALUE_COUNT];
 };
 
 /* log level config */
@@ -254,6 +261,7 @@ int oplus_ofp_ultra_low_power_aod_update(void *sde_encoder_virt);
 bool oplus_ofp_get_aod_state(void);
 ktime_t oplus_get_doze_disable_time(void);
 void oplus_ofp_video_mode_refresh_flag_update(void *dsi_display_mode);
+int oplus_panel_parse_video_mode_aod_brightness_config(struct dsi_panel *panel);
 
 /* -------------------- node -------------------- */
 /* fp_type */

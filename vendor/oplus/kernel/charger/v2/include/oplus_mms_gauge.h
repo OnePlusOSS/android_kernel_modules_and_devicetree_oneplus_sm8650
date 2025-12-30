@@ -211,6 +211,7 @@ int oplus_gauge_set_bcc_parameters(const char *buf);
 int oplus_gauge_get_sub_btb_curr_limit(struct oplus_mms *topic);
 int oplus_gauge_protect_check(void);
 bool oplus_gauge_afi_update_done(void);
+void oplus_gauge_set_plugin_status(void);
 
 bool oplus_gauge_check_reset_condition(void);
 bool oplus_gauge_reset(void);
@@ -223,6 +224,7 @@ void oplus_gauge_set_deep_dischg_ratio_thr(struct oplus_mms *topic, int ratio);
 int oplus_gauge_get_deep_dischg_ratio_thr(struct oplus_mms *topic);
 int oplus_gauge_get_battery_type_str(char *type);
 struct device_node *oplus_get_node_by_type(struct device_node *father_node);
+struct device_node *oplus_get_node_by_child_gauge(struct device_node *father_node);
 int oplus_gauge_get_battinfo_sn(struct oplus_mms *topic, char *sn_buff, int size_buffer);
 int oplus_gauge_get_sili_alg_application_info(struct oplus_mms *topic, u8 *info, int len);
 int oplus_gauge_get_sili_alg_lifetime_info(struct oplus_mms *mms, u8 *info, int len);

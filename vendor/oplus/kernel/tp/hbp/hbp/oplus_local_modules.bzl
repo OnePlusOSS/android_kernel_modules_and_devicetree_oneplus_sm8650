@@ -66,7 +66,8 @@ def define_oplus_local_modules():
             "hbp_power.c",
             "hbp_spi.c",
             "hbp_sysfs.c",
-            "hbp_exception.c"
+            "hbp_exception.c",
+            "hbp_healthinfo.c"
         ]),
         includes = ["."],
         ko_deps = panel_event_notifier_ko_deps + tp_others_ko_deps,

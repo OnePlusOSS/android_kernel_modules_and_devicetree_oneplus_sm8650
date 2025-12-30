@@ -1408,6 +1408,7 @@ static void dsi_configure_command_scheduling(struct dsi_ctrl *dsi_ctrl,
 				break;
 		}
 		sched_line_no = g_oplus_send_fps_code ? 1 : ((sched_line_no == 0) ? 1 :sched_line_no);
+		sched_line_no = (line_no == 0) ? sched_line_no : line_no;
 #endif
 		if (timing) {
 			if (sched_line_no >= timing->v_front_porch)

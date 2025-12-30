@@ -701,11 +701,11 @@ int oplus_panel_vddr_off(struct dsi_display *display, const char *vreg_name)
 		if (gpio_is_valid(display->panel->reset_config.panel_vout_gpio)) {
 			gpio_set_value(display->panel->reset_config.panel_vout_gpio, 0);
 		}
-
+		usleep_range(5000, 5100);
 		if (gpio_is_valid(display->panel->reset_config.panel_vddr_vout_gpio2)) {
 			gpio_set_value(display->panel->reset_config.panel_vddr_vout_gpio2, 0);
 		}
-		usleep_range(5000, 5100);
+		usleep_range(3000, 3100);
 	}
 
 	return rc;

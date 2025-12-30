@@ -635,6 +635,20 @@ unlock_out:
 	return retval;
 }
 
+static int syna_hw_reset_zeroflash(struct syna_tcm_hcd *tcm_hcd, struct hw_resource *hw_res)
+{
+	if (gpio_is_valid(hw_res->reset_gpio)) {
+		TPD_INFO("hardware reset: %d\n", hw_res->reset_gpio);
+		gpio_set_value(hw_res->reset_gpio, false);
+		msleep(20);
+		gpio_set_value(hw_res->reset_gpio, true);
+		msleep(200);
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
 static void zeroflash_download_config_work(struct work_struct *work)
 {
 	int retval = 0;
@@ -656,6 +670,9 @@ static void zeroflash_download_config_work(struct work_struct *work)
 		if (retval < 0) {
 			if (tcm_hcd->health_monitor_support) {
 			/*	tcm_hcd->monitor_data->reserve2++;*/
+			}
+			if (tcm_hcd->status_report_code != REPORT_IDENTIFY) {
+				syna_hw_reset_zeroflash(tcm_hcd, tcm_hcd->hw_res);
 			}
 			TPD_INFO(
 				"Failed to download application config\n");
@@ -900,12 +917,18 @@ static void zeroflash_do_romboot_firmware_download(void)
 
 	UNLOCK_BUFFER(g_zeroflash_hcd->out);
 	if (retval < 0) {
+		if (tcm_hcd->status_report_code != REPORT_IDENTIFY) {
+			syna_hw_reset_zeroflash(tcm_hcd, tcm_hcd->hw_res);
+		}
 		TPD_INFO("Failed to write command ROMBOOT DOWNLOAD");
 		goto exit;
 	}
 
 	retval = syna_tcm_run_bootloader_firmware(tcm_hcd);
 	if (retval < 0) {
+		if (tcm_hcd->status_report_code != REPORT_IDENTIFY) {
+			syna_hw_reset_zeroflash(tcm_hcd, tcm_hcd->hw_res);
+		}
 		TPD_INFO("Failed to switch to bootloader");
 		goto exit;
 	}

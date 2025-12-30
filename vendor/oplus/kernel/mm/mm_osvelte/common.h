@@ -7,11 +7,7 @@
 
 #define KMODULE_NAME "oplus_bsp_mm_osvelte"
 
-#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE_DBG)
-#define DEV_NAME "osvelte_dbg"
-#else
 #define DEV_NAME "osvelte"
-#endif
 
 #define DEV_PATH "/dev/" DEV_NAME
 
@@ -61,4 +57,5 @@ extern struct kobject *oplus_mm_kobj;
 extern void osvelte_register_symbol(enum oplus_mm_symbol sym, void *data);
 extern void *osvelte_read_symbol(enum oplus_mm_symbol sym, bool atomic);
 extern bool osvelte_test_scene(unsigned long nr);
+extern void *osvelte_kallsyms_lookup_name(const char *name);
 #endif /* _OSVELTE_COMMON_H */

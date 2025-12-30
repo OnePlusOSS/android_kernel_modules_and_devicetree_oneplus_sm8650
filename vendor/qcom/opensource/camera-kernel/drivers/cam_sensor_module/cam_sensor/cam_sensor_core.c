@@ -1135,6 +1135,7 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 	int ret;
 	char trace[64] = {0};
 	char fb_payload[PAYLOAD_LENGTH] = {0};
+	struct device_node *of_node = s_ctrl->of_node;
 #endif
 
 	if (!s_ctrl || !arg) {
@@ -1656,11 +1657,11 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 #endif
 
 #ifdef OPLUS_FEATURE_CAMERA_COMMON
-			if ((rc == -EAGAIN || rc == -ETIMEDOUT || rc == -EINVAL) &&
+			if (!of_property_read_bool(of_node, "skip_reapply_settings") && ((rc == -EAGAIN || rc == -ETIMEDOUT || rc == -EINVAL) &&
 #else
-			if ((rc == -EAGAIN) &&
+			if (((rc == -EAGAIN) &&
 #endif
-			((s_ctrl->io_master_info.master_type == CCI_MASTER) || (s_ctrl->io_master_info.master_type == I2C_MASTER))) {
+			((s_ctrl->io_master_info.master_type == CCI_MASTER) || (s_ctrl->io_master_info.master_type == I2C_MASTER)))) {
 				/* If CCI hardware is resetting we need to wait
 				 * for sometime before reapply
 				 */

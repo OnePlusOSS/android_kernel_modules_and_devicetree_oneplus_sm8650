@@ -534,7 +534,8 @@ static int dsi_panel_power_on(struct dsi_panel *panel)
 		|| !strcmp(panel->oplus_priv.vendor_name, "AB781")
 		|| !strcmp(panel->oplus_priv.vendor_name, "AC223")
 		|| !strcmp(panel->oplus_priv.vendor_name, "A0020")
-		|| !strcmp(panel->oplus_priv.vendor_name, "A0014")) {
+		|| !strcmp(panel->oplus_priv.vendor_name, "A0014")
+		|| !strcmp(panel->oplus_priv.vendor_name, "A0034")) {
 		rc = 0;
 	} else {
 /*#ifdef OPLUS_FEATURE_TP_BASIC*/
@@ -2612,6 +2613,16 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"oplus,dsi-panel-gamma-compensation-page0-command",
 	"oplus,dsi-panel-gamma-compensation-page1-command",
 	"oplus,dsi-panel-gamma-compensation-command",
+	"qcom,mdss-dsi-fps-switch-165HZ-enter-144Hz-command",
+	"qcom,mdss-dsi-fps-switch-165HZ-enter-120Hz-command",
+	"qcom,mdss-dsi-fps-switch-165HZ-enter-90Hz-command",
+	"qcom,mdss-dsi-fps-switch-165HZ-enter-60Hz-command",
+	"qcom,mdss-dsi-fps-switch-144HZ-enter-120Hz-command",
+	"qcom,mdss-dsi-fps-switch-144HZ-enter-90Hz-command",
+	"qcom,mdss-dsi-fps-switch-144HZ-enter-60Hz-command",
+	"qcom,mdss-dsi-fps-switch-enter-165Hz-command",
+	"qcom,mdss-dsi-fps-switch-144Hz-enter-165Hz-command",
+	"qcom,mdss-dsi-fps-switch-enter-144Hz-command",
 #endif /* OPLUS_FEATURE_DISPLAY */
 };
 
@@ -2839,6 +2850,16 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"oplus,dsi-panel-gamma-compensation-page0-command-state",
 	"oplus,dsi-panel-gamma-compensation-page1-command-state",
 	"oplus,dsi-panel-gamma-compensation-command-state",
+	"qcom,mdss-dsi-fps-switch-165HZ-enter-144Hz-command-state",
+	"qcom,mdss-dsi-fps-switch-165HZ-enter-120Hz-command-state",
+	"qcom,mdss-dsi-fps-switch-165HZ-enter-90Hz-command-state",
+	"qcom,mdss-dsi-fps-switch-165HZ-enter-60Hz-command-state",
+	"qcom,mdss-dsi-fps-switch-144HZ-enter-120Hz-command-state",
+	"qcom,mdss-dsi-fps-switch-144HZ-enter-90Hz-command-state",
+	"qcom,mdss-dsi-fps-switch-144HZ-enter-60Hz-command-state",
+	"qcom,mdss-dsi-fps-switch-enter-165Hz-command-state",
+	"qcom,mdss-dsi-fps-switch-144Hz-enter-165Hz-command-state",
+	"qcom,mdss-dsi-fps-switch-enter-144Hz-command-state",
 #endif /* OPLUS_FEATURE_DISPLAY */
 
 };
@@ -5778,8 +5799,9 @@ int dsi_panel_prepare(struct dsi_panel *panel)
 			|| !strcmp(panel->oplus_priv.vendor_name, "AB781")
 			|| !strcmp(panel->oplus_priv.vendor_name, "AC223")
 			|| !strcmp(panel->oplus_priv.vendor_name, "A0020")
-			|| !strcmp(panel->oplus_priv.vendor_name, "A0014")) {
-			if (!strcmp(panel->oplus_priv.vendor_name, "A0014")) {
+			|| !strcmp(panel->oplus_priv.vendor_name, "A0014")
+			|| !strcmp(panel->oplus_priv.vendor_name, "A0034")) {
+			if (!strcmp(panel->oplus_priv.vendor_name, "A0014") || !strcmp(panel->oplus_priv.vendor_name, "A0034")) {
 				usleep_range(11*1000, (11*1000)+100);
 			} else {
 				usleep_range(2*1000, (2*1000)+100);
@@ -6467,6 +6489,7 @@ int oplus_panel_vid_cmdp_handle(void *dsi_panel, enum dsi_cmd_set_type type)
 	struct dsi_panel *panel = dsi_panel;
 	struct dsi_display_mode *mode;
 	struct dsi_cmd_desc *cmds;
+	struct task_struct *task = current;
 	int i = 0;
 	u32 count;
 
@@ -6478,6 +6501,10 @@ int oplus_panel_vid_cmdp_handle(void *dsi_panel, enum dsi_cmd_set_type type)
 	if((panel->panel_mode != DSI_OP_VIDEO_MODE) || (!panel->oplus_priv.enable_dsi_cmd_package)) {
 		return 0;
 	}
+	if (strncmp(task->comm, "crtc_commit", 11) != 0) {
+		return 0;
+	}
+
 	mode = panel->cur_mode;
 	cmds = mode->priv_info->cmd_sets[type].cmds;
 	count = mode->priv_info->cmd_sets[type].count;
@@ -6488,7 +6515,17 @@ int oplus_panel_vid_cmdp_handle(void *dsi_panel, enum dsi_cmd_set_type type)
 	case DSI_CMD_ESD_SWITCH_PAGE:
 	case DSI_CMD_DEFAULT_SWITCH_PAGE:
 	case DSI_CMD_SET_PPS:
-		break;
+	case DSI_CMD_FPS_165HZ_ENTER_144HZ:
+	case DSI_CMD_FPS_165HZ_ENTER_120HZ:
+	case DSI_CMD_FPS_165HZ_ENTER_90HZ:
+	case DSI_CMD_FPS_165HZ_ENTER_60HZ:
+	case DSI_CMD_FPS_144HZ_ENTER_120HZ:
+	case DSI_CMD_FPS_144HZ_ENTER_90HZ:
+	case DSI_CMD_FPS_144HZ_ENTER_60HZ:
+	case DSI_CMD_FPS_ENTER_165HZ:
+	case DSI_CMD_FPS_144HZ_ENTER_165HZ:
+	case DSI_CMD_FPS_ENTER_144HZ:
+	break;
 	default:
 		if (count > 0) {
 			dsi_cmd_set_type_status = (int)type;
