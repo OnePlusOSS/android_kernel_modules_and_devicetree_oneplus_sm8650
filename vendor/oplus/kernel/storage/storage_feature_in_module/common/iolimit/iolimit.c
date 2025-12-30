@@ -32,7 +32,46 @@
 #include <trace/hooks/mm.h>
 
 #define CREATE_TRACE_POINTS
-#include "trace.h"
+
+
+#undef TRACE_SYSTEM
+#define TRACE_SYSTEM unisoc_io
+
+#include <linux/tracepoint.h>
+
+TRACE_EVENT(iolimit_write_control,
+	TP_PROTO(unsigned long delta),
+
+	TP_ARGS(delta),
+
+	TP_STRUCT__entry(
+		__field(pid_t, tgid)
+		__field(pid_t, pid)
+		__array(char, comm, TASK_COMM_LEN)
+		__field(unsigned long, delta)
+	),
+
+	TP_fast_assign(
+		__entry->tgid = current->tgid;
+		__entry->pid  = current->pid;
+		memcpy(__entry->comm, current->comm, TASK_COMM_LEN);
+		__entry->delta = delta * 1000 / HZ;
+	),
+
+	TP_printk("tgid:%d pid:%d comm=%s delta=%lu\n",
+		__entry->tgid,
+		__entry->pid,
+		__entry->comm,
+		__entry->delta
+	)
+);
+
+#undef TRACE_INCLUDE_PATH
+#define TRACE_INCLUDE_PATH .
+#define TRACE_INCLUDE_FILE trace
+
+#include <trace/define_trace.h>
+
 
 //IO control's window is selected as (1/8)s.
 #define WAIT_PARTS_NUM		(8)
@@ -366,7 +405,8 @@ static struct blkcg_policy iolimit_policy = {
 
 static int __init iolimit_init(void)
 {
-	int ret = blkcg_policy_register(&iolimit_policy);
+	int ret;
+	ret = blkcg_policy_register(&iolimit_policy);
 
 	if (ret < 0) {
 		pr_err("blkcg policy register failed: %d\n", ret);

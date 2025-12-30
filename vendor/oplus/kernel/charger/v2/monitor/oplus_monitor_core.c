@@ -18,6 +18,7 @@
 #include <soc/oplus/system/oplus_project.h>
 #endif
 #include <oplus_chg_module.h>
+#include <oplus_chg_voter.h>
 #include <oplus_chg_vooc.h>
 #include <oplus_mms_gauge.h>
 #include <oplus_mms_wired.h>
@@ -35,6 +36,10 @@
 #include <oplus_i2c_rst_notify.h>
 #endif
 #include <oplus_chg_plc.h>
+
+#if IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP)
+#include "track/oplus_track_state_keep.h"
+#endif
 
 __maybe_unused static bool is_fv_votable_available(struct oplus_monitor *chip)
 {
@@ -2136,7 +2141,29 @@ static struct mms_item oplus_monitor_item[] = {
 			.str_data = true,
 		}
 	},
-
+	{
+		.desc = {
+			.item_id = ERR_ITEM_STATE_KEEP_INFO,
+			.str_data = true,
+		}
+	},
+	{
+		.desc = {
+			.item_id = ERR_ITEM_STATE_KEEP_ABNORMAL,
+			.str_data = true,
+		}
+	},
+	{
+		.desc = {
+			.item_id = ERR_ITEM_USBIN_ABNORMAL,
+		}
+	},
+	{
+		.desc = {
+			.item_id = ERR_ITEM_SEC_IC_MEM_INFO,
+			.str_data = true,
+		}
+	}
 };
 
 static const struct oplus_mms_desc oplus_monitor_desc = {
@@ -2266,6 +2293,9 @@ static int oplus_monitor_probe(struct platform_device *pdev)
 	oplus_mms_wait_topic("ufcs", oplus_monitor_subscribe_ufcs_topic, chip);
 	oplus_mms_wait_topic("retention", oplus_monitor_subscribe_retention_topic, chip);
 	oplus_mms_wait_topic("plc", oplus_monitor_subscribe_plc_topic, chip);
+#if IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP)
+	oplus_mms_wait_topic("state_keep", oplus_monitor_subscribe_keep_topic, chip);
+#endif
 
 	chg_info("probe success\n");
 	return 0;
@@ -2301,6 +2331,10 @@ static int oplus_monitor_remove(struct platform_device *pdev)
 		oplus_mms_unsubscribe(chip->ufcs_subs);
 	if (!IS_ERR_OR_NULL(chip->plc_subs))
 		oplus_mms_unsubscribe(chip->plc_subs);
+#if IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP)
+	if (!IS_ERR_OR_NULL(chip->keep_subs))
+		oplus_mms_unsubscribe(chip->keep_subs);
+#endif
 	oplus_chg_track_driver_exit(chip);
 	platform_set_drvdata(pdev, NULL);
 	devm_kfree(&pdev->dev, chip);

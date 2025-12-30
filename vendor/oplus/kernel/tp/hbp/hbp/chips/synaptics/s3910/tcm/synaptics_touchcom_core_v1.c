@@ -530,23 +530,13 @@ exit:
  * @return
  *    on success, 0 or positive value; otherwise, negative value on error.
  */
-static int syna_tcm_v1_write(struct tcm_dev *tcm_dev, unsigned char command,
-		unsigned char *payload, unsigned int payload_len,
+static int syna_tcm_v1_write_buf_init(struct tcm_message_data_blob *tcm_msg,
+		unsigned char command, unsigned char *payload, unsigned int payload_len,
 		bool extra_crc, unsigned short crc)
 {
 	int retval = 0;
-	struct tcm_message_data_blob *tcm_msg = NULL;
 	int size, buf_size;
 	unsigned char crc16[TCM_MSG_CRC_LENGTH] = { 0 };
-
-	if (!tcm_dev) {
-		hbp_err("Invalid tcm device handle\n");
-		return _EINVAL;
-	}
-
-	tcm_msg = &tcm_dev->msg_data;
-
-	syna_tcm_buf_lock(&tcm_msg->out);
 
 	/* allocate the space storing the written data */
 	buf_size = payload_len + 3;
@@ -560,7 +550,7 @@ static int syna_tcm_v1_write(struct tcm_dev *tcm_dev, unsigned char command,
 	retval = syna_tcm_buf_alloc(&tcm_msg->out, buf_size);
 	if (retval < 0) {
 		hbp_err("Fail to allocate memory for internal buf.out\n");
-		goto exit;
+		return retval;
 	}
 
 	if (command != CMD_CONTINUE_WRITE) {
@@ -582,7 +572,7 @@ static int syna_tcm_v1_write(struct tcm_dev *tcm_dev, unsigned char command,
 					);
 			if (retval < 0) {
 				hbp_err("Fail to copy payload\n");
-				goto exit;
+				return retval;
 			}
 		}
 	} else {
@@ -601,7 +591,7 @@ static int syna_tcm_v1_write(struct tcm_dev *tcm_dev, unsigned char command,
 				);
 		if (retval < 0) {
 			hbp_err("Fail to copy continued write\n");
-			goto exit;
+			return retval;
 		}
 	}
 
@@ -615,11 +605,41 @@ static int syna_tcm_v1_write(struct tcm_dev *tcm_dev, unsigned char command,
 				);
 		if (retval < 0) {
 			hbp_err("Fail to append crc16\n");
-			goto exit;
+			return retval;
 		}
 
 		size += sizeof(crc16);
 	}
+
+	return size;
+}
+
+static int syna_tcm_v1_write(struct tcm_dev *tcm_dev, unsigned char command,
+		unsigned char *payload, unsigned int payload_len,
+		bool extra_crc, unsigned short crc)
+{
+	int retval = 0;
+	struct tcm_message_data_blob *tcm_msg = NULL;
+	int size;
+
+	if (!tcm_dev) {
+		hbp_err("Invalid tcm device handle\n");
+		return _EINVAL;
+	}
+
+	tcm_msg = &tcm_dev->msg_data;
+
+	syna_tcm_buf_lock(&tcm_msg->out);
+
+	retval = syna_tcm_v1_write_buf_init(tcm_msg,
+			command, payload, payload_len,
+			extra_crc, crc);
+	if (retval < 0) {
+		hbp_err("Fail to init write buf, ret = %d\n", retval);
+		goto exit;
+	}
+
+	size = retval;
 
 	/* write command packet to the device */
 	retval = syna_tcm_write(tcm_dev,

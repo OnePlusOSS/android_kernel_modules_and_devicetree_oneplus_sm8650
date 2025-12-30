@@ -26,3 +26,4 @@
 ../vendor/oplus/kernel/power/standby_netlink
 ../vendor/oplus/kernel/cpu/sched_ext
 ../vendor/oplus/kernel/power/rpmh
+../vendor/oplus/kernel/patch

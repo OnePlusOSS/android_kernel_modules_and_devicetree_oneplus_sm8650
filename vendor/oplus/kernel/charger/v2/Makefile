@@ -113,6 +113,12 @@ oplus_chg_v2-y += monitor/oplus_chg_track.o
 oplus_chg_v2-y += monitor/oplus_chg_exception.o
 oplus_chg_v2-y += plat_ufcs/plat_ufcs_notify.o
 
+oplus_chg_v2-$(CONFIG_OPLUS_CHG_RECOVERY) += recovery/oplus_chg_recovery.o
+oplus_chg_v2-$(CONFIG_OPLUS_CHG_STATE_KEEP) += recovery/state_keep/state_keep.o
+oplus_chg_v2-$(CONFIG_OPLUS_CHG_STATE_KEEP) += recovery/state_keep/detection/wired_disconnect_detection.o
+oplus_chg_v2-$(CONFIG_OPLUS_CHG_STATE_KEEP) += recovery/state_keep/detection/vooc_disconnect_detection.o
+oplus_chg_v2-$(CONFIG_OPLUS_CHG_STATE_KEEP) += monitor/track/oplus_track_state_keep.o
+
 oplus_chg_v2-$(CONFIG_OPLUS_STATE_RETENTION) += oplus_chg_quirks.o
 oplus_chg_v2-$(CONFIG_OPLUS_STATE_RETENTION) += oplus_chg_state_retention.o
 oplus_chg_v2-$(CONFIG_OPLUS_DA9313_CHARGER) += charger_ic/oplus_da9313.o
@@ -188,6 +194,8 @@ oplus_chg_v2-$(CONFIG_OPLUS_WIRELESS_NU1669) += wireless_ic/oplus_hal_nu1669.o
 oplus_chg_v2-$(CONFIG_OPLUS_WIRELESS_P9415) += wireless_ic/oplus_hal_p9415.o
 oplus_chg_v2-$(CONFIG_OPLUS_WIRELESS_SC96257) += wireless_ic/oplus_hal_sc96257.o
 oplus_chg_v2-$(CONFIG_OPLUS_CHARGEPUMP_HL7227) += chargepump_ic/oplus_hal_hl7227.o
+
+oplus_chg_v2-$(CONFIG_OPLUS_DEBUG_AUTH) += debug/oplus_debug_auth.o
 
 KBUILD_LDS_MODULE_ATTACH = oplus_chg_module.lds
 

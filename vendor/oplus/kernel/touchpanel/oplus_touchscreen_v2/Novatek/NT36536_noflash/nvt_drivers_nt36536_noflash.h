@@ -65,6 +65,7 @@
 #define DOUSWIP_DETECT                  34
 #define PEN_DETECT                      25
 
+#define EVENTBUFFER_INJECT_WDT_RESET     0x24       /*inject watchdog reset*/
 #define EVENTBUFFER_PWR_PLUG_IN          0x53
 #define EVENTBUFFER_PWR_PLUG_OUT         0x51
 #define EVENTBUFFER_HOPPING_POLLING_ON   0x73

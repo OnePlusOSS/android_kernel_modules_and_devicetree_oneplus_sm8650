@@ -37,6 +37,15 @@
 #include "dsi_iris_api.h"
 #endif
 
+#define REFRESH_RATE_FPS_60HZ 60
+#define REFRESH_RATE_FPS_90HZ 90
+#define REFRESH_RATE_FPS_120HZ 120
+#define REFRESH_RATE_FPS_144HZ 144
+#define REFRESH_RATE_FPS_165HZ 165
+
+int video_cur_refresh_rate = 0;
+int target_refresh_rate = 0;
+
 extern int lcd_closebl_flag;
 extern u32 oplus_last_backlight;
 int switch_pwm_in_pre_bl = 0;
@@ -213,6 +222,17 @@ int oplus_panel_features_config(struct dsi_panel *panel)
 		"oplus,enable_dsi_cmd_package");
 	LCD_INFO("oplus,enable_dsi_cmd_package: %s\n",
 		panel->oplus_priv.enable_dsi_cmd_package ? "true" : "false");
+
+	panel->oplus_priv.vid_fps_switch_compenstate_enable = utils->read_bool(utils->data,
+		"oplus,video-mode-fps-switch-compenstate-enable");
+	LCD_INFO("oplus,video-mode-fps-switch-compenstate-enable: %s\n",
+		panel->oplus_priv.vid_fps_switch_compenstate_enable ? "true" : "false");
+
+	panel->oplus_priv.doze_disable_esdcheck = utils->read_bool(utils->data,
+			"oplus,doze_disable_esdcheck");
+	LCD_INFO("oplus,doze_disable_esdcheck: %s\n",
+			panel->oplus_priv.doze_disable_esdcheck ? "true" : "false");
+
 	return 0;
 }
 
@@ -247,6 +267,101 @@ int oplus_panel_post_on_backlight(void *display, struct dsi_panel *panel, u32 bl
 		atomic_set(&panel->esd_pending, 0);
 	}
 	return 0;
+}
+
+bool oplus_panel_switch_vid_mode_compenstate_post(struct dsi_panel *panel, struct drm_crtc *crtc, int refresh_rate)
+{
+	u32 rc = 0;
+	int dsi_cmd_vid_switch = -1;
+	bool cmd_switch_flag = false;
+	target_refresh_rate = refresh_rate;
+
+	if (target_refresh_rate == 165) {
+		switch (video_cur_refresh_rate) {
+		case REFRESH_RATE_FPS_60HZ:
+		case REFRESH_RATE_FPS_90HZ:
+		case REFRESH_RATE_FPS_120HZ:
+			dsi_cmd_vid_switch = DSI_CMD_FPS_ENTER_165HZ;
+			break;
+		case REFRESH_RATE_FPS_144HZ:
+			dsi_cmd_vid_switch = DSI_CMD_FPS_144HZ_ENTER_165HZ;
+			break;
+		}
+	} else if (video_cur_refresh_rate == 165) {
+		switch (target_refresh_rate) {
+		case REFRESH_RATE_FPS_60HZ:
+			dsi_cmd_vid_switch = DSI_CMD_FPS_165HZ_ENTER_60HZ;
+			break;
+		case REFRESH_RATE_FPS_90HZ:
+			dsi_cmd_vid_switch = DSI_CMD_FPS_165HZ_ENTER_90HZ;
+			break;
+		case REFRESH_RATE_FPS_120HZ:
+			dsi_cmd_vid_switch = DSI_CMD_FPS_165HZ_ENTER_120HZ;
+			break;
+		case REFRESH_RATE_FPS_144HZ:
+			dsi_cmd_vid_switch = DSI_CMD_FPS_165HZ_ENTER_144HZ;
+			break;
+		}
+	} else if (video_cur_refresh_rate == 144) {
+		switch (target_refresh_rate) {
+		case REFRESH_RATE_FPS_60HZ:
+			dsi_cmd_vid_switch = DSI_CMD_FPS_144HZ_ENTER_60HZ;
+			break;
+		case REFRESH_RATE_FPS_90HZ:
+			dsi_cmd_vid_switch = DSI_CMD_FPS_144HZ_ENTER_90HZ;
+			break;
+		case REFRESH_RATE_FPS_120HZ:
+			dsi_cmd_vid_switch = DSI_CMD_FPS_144HZ_ENTER_120HZ;
+			break;
+		case REFRESH_RATE_FPS_165HZ:
+			dsi_cmd_vid_switch = DSI_CMD_FPS_144HZ_ENTER_165HZ;
+			break;
+		}
+	} else if (target_refresh_rate == 144) {
+		switch (video_cur_refresh_rate) {
+		case REFRESH_RATE_FPS_60HZ:
+		case REFRESH_RATE_FPS_90HZ:
+		case REFRESH_RATE_FPS_120HZ:
+			dsi_cmd_vid_switch = DSI_CMD_FPS_ENTER_144HZ;
+			break;
+		case REFRESH_RATE_FPS_165HZ:
+			dsi_cmd_vid_switch = DSI_CMD_FPS_165HZ_ENTER_144HZ;
+			break;
+		}
+	}
+
+	LCD_INFO("panel : dsi_cmd_vid_switch = %d, target_refresh_rate = %d, "
+		"video_cur_refresh_rate = %d\n", dsi_cmd_vid_switch,
+		target_refresh_rate, video_cur_refresh_rate);
+
+	if (panel->esd_config.status_mode == ESD_MODE_PANEL_ERROR_FLAG) {
+		/*skip esd check when vedio mode switch timming gamma*/
+		atomic_set(&panel->esd_pending, 1);
+	}
+
+	if (dsi_cmd_vid_switch != -1) {
+		mutex_lock(&panel->panel_lock);
+		rc = dsi_panel_tx_cmd_set(panel, dsi_cmd_vid_switch);
+		if (rc) {
+			LCD_ERR("[%s] failed to send fps compenstate cmds, rc=%d\n",
+				panel->name, rc);
+		}
+		cmd_switch_flag = true;
+		switch (video_cur_refresh_rate) {
+		case REFRESH_RATE_FPS_60HZ:
+			usleep_range(9000, 9000+100);
+			break;
+		case REFRESH_RATE_FPS_90HZ:
+			usleep_range(3000, 3000+100);
+			break;
+		}
+		mutex_unlock(&panel->panel_lock);
+	}
+
+	dsi_cmd_vid_switch = -1;
+	video_cur_refresh_rate = target_refresh_rate;
+
+	return cmd_switch_flag;
 }
 
 void oplus_panel_switch_vid_mode_post(struct dsi_display *display, struct dsi_display_mode *mode)
@@ -288,12 +403,19 @@ void oplus_panel_switch_vid_mode_post(struct dsi_display *display, struct dsi_di
 	refresh_rate = mode->timing.refresh_rate;
 		LCD_INFO("oplus_panel_switch_vid_mode_post refresh %d\n", refresh_rate);
 
+	if (panel->oplus_priv.vid_fps_switch_compenstate_enable && panel->oplus_priv.vid_timming_switch_post_enabled) {
+		if (oplus_panel_switch_vid_mode_compenstate_post(panel, crtc, refresh_rate))
+			return;
+	}
+
 	if (refresh_rate == 120) {
 		dsi_cmd_vid_switch = DSI_CMD_VID_120_SWITCH;
 	} else if (refresh_rate == 60) {
 		dsi_cmd_vid_switch = DSI_CMD_VID_60_SWITCH;
 	} else if (refresh_rate == 90) {
 		dsi_cmd_vid_switch = DSI_CMD_VID_90_SWITCH;
+	} else if (refresh_rate == 144) {
+		dsi_cmd_vid_switch = DSI_CMD_VID_144_SWITCH;
 	} else {
 		return;
 	}
@@ -334,8 +456,8 @@ void oplus_panel_switch_vid_mode(struct dsi_display *display, struct dsi_display
 
 	panel = display->panel;
 	crtc = display->drm_conn->state->crtc;
-	if (panel->power_mode == SDE_MODE_DPMS_OFF || oplus_sync_power_state != SDE_MODE_DPMS_ON) {
-		LCD_INFO("display panel in off status,power_mode = %d, oplus_sync_power_state =  %d\n", panel->power_mode, oplus_sync_power_state);
+	if (panel->power_mode == SDE_MODE_DPMS_OFF) {
+		LCD_INFO("display panel in off status,power_mode = %d", panel->power_mode);
 		return;
 	}
 

@@ -8545,7 +8545,7 @@ static bool init_gauge_auth(oplus_gauge_auth_result *rst, struct bq27541_authent
 	memcpy(authenticate_data->message, rst->msg, len);
 	bq27541_sha1_hmac_authenticate(authenticate_data);
 
-	if (strncmp(authenticate_data->message, rst->rcv_msg, len)) {
+	if (memcmp(authenticate_data->message, rst->rcv_msg, len)) {
 		pr_err("Gauge authenticate compare failed\n");
 		return false;
 	} else {

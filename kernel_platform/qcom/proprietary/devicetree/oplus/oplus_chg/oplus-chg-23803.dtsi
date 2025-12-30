@@ -131,6 +131,8 @@
 					OPLUS_IC_FUNC_BUCK_GET_BATT_BTB_TEMP
 					OPLUS_IC_FUNC_SET_TYPEC_MODE
 					OPLUS_IC_FUNC_GET_TYPEC_ROLE
+					OPLUS_IC_FUNC_BUCK_GET_USB_AICL_ENHANCE
+					OPLUS_IC_FUNC_BUCK_SET_AICL_POINT
 				>;
 				virqs = <
 					OPLUS_IC_VIRQ_ERR
@@ -370,6 +372,8 @@
 		oplus,smooth_switch;
 		oplus,reserve_chg_soc = <3>;
 		oplus,reserve_dis_soc = <3>;
+
+		oplus_spec,batt_full_time = <300>;
 	};
 
 	oplus_vooc: oplus,vooc {
@@ -485,6 +489,7 @@
 
 	oplus,voocphy_bidirect_cp_support;
 	oplus,voocphy_support;
+	oplus,usb_aicl_enhance;
 	oplus,chg_ops = "plat-pmic";
 	qcom,otg_boost_src = <0>; /* 0:plat_pmic 1:external */
 	oplus,batt_num = <2>;

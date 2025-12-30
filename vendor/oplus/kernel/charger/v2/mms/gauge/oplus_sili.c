@@ -1922,6 +1922,17 @@ struct device_node *oplus_get_node_by_type(struct device_node *father_node)
 	return node;
 }
 
+struct device_node *oplus_get_node_by_child_gauge(struct device_node *father_node)
+{
+	struct device_node *node = of_find_node_by_path("/soc/oplus_chg_core");
+
+	if (node == NULL)
+		return father_node;
+	if (!of_property_read_bool(node, "oplus,gauge_ic_by_child_node"))
+		return father_node;
+
+	return oplus_get_node_by_type(father_node);
+}
 
 void oplus_mms_gauge_update_super_endurance_mode_status_work(struct work_struct *work)
 {

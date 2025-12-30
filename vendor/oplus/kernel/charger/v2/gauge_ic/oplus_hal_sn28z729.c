@@ -84,6 +84,8 @@
 #define SMEM_RESERVED_BOOT_INFO_FOR_APPS 418
 #define EXTEND_CMD_TRY_COUNT 3
 #define SEAL_POLLING_RETRY_LIMIT 100
+#define SOC_CENTI_MIN		0
+#define SOC_CENTI_MAX		10000
 
 #define DATAFLASHBLOCK 0x3F
 #define AUTHENDATA 0x40
@@ -141,6 +143,7 @@ struct chip_sn28z729 {
 	bool probe_err;
 
 	int soc_pre;
+	int soc_centi_pre;
 	int temp_pre;
 	int current_pre;
 	int cc_pre;
@@ -185,6 +188,7 @@ struct chip_sn28z729 {
 
 static int oplus_sn28z729_init(struct oplus_chg_ic_dev *ic_dev);
 static int oplus_sn28z729_exit(struct oplus_chg_ic_dev *ic_dev);
+static int sn28z729_get_firm_ver(struct chip_sn28z729 *chip);
 
 static __inline__ void sn28z729_push_i2c_err(struct chip_sn28z729 *chip, bool read)
 {
@@ -579,6 +583,7 @@ static int sn28z729_write_block(struct chip_sn28z729 *chip, int addr, u8 *buf, i
 	int try_count = EXTEND_CMD_TRY_COUNT;
 	u8 extend_read_data[SN28Z729_BLOCK_SIZE + 2] = { 0 };
 	u8 extend_write_data[SN28Z729_BLOCK_SIZE + 2] = { 0 };
+	u8 check_data[2] = { 0 };
 	u8 checksum = 0;
 
 	ret = sn28z729_block_check_conditions(buf, len, offset, do_checksum, block_size);
@@ -623,11 +628,10 @@ try:
 	if (ret < 0)
 		goto error;
 	checksum = sn28z729_calc_checksum(extend_write_data, block_size + 2);
-	ret = sn28z729_i2c_txsubcmd_onebyte(chip, SN28Z729_EXTEND_DATA_CHECKSUM_ADDR, checksum);
-	if (ret < 0)
-		goto error;
-	ret = sn28z729_i2c_txsubcmd_onebyte(chip, SN28Z729_EXTEND_DATA_LEN_ADDR,
-							block_size + 2 + 2);
+	check_data[0] = checksum;
+	check_data[1] = block_size + 2 + 2;
+	ret = sn28z729_write_i2c_block(chip, SN28Z729_EXTEND_DATA_CHECKSUM_ADDR, 2,
+		check_data);
 	if (ret < 0)
 		goto error;
 
@@ -1417,7 +1421,7 @@ static int sn28z729_get_average_current(struct chip_sn28z729 *chip)
 	return curr;
 }
 
-static int sn28z729_sha1_hmac_authenticate(struct chip_sn28z729 *chip,
+static bool sn28z729_sha1_hmac_authenticate(struct chip_sn28z729 *chip,
 					struct sn28z729_authenticate_data *authenticate_data)
 {
 	int i;
@@ -1435,19 +1439,26 @@ static int sn28z729_sha1_hmac_authenticate(struct chip_sn28z729 *chip,
 	for (i = 0; i < authenticate_data->message_len; i++)
 		checksum_buf[0] = checksum_buf[0] + authenticate_data->message[i];
 	checksum_buf[0] = 0xff - (checksum_buf[0] & 0xff);
-
+	mutex_lock(&chip->extended_cmd_access);
 	ret = sn28z729_i2c_txsubcmd_onebyte(chip, DATAFLASHBLOCK, authen_cmd_buf[0]);
+	if (ret < 0)
+		goto err;
 
-	if (ret < 0) {
-		chg_err("i2c write error\n");
-		return GAUGE_ERROR;
-	}
-	sn28z729_write_i2c_block(chip, AUTHENDATA, authenticate_data->message_len,
+	ret = sn28z729_write_i2c_block(chip, AUTHENDATA, authenticate_data->message_len,
 		authenticate_data->message);
+	if (ret < 0)
+		goto err;
 	msleep(5);
-	sn28z729_i2c_txsubcmd_onebyte(chip, AUTHENCHECKSUM, checksum_buf[0]);
+
+	ret = sn28z729_i2c_txsubcmd_onebyte(chip, AUTHENCHECKSUM, checksum_buf[0]);
+	if (ret < 0)
+		goto err;
 	msleep(10);
-	sn28z729_read_i2c_block(chip, AUTHENDATA, authenticate_data->message_len, &recv_buf[0]);
+
+	ret = sn28z729_read_i2c_block(chip, AUTHENDATA, authenticate_data->message_len, &recv_buf[0]);
+	if (ret < 0)
+		goto err;
+	mutex_unlock(&chip->extended_cmd_access);
 	len = authenticate_data->message_len;
 	for (i = 0; i < len / 2; i++) {
 		t = recv_buf[i];
@@ -1457,7 +1468,11 @@ static int sn28z729_sha1_hmac_authenticate(struct chip_sn28z729 *chip,
 
 	memmove(authenticate_data->message, &recv_buf[0], authenticate_data->message_len);
 
-	return 0;
+	return true;
+err:
+	chg_err("fail\n");
+	mutex_unlock(&chip->extended_cmd_access);
+	return false;
 }
 
 static bool sn28z729_get_smem_batt_info(oplus_gauge_auth_result *auth, int kk)
@@ -1507,6 +1522,7 @@ static bool init_gauge_auth(struct chip_sn28z729 *chip, oplus_gauge_auth_result 
 {
 	int len = GAUGE_AUTH_MSG_LEN < AUTHEN_MESSAGE_MAX_COUNT ? GAUGE_AUTH_MSG_LEN :
 		AUTHEN_MESSAGE_MAX_COUNT;
+	bool ret = false;
 
 	if (NULL == rst || NULL == authenticate_data) {
 		chg_err("Gauge authenticate failed\n");
@@ -1516,7 +1532,11 @@ static bool init_gauge_auth(struct chip_sn28z729 *chip, oplus_gauge_auth_result 
 	memset(authenticate_data, 0, sizeof(struct sn28z729_authenticate_data));
 	authenticate_data->message_len = len;
 	memmove(authenticate_data->message, rst->msg, len);
-	sn28z729_sha1_hmac_authenticate(chip, authenticate_data);
+	ret = sn28z729_sha1_hmac_authenticate(chip, authenticate_data);
+	if (!ret) {
+		chg_err("get ic hmac info failed\n");
+		return false;
+	}
 
 	if (memcmp(authenticate_data->message, rst->rcv_msg, len)) {
 		chg_err("Gauge authenticate compare failed\n");
@@ -1640,6 +1660,11 @@ static int sn28z729_set_sleep_mode_status(struct chip_sn28z729 *chip, bool enabl
 	bool ic_enable = 0;
 	u8 buf[SN28Z729_SLEEP_MODE_NUM_SIZE] = { 0 };
 
+	if (enable && (sn28z729_get_firm_ver(chip) < SN28Z729_SUPPORT_ENABLE_SLEEP_MODE_VERSION)) {
+		chg_err("sn28z729_set_sleep_mode_status: not support enable it!\n");
+		return 0;
+	}
+
 	ret = sn28z729_read_block(chip, SN28Z729_REG_DA_CFG, buf, SN28Z729_SLEEP_MODE_NUM_SIZE,
 		0, false, false);
 	if (ret < 0)
@@ -1730,12 +1755,14 @@ __maybe_unused static int sn28z729_gauge_get_firm_version(struct chip_sn28z729 *
 	chg_info("get chip id [0x%x 0x%x 0x%x 0x%x] firm_version[0x%x,0x%x] "
 		"build_number[0x%x,0x%x]\n", cntl1_val[0], cntl1_val[1], cntl1_val[2], cntl1_val[3],
 		cntl1_val[4], cntl1_val[5], cntl1_val[6], cntl1_val[7]);
-	*firm_version = ((cntl1_val[5] << 8) + cntl1_val[4]) & 0xffff;
-	chip->firm_ver = ((cntl1_val[5] << 8) + cntl1_val[4]) & 0xffff;
-	build_num = ((cntl1_val[7] << 8) + cntl1_val[6]) & 0xffff;
+	*firm_version = ((cntl1_val[4] & 0xf0) >> 4) * 1000 + (cntl1_val[4] & 0xf) * 100 +
+			((cntl1_val[5] & 0xf0) >> 4) * 10 + (cntl1_val[5] & 0xf);
+	chip->firm_ver = *firm_version;
+	build_num = ((cntl1_val[6] & 0xf0) >> 4) * 1000 + (cntl1_val[6] & 0xf) * 100 +
+			((cntl1_val[7] & 0xf0) >> 4) * 10 + (cntl1_val[7] & 0xf);
 	mutex_unlock(&chip->extended_cmd_access);
 
-	chg_info("firm_version = 0x%x, build_num = 0x%x\n", *firm_version, build_num);
+	chg_info("firm_version = %4d, build_num = %4d\n", *firm_version, build_num);
 
 	return status;
 }
@@ -2289,10 +2316,11 @@ static int sn28z729_gauge_reg_dump(struct chip_sn28z729 *chip)
 		read_done = !(i < sizeof(dump_reg) / sizeof(int));
 		read_done &= !(sum < len_max);
 	}
+	mutex_lock(&chip->extended_cmd_access);
 	sn28z729_it_status1_dump(chip, len_sus_pwr, iv, len_max, pos, &sum, &l);
 	sn28z729_it_status2_dump(chip, len_max_pwr, iv, len_max, pos, &sum, &l);
 	sn28z729_it_status3_dump(chip, len_sus_curr_h, iv, len_max, pos, &sum, &l);
-
+	mutex_unlock(&chip->extended_cmd_access);
 	chg_err("gauge regs: %s\n", buf);
 	return 0;
 }
@@ -4042,6 +4070,47 @@ static int oplus_sn28z729_get_three_level_term_volt(struct oplus_chg_ic_dev *ic_
 	return 0;
 }
 
+static int sn28z729_get_battery_soc_centi(struct chip_sn28z729 *chip)
+{
+	int rc = 0;
+	int soc_centi = 0;
+	u8 data[SN28Z729_SOC_CENTI_LEN] = {0};
+
+	if (sn28z729_get_firm_ver(chip) < SN28Z729_NEED_TO_SUPPORT_THIRD_TERM_VOLT_FIRM_VER)
+		return -ENOTSUPP;
+
+	if (is_chip_suspended_or_locked(chip))
+		return chip->soc_centi_pre;
+
+	rc = sn28z729_read_block(chip, SN28Z729_SOC_CENTI_ADDR, data, SN28Z729_SOC_CENTI_LEN,
+				0, false, true);
+	if (rc) {
+		chg_err("error reading soc_centi\n");
+		return chip->soc_centi_pre;
+	}
+
+	soc_centi = ((data[1] << 0x08) | data[0]);
+	chip->soc_centi_pre = soc_centi;
+
+	return soc_centi;
+}
+
+static int oplus_sn28z729_get_batt_soc_centi(struct oplus_chg_ic_dev *ic_dev, int *soc_centi)
+{
+	struct chip_sn28z729 *chip;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		*soc_centi = -ENODEV;
+		return 0;
+	}
+
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+	*soc_centi = sn28z729_get_battery_soc_centi(chip);
+
+	return 0;
+}
+
 static void *oplus_chg_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_chg_ic_func func_id)
 {
 	void *func = NULL;
@@ -4285,6 +4354,10 @@ static void *oplus_chg_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_chg_
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_THREE_LEVEL_TERM_VOLT,
 			oplus_sn28z729_get_three_level_term_volt);
 		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_BATT_SOC_CENTI:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_BATT_SOC_CENTI,
+			oplus_sn28z729_get_batt_soc_centi);
+		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);
 		func = NULL;
@@ -4343,7 +4416,7 @@ static int sn28z729_vars_init(struct chip_sn28z729 *chip)
 
 	/* default 50% */
 	chip->soc_pre = 50;
-
+	chip->soc_centi_pre = -EINVAL;
 	/* default 999mA */
 	chip->current_pre = 999;
 

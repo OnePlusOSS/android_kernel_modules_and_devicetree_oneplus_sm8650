@@ -17,6 +17,14 @@ static int syna_dev_read(void *priv, char *data, int32_t len)
 	return tcm_hcd->bus_ops->read_block(tcm_hcd->bus_ops, data, len);
 }
 */
+void syna_hw_reset(struct syna_tcm *tcm_hcd)
+{
+	hbp_dev_power_type_ctrl(tcm_hcd, POWER_RESET, false);
+	msleep(10);
+	hbp_dev_power_type_ctrl(tcm_hcd, POWER_RESET, true);
+	msleep(100);
+}
+
 static int syna_spi_sync(void *priv, char *tx, char *rx, int32_t len)
 {
 	struct syna_tcm *tcm_hcd = (struct syna_tcm *)priv;
@@ -143,7 +151,7 @@ static int syna_get_irq_reason(void *priv, enum irq_reason *reason)
 			&tcm_hcd->event_data);
 	if (retval < 0) {
 		hbp_err("Fail to get event data\n");
-		hbp_dev_ctrl_hw_reset();
+		syna_hw_reset(tcm_hcd);
 		return -1;
 	}
 
@@ -165,37 +173,29 @@ static int syna_get_irq_reason(void *priv, enum irq_reason *reason)
 	return 0;
 }
 
-static void finger_err_handle(struct tcm_touch_data_blob *touch_data)
+static void finger_err_handle(struct syna_tcm *tcm_hcd, struct tcm_touch_data_blob *touch_data)
 {
 	hbp_info("TP_FP_ERROR_REPORT:fingerprint error type:[%*ph]\n", 6, touch_data->extra_gesture_info);
 	switch (touch_data->extra_gesture_info[0]) {
 	case FINGERPRINT_AREA_NOT_MATCH:
-		/* if (tcm->health_monitor_support) {
-			tp_healthinfo_report(&tcm->monitor_data, HEALTH_REPORT, "fingerprint_area_not_match_count");
-		} */
+		hbp_dev_healthinfo_report(tcm_hcd, "fingerprint_area_not_match_count");
 		hbp_info("TP_FP_ERROR_REPORT:area size: 0x%x\n", touch_data->extra_gesture_info[2]);
 		hbp_info("TP_FP_ERROR_REPORT:FINGERPRINT_AREA_NOT_MATCH\n");
 		break;
 	case ANOTHER_FINGER_ON_NON_FP_ZONE:
-		/*if (tcm->health_monitor_support) {
-			tp_healthinfo_report(&tcm->monitor_data, HEALTH_REPORT, "another_finger_on_non-fingerprint_zone_count");
-		} */
+		hbp_dev_healthinfo_report(tcm_hcd, "another_finger_on_non-fingerprint_zone_count");
 		hbp_info("TP_FP_ERROR_REPORT:x:0x%x,y:0x%x\n",
 			(touch_data->extra_gesture_info[3] << 8) + touch_data->extra_gesture_info[2],
 			(touch_data->extra_gesture_info[5] << 8) + touch_data->extra_gesture_info[4]);
 		hbp_info("TP_FP_ERROR_REPORT:ANOTHER_FINGER_ON_NON_FP_ZONE\n");
 		break;
 	case FINGERPRINT_DOWN_BEFORE_FP_ENABLE:
-		/* if (tcm->health_monitor_support) {
-			tp_healthinfo_report(&tcm->monitor_data, HEALTH_REPORT, "fingerprint_down_before_fp_enable_count");
-		} */
+		hbp_dev_healthinfo_report(tcm_hcd, "fingerprint_down_before_fp_enable_count");
 		hbp_info("TP_FP_ERROR_REPORT:down time: 0x%x\n", touch_data->extra_gesture_info[2]);
 		hbp_info("TP_FP_ERROR_REPORT:FINGERPRINT_DOWN_BEFORE_FP_ENABLE\n");
 		break;
 	case FINGERPRINT_OUT_MOVE_IN:
-		/* if (tcm->health_monitor_support) {
-			tp_healthinfo_report(&tcm->monitor_data, HEALTH_REPORT, "fingerprint_out_move_in_count");
-		} */
+		hbp_dev_healthinfo_report(tcm_hcd, "fingerprint_out_move_in_count");
 		hbp_info("TP_FP_ERROR_REPORT:FINGERPRINT_OUT_MOVE_IN\n");
 		break;
 	default:
@@ -315,7 +315,7 @@ static int syna_get_gesture(void *priv, struct gesture_info *gesture)
 		gesture->type = FingerprintUp;
 		break;
 	case FINGERPRINT_ERR_REPORT:
-		finger_err_handle(touch_data);
+		finger_err_handle(tcm_hcd, touch_data);
 		break;
 	case HEART_DETECT:
 		gesture->type = Heart;
@@ -552,7 +552,7 @@ static int syna_dev_probe(struct platform_device *pdev)
 			break;
 		}
 		hbp_err("Detect device fail, retry = %d.\n", retry);
-		hbp_dev_ctrl_hw_reset();
+		syna_hw_reset(tcm_hcd);
 	}
 
 	tcm_hcd->probe_done = true;

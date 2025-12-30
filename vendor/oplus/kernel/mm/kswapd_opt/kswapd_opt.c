@@ -12,6 +12,7 @@
 #define CONFIG_ALLOC_ADJUST_FLAGS 1
 #define CONFIG_ALLOC_ORDER_STAT 1
 #define CONFIG_KSWAPS_LOAD_STAT 1
+#define CONFIG_KSWAPD_NICE 1
 #endif
 
 #include <linux/types.h>
@@ -486,6 +487,103 @@ static void remove_kswapd_load_stat_proc(void)
 }
 #endif
 
+#if IS_ENABLED(CONFIG_KSWAPD_NICE)
+#define KSWAPD_COMM "kswapd0"
+static struct proc_dir_entry *kswapd_nice_entry;
+static int global_kswapd_pid = -1;
+static int global_kswapd_nice = 0;
+
+static ssize_t kswapd_nice_write(struct file *file, const char __user *buf,
+		size_t count, loff_t *ppos)
+{
+	char kbuf[KBUF_LEN] = {0};
+	char *str;
+	int val = -1;
+	struct task_struct *tsk = NULL;
+
+	if (count > KBUF_LEN - 1) {
+		pr_warn("input too long\n");
+		return -EINVAL;
+	}
+
+	if (copy_from_user(kbuf, buf, count))
+		return -EINVAL;
+
+	kbuf[count] = 0;
+	str = strstrip(kbuf);
+	if (!str) {
+		pr_warn("input empty\n");
+		return -EINVAL;
+	}
+
+	if (kstrtoint(str, 0, &val)) {
+		pr_warn("not a valid number\n");
+		return -EINVAL;
+	}
+	if (val == global_kswapd_nice || val < MIN_NICE || val > MAX_NICE) {
+		pr_warn("not a valid nice: %d \n", val);
+		return -EINVAL;
+	}
+	/* start to set nice of kswapd0 */
+	rcu_read_lock();
+	for_each_process(tsk) {
+		if (tsk->flags & PF_KTHREAD) {
+			if (!strncmp(tsk->comm, KSWAPD_COMM,
+				     sizeof(KSWAPD_COMM) - 1)) {
+				global_kswapd_pid = tsk -> pid;
+				global_kswapd_nice = val;
+				set_user_nice(tsk, val);
+				break;
+			}
+		}
+	}
+	rcu_read_unlock();
+	return count;
+}
+
+static ssize_t kswapd_nice_read(struct file *file, char __user *buf,
+		size_t count, loff_t *ppos)
+{
+	char buffer[20];
+	size_t len = 0;
+
+	len = snprintf(buffer, sizeof(buffer), "pid=%d nice=%d \n", global_kswapd_pid, global_kswapd_nice);
+
+	return simple_read_from_buffer(buf, count, ppos, buffer, len);
+}
+
+static const struct proc_ops proc_kswapd_nice_ops = {
+	.proc_read  = kswapd_nice_read,
+	.proc_write = kswapd_nice_write,
+};
+
+static void create_kswapd_nice_proc(void)
+{
+	kswapd_nice_entry = proc_create("oplus_mem/kswapd_nice",
+		0660, NULL, &proc_kswapd_nice_ops);
+
+	if (!kswapd_nice_entry)
+		pr_err("kswapd_nice_entry create failed, ENOMEM\n");
+}
+
+static void remove_kswapd_nice_proc(void)
+{
+	if (kswapd_nice_entry) {
+		proc_remove(kswapd_nice_entry);
+		kswapd_nice_entry = NULL;
+	}
+}
+
+#else
+static void create_kswapd_nice_proc(void)
+{
+}
+
+static void remove_kswapd_nice_proc(void)
+{
+}
+#endif
+
 static int __init kswapd_opt_init(void)
 {
 	int ret = 0;
@@ -512,6 +610,7 @@ static int __init kswapd_opt_init(void)
 	else
 		create_kswapd_load_stat_proc();
 
+	create_kswapd_nice_proc();
 	pr_info("%s init done\n", __func__);
 	return 0;
 }
@@ -525,6 +624,7 @@ static void __exit kswapd_opt_exit(void)
 	remove_kswapd_debug_proc();
 	unregister_kswapd_load_stat();
 	remove_kswapd_load_stat_proc();
+	remove_kswapd_nice_proc();
 	pr_info("%s exit\n", __func__);
 }
 

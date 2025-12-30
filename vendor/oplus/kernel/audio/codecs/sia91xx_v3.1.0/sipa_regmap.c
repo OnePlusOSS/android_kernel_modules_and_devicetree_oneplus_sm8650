@@ -78,7 +78,7 @@ static const struct reg_map_info reg_map_info_table[] = {
 		.reg_addr_width = 8,
 		.reg_val_width = 8,
 		.chip_id_addr = 0x00,
-		.chip_id_ranges = {{0x60, 0x68}},
+		.chip_id_ranges = {{0x60, 0x61}},
 		.chip_id_range_num = 1
 	},
 	[CHIP_TYPE_SIA8159A] = {
@@ -135,6 +135,14 @@ static const struct reg_map_info reg_map_info_table[] = {
 		.reg_val_width = 8,
 		.chip_id_addr = 0x00,
 		.chip_id_ranges = {{0x6A, 0x6D}},
+		.chip_id_range_num = 1
+	},
+	[CHIP_TYPE_SIA8168] = {
+		.chip_type = CHIP_TYPE_SIA8168,
+		.reg_addr_width = 8,
+		.reg_val_width = 8,
+		.chip_id_addr = 0x00,
+		.chip_id_ranges = {{0x66, 0x68}},
 		.chip_id_range_num = 1
 	},
 };
@@ -450,6 +458,7 @@ static int sipa_regmap_proc_1_reg(sipa_dev_t *si_pa,
 	SIPA_REG_PROC *reg, unsigned int val_width)
 {
 	unsigned int val = 0;
+	unsigned int val_back = 0;
 	unsigned int full_mask = 0;
 
 	if (NULL == si_pa || NULL == reg)
@@ -482,7 +491,20 @@ static int sipa_regmap_proc_1_reg(sipa_dev_t *si_pa,
 			val = (val  & (~reg->mask)) | (reg->val[si_pa->scene] & reg->mask);
 		} else
 			val = reg->val[si_pa->scene];
-
+		if (si_pa->chip_type == CHIP_TYPE_SIA8168) {
+			if (reg->addr == SIA8168_REG_ALGE_EN)
+			{
+				if (0 != regmap_read(si_pa->regmap, reg->addr, &val_back))
+					return -EFAULT;
+				if ((val_back ^ val ) & 0x20) {
+					if (sipa_regmap_get_chip_en(si_pa)){
+						pr_err("[  err][%s] %s: addr:0x%2x,val_back:0x%2x,val:0x%2x,bit5 cannot be configured during power on\n", 
+							LOG_FLAG, __func__, reg->addr, val_back, val);
+						return -EFAULT;
+					}
+				}
+			}
+		}
 		if (0 != regmap_write(si_pa->regmap, reg->addr, val))
 			return -EFAULT;
 
@@ -645,10 +667,46 @@ void sipa_regmap_set_pvdd_limit(
 	uint8_t *data;
 	SIPA_FUNC0_TO_REG *pvdd_limit;
 	int8_t cp_ovp = 0;
-
+	unsigned int val = 0;
 	if (NULL == regmap)
 		return;
 
+	if (chip_type == CHIP_TYPE_SIA8168) {
+		if (vol <= 3200000) {
+			if (0 != regmap_read(regmap, SIA8168_REG_PAR_CFG2, &val)){
+				pr_err("[  err][%s] %s: sipa_read_reg err !!! \r\n",
+				LOG_FLAG, __func__);
+				return;
+			}
+
+			val = (val & (~0x07)) | 0x03;
+			pr_info("[ info][%s] %s: chip_type = %d, vol = %d, val = 0x%02x\r\n",
+				LOG_FLAG, __func__, chip_type, vol, val);
+
+			if (0 != regmap_write(regmap, SIA8168_REG_PAR_CFG2, val)){
+				pr_err("[  err][%s] %s: sipa_write_reg err !!! \r\n",
+					LOG_FLAG, __func__);
+				return;
+			}
+		} else  {
+			if (0 != regmap_read(regmap, SIA8168_REG_PAR_CFG2, &val)){
+				pr_err("[  err][%s] %s: sipa_read_reg err !!! \r\n",
+				LOG_FLAG, __func__);
+				return;
+			}
+
+			val = val & (~0x07);
+			pr_info("[ info][%s] %s: chip_type = %d, vol = %d, val = 0x%02x\r\n",
+				LOG_FLAG, __func__, chip_type, vol, val);
+
+			if (0 != regmap_write(regmap, SIA8168_REG_PAR_CFG2, val)){
+				pr_err("[  err][%s] %s: sipa_write_reg err !!! \r\n",
+					LOG_FLAG, __func__);
+				return;
+			}
+		}
+		return;
+	}
 	if (3200000 > vol || 5000000 < vol) {
 		pr_err("[  err][%s] %s: voltage = %u out of range !!! \r\n",
 			LOG_FLAG, __func__, vol);

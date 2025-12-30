@@ -233,6 +233,10 @@
 					OPLUS_IC_FUNC_GAUGE_GET_CALIB_TIME
 					OPLUS_IC_FUNC_GAUGE_SET_CALIB_TIME
 					OPLUS_IC_FUNC_GAUGE_GET_BATT_SN
+					OPLUS_IC_FUNC_GAUGE_GET_DEC_FG_TYPE
+					OPLUS_IC_FUNC_GAUGE_GET_DEC_CV_SOH
+					OPLUS_IC_FUNC_GAUGE_SET_VCT
+					OPLUS_IC_FUNC_GAUGE_GET_VCT
 				>;
 				virqs = <
 					OPLUS_IC_VIRQ_ERR
@@ -464,6 +468,9 @@
 
 	oplus_chg_comm: oplus,comm {
 		compatible = "oplus,common-charge";
+		oplus_spec,dec_step = <20>;
+		oplus_spec,dec-vol-cc-full-thr = <0 400 600 800 1000 1200>;
+		oplus_spec,dec-vol-fv-full-mv = <0 20 20 40 40 40>;
 		oplus_spec,batt-them-thr = <(-100) 0 50 120 160 450 530>;
 		oplus_spec,iterm-ma = <142>;
 		oplus_spec,fv-mv = <4470 4470 4470 4470 4470 4470 4130 4130>;

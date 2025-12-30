@@ -69,6 +69,7 @@
 #include <oplus_chg_pps.h>
 #include <oplus_chg_wls.h>
 #include <oplus_chg_monitor.h>
+#include <oplus_chg_cpa.h>
 
 #ifndef CONFIG_DISABLE_OPLUS_FUNCTION
 #include <soc/oplus/system/boot_mode.h>
@@ -4503,6 +4504,7 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 		chg_info("pd type:%d. sink vbus %dmV %dmA type(0x%02X)\n",
 		         pinfo->pd_type, noti->vbus_state.mv, noti->vbus_state.ma, noti->vbus_state.type);
 		if (oplus_chg_get_common_charge_icl_support_flags() &&
+		    pinfo->pd_type != MTK_PD_CONNECT_NONE &&
 		    noti->vbus_state.ma <= SINK_SUSPEND_CURRENT) {
 			cancel_delayed_work_sync(&pinfo->charger_suspend_recovery_work);
 			oplus_chg_suspend_charger(true, TCPC_IBUS_DRAW_VOTER);
@@ -6123,6 +6125,21 @@ out:
 	return rc;
 }
 
+static bool mtk_chg_vooc_protocol_is_disabled(struct mtk_charger *chip)
+{
+	static struct oplus_mms *cpa_topic;
+
+	if (IS_ERR_OR_NULL(cpa_topic)) {
+		cpa_topic = oplus_mms_get_by_name("cpa");
+		if (IS_ERR_OR_NULL(cpa_topic)) {
+			chg_err("cpa topic not found\n");
+			return false;
+		}
+	}
+
+	return !oplus_cpa_protocol_check_enable(cpa_topic, CHG_PROTOCOL_VOOC);
+}
+
 static int mtk_chg_should_disable_pd(struct oplus_chg_ic_dev *ic_dev)
 {
 	struct mtk_charger *chip;
@@ -6141,6 +6158,9 @@ static int mtk_chg_should_disable_pd(struct oplus_chg_ic_dev *ic_dev)
 		vooc_disable = get_effective_result(vooc_disable_votable);
 	else
 		chg_err("VOOC_DISABLE votable not found\n");
+
+	if (mtk_chg_vooc_protocol_is_disabled(chip))
+		vooc_disable = true;
 
 	disable_pd = chip->pd_svooc;
 	if (chip->pd_svooc && vooc_disable) {

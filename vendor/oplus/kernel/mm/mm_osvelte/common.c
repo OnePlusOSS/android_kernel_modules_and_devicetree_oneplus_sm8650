@@ -11,6 +11,8 @@
 #include "common.h"
 #include "internal.h"
 
+typedef unsigned long (*kallsyms_lookup_name_t)(const char *name);
+
 struct common_data {
 	DECLARE_BITMAP(scene, BITS_PER_LONG);
 	/* Prevent concurrent execution of device init */
@@ -21,6 +23,7 @@ struct common_data {
 	bool timer_init;
 	/* kobj */
 	struct kobject *common_kobj;
+	kallsyms_lookup_name_t kp_kallsyms_lookup_name;
 };
 
 static const char * const scene_to_txt[NR_MM_SCENE_BIT] = {
@@ -98,12 +101,23 @@ out:
 }
 EXPORT_SYMBOL_GPL(osvelte_read_symbol);
 
+void *osvelte_kallsyms_lookup_name(const char *name)
+{
+	struct common_data *data = &g_common;
+
+	if (unlikely(!data->kp_kallsyms_lookup_name))
+		return NULL;
+
+	return (void *)data->kp_kallsyms_lookup_name(name);
+}
+EXPORT_SYMBOL_GPL(osvelte_kallsyms_lookup_name);
+
 long osvelte_common_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int ret = -EINVAL;
 
 	if (cmd < CMD_COMMON_MIN || cmd > CMD_COMMON_MAX)
-		return CMD_COMMON_INVLAID;
+		return CMD_COMMON_INVALID;
 
 	switch (cmd) {
 	case CMD_OSVELTE_SET_SCENE:
@@ -151,6 +165,25 @@ static struct attribute_group attr_group = {
 	.attrs = attrs,
 };
 
+static int init_kallsyms_lookup_name(void)
+{
+	struct common_data *data = &g_common;
+	struct kprobe kp = {
+		.symbol_name = "kallsyms_lookup_name",
+	};
+	int ret;
+
+	ret = register_kprobe(&kp);
+	if (ret) {
+		osvelte_loge("failed to read kallsyms_lookup_name\n");
+		return ret;
+	}
+	data->kp_kallsyms_lookup_name = (void *)kp.addr;
+	unregister_kprobe(&kp);
+	osvelte_logi("+\n");
+	return 0;
+}
+
 int osvelte_common_init(struct kobject *root)
 {
 	struct common_data *data = &g_common;
@@ -169,6 +202,7 @@ int osvelte_common_init(struct kobject *root)
 		kobject_put(data->common_kobj);
 		return -ENOMEM;
 	}
+	init_kallsyms_lookup_name();
 	osvelte_register_symbol(OPLUS_MM_KOBJ, oplus_mm_kobj);
 	return 0;
 }

@@ -63,7 +63,11 @@
  ******************************************************************/
 #define AW87XXX_I2C_NAME	"aw87xxx_pa_2_x_0"
 #define AW87XXX_DRIVER_VERSION	"v2.12.0"
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 115))
+#define AW87XXX_FW_BIN_NAME	"aw87xxx_acf.bin"
+#else
 #define AW87XXX_FW_BIN_NAME	"../../odm/firmware/awinic/aw87xxx_acf.bin"
+#endif
 #define AW87XXX_LOW_VOLUME_VOLTAGE 0x04
 #define AW87XXX_HIGH_VOLUME_VOLTAGE_DEFAULT 0x08
 
@@ -1949,7 +1953,7 @@ static int aw87xxx_i2c_probe(struct i2c_client *client,
 	struct device_node *dev_node = client->dev.of_node;
 	struct aw87xxx *aw87xxx = NULL;
 	int ret = -1;
-#ifdef AW_KERNEL_VER_OVER_6_6_0
+#ifdef AW_KERNEL_VER_OVER_6_1_0
 	struct gpio_desc *desc = NULL;
 #endif
 
@@ -2071,7 +2075,7 @@ static int aw87xxx_i2c_probe(struct i2c_client *client,
 
 exit_device_init_failed:
 
-#ifdef AW_KERNEL_VER_OVER_6_6_0
+#ifdef AW_KERNEL_VER_OVER_6_1_0
 
 	/*free gpio*/
 	if (gpio_is_valid(aw87xxx->aw_dev.rst_gpio)) {
@@ -2109,7 +2113,7 @@ static int aw87xxx_i2c_remove(struct i2c_client *client)
 #endif
 {
 	struct aw87xxx *aw87xxx = i2c_get_clientdata(client);
-#ifdef AW_KERNEL_VER_OVER_6_6_0
+#ifdef AW_KERNEL_VER_OVER_6_1_0
 	struct gpio_desc *desc = NULL;
 #endif
 
@@ -2119,7 +2123,7 @@ static int aw87xxx_i2c_remove(struct i2c_client *client)
 	if (aw87xxx->dev_index == 0)
 		aw87xxx_algo_auth_misc_deinit(&aw87xxx->aw_dev);
 
-#ifdef AW_KERNEL_VER_OVER_6_6_0
+#ifdef AW_KERNEL_VER_OVER_6_1_0
 	/*free gpio*/
 	if (gpio_is_valid(aw87xxx->aw_dev.rst_gpio)) {
 		desc = gpio_to_desc(aw87xxx->aw_dev.rst_gpio);

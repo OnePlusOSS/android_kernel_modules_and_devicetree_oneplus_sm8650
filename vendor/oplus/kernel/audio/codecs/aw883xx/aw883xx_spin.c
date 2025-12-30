@@ -558,6 +558,16 @@ static int aw_set_spin(struct snd_kcontrol *kcontrol,
 
 	ctrl_value = (uint32_t)ucontrol->value.integer.value[0];
 
+	if (ctrl_value >= ARRAY_SIZE(aw_spin)) {
+		aw_dev_err(aw883xx->dev, "spin value %d is unsupport", ctrl_value);
+		return 0;
+	}
+
+	if (ctrl_value == g_spin_angle) {
+		aw_dev_dbg(aw883xx->dev, "spin value %d is same with current value %d, no need to switch", ctrl_value, g_spin_angle);
+		return 0;
+	}
+
 	mutex_lock(&g_aw_spin_lock);
 	if (aw883xx->pstream == AW883XX_STREAM_OPEN) {
 		ret = aw_set_spin_angle(aw883xx, ctrl_value);

@@ -594,6 +594,9 @@ static void oplus_vc_online_work(struct work_struct *work)
 	bool online = false;
 	int i;
 
+	chg_info("%s: flush offline_work\n", child->ic_dev->manu_name);
+	flush_work(&child->offline_work);
+
 	chg_info("%s online\n", child->ic_dev->manu_name);
 	chip = oplus_chg_ic_get_drvdata(child->parent);
 
@@ -620,6 +623,9 @@ static void oplus_vc_offline_work(struct work_struct *work)
 	struct oplus_virtual_cp_ic *chip;
 	bool online = true;
 	int i;
+
+	chg_info("%s: flush online_work\n", child->ic_dev->manu_name);
+	flush_work(&child->online_work);
 
 	chg_info("%s offline\n", child->ic_dev->manu_name);
 	chip = oplus_chg_ic_get_drvdata(child->parent);

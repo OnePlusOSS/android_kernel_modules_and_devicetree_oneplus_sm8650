@@ -122,17 +122,6 @@
 		reg = <0x0 0x99280000 0x0 0x80000>;
 	};
 
-	/*
-	Reserve the original Qualcomm adspslpi_mem memory, otherwise it will be normally used by the kernel
-	and cleared by TZ-TME during the dump scenario after modem subsystem offline, rendering the dump invalid.
-	Note: The previous method of adjusting adspslpi_mem was incorrect. It should adjust all the start and size
-	backwards, rather than move to last and create gaps.
-	*/
-	adspslpi_mem_qcom_ori: adspslpi_region_qcom_ori@99300000 {
-		no-map;
-		reg = <0x0 0x99300000 0x0 0x2800000>;
-	};
-
 	/* PIL:0x8AC00000 to 0x9F2FFFFF, chang adsp addr from 0x99300000 to 0x9f300000 */
 	adspslpi_mem: adspslpi_region@9f300000 {
 		no-map;

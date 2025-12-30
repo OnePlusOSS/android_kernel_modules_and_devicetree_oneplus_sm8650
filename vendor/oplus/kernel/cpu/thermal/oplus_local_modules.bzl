@@ -46,11 +46,25 @@ def define_oplus_local_modules():
         }),
     )
 
+    define_oplus_ddk_module(
+        name = "oplus_thermal_vendor_hooks",
+        srcs = native.glob([
+            "**/*.h",
+            "oplus_thermal_vendor_hooks.c",
+        ]),
+        includes = ["."],
+        copts = select({
+            "//build/kernel/kleaf:kocov_is_true": ["-fprofile-arcs", "-ftest-coverage"],
+            "//conditions:default": [],
+        }),
+    )
+
     ddk_copy_to_dist_dir(
         name = "oplus_horae",
         module_list = [
             "horae_shell_temp",
             "oplus_ipa_thermal",
             "thermal_pa_adc",
+            "oplus_thermal_vendor_hooks",
         ],
     )

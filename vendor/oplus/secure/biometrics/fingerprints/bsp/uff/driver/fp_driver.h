@@ -10,6 +10,8 @@
 #include <linux/types.h>
 #include <linux/gpio/consumer.h>
 #include <linux/power_supply.h>
+#include <linux/stddef.h>
+#include <linux/minmax.h>
 #include "include/oplus_fp_common.h"
 #include "include/fingerprint_event.h"
 #include "include/fp_health.h"
@@ -205,6 +207,21 @@ struct fp_key {
 #ifndef EVENT_ACTION_UNDER_WATER
 #define EVENT_ACTION_UNDER_WATER 0x04
 #endif
+
+typedef struct tp2fp_touchpanel_event {
+    int touchpanel_id;
+    int x;
+    int y;
+    int fid;   /* Finger ID */
+    char type; /* 'D' - Down, 'M' - Move, 'U' - Up, */
+    int touch_state;
+    int area_rate;
+    int touch_early_down_flag;
+    long is_touch_fp_area_cnt;
+    ktime_t touch_fp_area_time;
+    ktime_t fp_down_time;
+    int tp_firmware_time;
+} tp2fp_touchpanel_event_t;
 
 struct fp_touch_film_info {
     bool filmed;

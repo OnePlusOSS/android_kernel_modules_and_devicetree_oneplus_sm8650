@@ -237,6 +237,8 @@ enum dynamic_config_id {
 	DC_GLOVE_MODE_STATE = 0xF5,
 	DC_GESTURE_MASK   = 0xFE,
 	DC_UNDER_WATER = 0xF6,
+	DC_LOW_TEMP_ENABLE = 0xFD,
+	DC_WATERPROOF_ENABLE = 0xFC,
 };
 
 enum command {
@@ -259,6 +261,7 @@ enum command {
 	CMD_SET_STATIC_CONFIG = 0x22,
 	CMD_GET_DYNAMIC_CONFIG = 0x23,
 	CMD_SET_DYNAMIC_CONFIG = 0x24,
+	CMD_SET_LONG_CONFIG = 0x34,
 	CMD_GET_TOUCH_REPORT_CONFIG = 0x25,
 	CMD_SET_TOUCH_REPORT_CONFIG = 0x26,
 	CMD_REZERO = 0x27,
@@ -336,6 +339,13 @@ enum flash_data {
 enum palm_mode {
 	PALM_TO_DEFAULT = 0,
 	PALM_TO_SLEEP   = 1,
+};
+
+enum diaphragm_mode {
+	DIAPHRAGM_DEFAULT_MODE = 0,
+	DIAPHRAGM_FILM_MODE = 1,
+	DIAPHRAGM_WATERPROO_MODE = 2,
+	DIAPHRAGM_FILM_WATERPROO_MODE = 3,
 };
 
 enum glove_mode {
@@ -505,6 +515,7 @@ struct syna_tcm_hcd {
 	struct touch_hcd *touch_hcd;
 	struct syna_tcm_test *test_hcd;
 	struct synaptics_proc_operations *syna_ops;
+	struct touchpanel_data *ts;
 	struct firmware_headfile *p_firmware_headfile;
 	struct firmware *tcm_firmware_headfile;
 
@@ -576,6 +587,7 @@ struct syna_tcm_hcd {
 	struct hrtimer watchdog;
 	struct work_struct timeout_work;
 
+	int tp_index;
 	unsigned int grip_darkzone_x;
 	unsigned int grip_darkzone_y;
 	unsigned int grip_darkzone_v2_x;
@@ -744,8 +756,7 @@ static inline int syna_tcm_realloc_mem(struct syna_tcm_hcd *tcm_hcd,
 		if (!(buffer->buf)) {
 			TPD_INFO("%s: Failed to allocate memory\n",
 				 __func__);
-			kfree(temp);
-			buffer->buf_size = 0;
+			buffer->buf = temp;
 			return -ENOMEM;
 		}
 
@@ -773,14 +784,15 @@ static inline int syna_tcm_alloc_mem(struct syna_tcm_hcd *tcm_hcd,
 				     struct syna_tcm_buffer *buffer, unsigned int size)
 {
 	if (size > buffer->buf_size) {
-		kfree(buffer->buf);
+		unsigned char *temp;
+		temp = buffer->buf;
 		buffer->buf = kmalloc(size, GFP_KERNEL);
 		if (!(buffer->buf)) {
 			TPD_INFO("%s: Failed to allocate memory, size %d\n", __func__, size);
-			buffer->buf_size = 0;
-			buffer->data_length = 0;
+			buffer->buf = temp;
 			return -ENOMEM;
 		}
+		kfree(temp);
 		buffer->buf_size = size;
 	}
 

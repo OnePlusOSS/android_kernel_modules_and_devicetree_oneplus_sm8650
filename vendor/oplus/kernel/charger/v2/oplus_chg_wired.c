@@ -105,6 +105,7 @@ struct oplus_chg_wired {
 	struct oplus_mms *vooc_topic;
 	struct oplus_mms *cpa_topic;
 	struct oplus_mms *retention_topic;
+	struct oplus_mms *keep_topic;
 	struct mms_subscribe *retention_subs;
 	struct mms_subscribe *gauge_subs;
 	struct mms_subscribe *wired_subs;
@@ -171,6 +172,7 @@ struct oplus_chg_wired {
 	bool disconnect_change;
 	bool retention_state_ready;
 	bool adjust_pdqc_vol_thr_support;
+	bool qc_curr_check_support;
 	bool authenticate;
 	bool hmac;
 	bool vooc_started;
@@ -198,6 +200,7 @@ struct oplus_chg_wired {
 	int chg_ctrl_by_sale_mode;
 	int pd_retry_count;
 	int qc_retry_count;
+	int curr_abnormal_cnt;
 	unsigned int err_code;
 	int factory_test_mode;
 	struct mutex icl_lock;
@@ -694,6 +697,7 @@ static void oplus_wired_variables_init(struct oplus_chg_wired *chip)
 	chip->pd_action = OPLUS_ACTION_NULL;
 	chip->pd_retry_count = 0;
 	chip->qc_retry_count = 0;
+	chip->curr_abnormal_cnt = 0;
 	chip->vbus_status = chip->pdqc12v_support ? VBUS_STS_12V_REQ : VBUS_STS_DEFAULT;
 	chip->chg_ctrl_by_sale_mode = 0;
 	mutex_init(&chip->icl_lock);
@@ -909,7 +913,7 @@ static void oplus_wired_qc_config_work(struct work_struct *work)
 		break;
 	case OPLUS_ACTION_BUCK:
 		chg_info("qc starts to buck\n");
-		if (chip->vbus_mv <= PDQC_BUCK_VBUS_THR) {
+		if (chip->vbus_mv <= PDQC_BUCK_VBUS_THR && chip->vbus_set_mv == OPLUS_CHG_VBUS_5V) {
 			chg_info("vbus_mv = %d mv, not need to buck.\n", chip->vbus_mv);
 			chip->qc_action = OPLUS_ACTION_NULL;
 			goto set_curr;
@@ -1038,6 +1042,41 @@ static int oplus_qc_cpa_switch_end(struct oplus_chg_wired *chip)
 	return 0;
 }
 
+#define QC_CURR_ABNORMAL_CNT_MAX 6
+static void oplus_wired_qc_curr_abnormal_check(struct oplus_chg_wired *chip)
+{
+	union mms_msg_data data = { 0 };
+
+	if (chip->chg_mode != OPLUS_WIRED_CHG_MODE_QC &&
+	    chip->chg_mode != OPLUS_WIRED_CHG_MODE_QC12V)
+		return;
+
+	if (get_effective_result(chip->output_suspend_votable)){
+		chip->curr_abnormal_cnt = 0;
+		return;
+	}
+
+	oplus_mms_get_item_data(chip->gauge_topic, GAUGE_ITEM_CURR, &data, false);
+
+	/* High power causing low ibat if ibus_ma > 100mA */
+	if (data.intval < 0 ||  oplus_wired_get_ibus() > 100){
+		chip->curr_abnormal_cnt = 0;
+		return;
+	}
+
+	chip->curr_abnormal_cnt++;
+	chg_err("ibat_ma=%d vbus_set_mv=%d curr_abnormal_cnt=%d\n", (int)data.intval, chip->vbus_set_mv, chip->curr_abnormal_cnt);
+
+	if (chip->curr_abnormal_cnt < QC_CURR_ABNORMAL_CNT_MAX)
+		return;
+
+	if (chip->qc_action == OPLUS_ACTION_BOOST || chip->vbus_set_mv > OPLUS_CHG_VBUS_5V){
+		cancel_delayed_work_sync(&chip->qc_config_work);
+		chip->qc_action = OPLUS_ACTION_BUCK;
+		schedule_delayed_work(&chip->qc_config_work, 0);
+	}
+}
+
 #define PD_BOOST_DISABLE_ICL_DELAY msecs_to_jiffies(3000)
 #define PD_BOOST_ICL_MA 1500
 static void oplus_wired_pd_boost_icl_disable_work(struct work_struct *work)
@@ -1056,6 +1095,50 @@ static void oplus_common_power_check_recover_work(struct work_struct *work)
 	chg_info("oplus_common_power_check_recover_work need_common_power_check %d\n", chip->need_common_power_check);
 }
 
+static bool oplus_wired_pd_boost_check(struct oplus_chg_wired *chip)
+{
+	struct oplus_wired_spec_config *spec = &chip->spec;
+	int cool_down, cool_down_vol;
+
+	if ((chip->keep_topic == NULL) || !chip->cpa_support) {
+		if (is_pd_svooc_votable_available(chip) &&
+		    !!get_effective_result(chip->pd_svooc_votable) &&
+		    is_vooc_disable_votable_available(chip) &&
+		    !get_effective_result(chip->vooc_disable_votable)) {
+			chg_info("pd_svooc check, pd cannot be boosted\n");
+			oplus_pd_cpa_switch_end(chip);
+			return false;
+		}
+	}
+
+	if (chip->pd_boost_disable) {
+		chg_info("pd boost is disable\n");
+		return false;
+	}
+
+	if (chip->cool_down > 0) {
+		cool_down = chip->cool_down > spec->cool_down_pdqc_level_max ?
+				    spec->cool_down_pdqc_level_max :
+				    chip->cool_down;
+		if (chip->chg_ctrl_by_sale_mode) {
+			if (spec->cool_down_sale_pdqc_vol_mv == PDQC_SALE_MODE_ALLOW_BUCK_MV)
+				chip->pd_action = OPLUS_ACTION_BUCK;
+			cool_down_vol = spec->cool_down_sale_pdqc_vol_mv;
+		} else {
+			cool_down_vol = spec->cool_down_pdqc_vol_mv[cool_down - 1];
+		}
+	} else {
+		cool_down_vol = 0;
+	}
+
+	if (cool_down_vol > 0 && cool_down_vol < OPLUS_CHG_VBUS_9V) {
+		chg_info("cool down limit, pd cannot be boosted\n");
+		return false;
+	}
+
+	return true;
+}
+
 #define PD_RETRY_DELAY msecs_to_jiffies(1000)
 #define PD_RETRY_COUNT_MAX 3
 static void oplus_wired_pd_config_work(struct work_struct *work)
@@ -1063,7 +1146,6 @@ static void oplus_wired_pd_config_work(struct work_struct *work)
 	struct oplus_chg_wired *chip =
 		container_of(work, struct oplus_chg_wired, pd_config_work.work);
 	struct oplus_wired_spec_config *spec = &chip->spec;
-	int cool_down, cool_down_vol;
 	int vbus_set_mv = OPLUS_CHG_VBUS_5V; /* vbus default setting voltage is 5V */
 	bool vbus_changed = false;
 	int rc;
@@ -1090,44 +1172,14 @@ static void oplus_wired_pd_config_work(struct work_struct *work)
 		}
 	}
 
-	if (chip->cool_down > 0) {
-		cool_down = chip->cool_down > spec->cool_down_pdqc_level_max ?
-				    spec->cool_down_pdqc_level_max :
-				    chip->cool_down;
-		if (chip->chg_ctrl_by_sale_mode) {
-			if (spec->cool_down_sale_pdqc_vol_mv == PDQC_SALE_MODE_ALLOW_BUCK_MV)
-				chip->pd_action = OPLUS_ACTION_BUCK;
-			cool_down_vol = spec->cool_down_sale_pdqc_vol_mv;
-		} else {
-			cool_down_vol = spec->cool_down_pdqc_vol_mv[cool_down - 1];
-		}
-	} else {
-		cool_down_vol = 0;
-	}
-
 	chip->vbus_mv = oplus_wired_get_vbus();
 	switch (chip->pd_action) {
 	case OPLUS_ACTION_BOOST:
-		if (is_pd_svooc_votable_available(chip) &&
-		    !!get_effective_result(chip->pd_svooc_votable) &&
-		    is_vooc_disable_votable_available(chip) &&
-		    !get_effective_result(chip->vooc_disable_votable)) {
-			chg_info("pd_svooc check, pd cannot be boosted\n");
+		if (!oplus_wired_pd_boost_check(chip)) {
 			chip->pd_action = OPLUS_ACTION_NULL;
-			oplus_pd_cpa_switch_end(chip);
 			goto set_curr;
 		}
 
-		if (chip->pd_boost_disable) {
-			chg_info("pd boost is disable\n");
-			chip->pd_action = OPLUS_ACTION_NULL;
-			goto set_curr;
-		}
-		if (cool_down_vol > 0 && cool_down_vol < OPLUS_CHG_VBUS_9V) {
-			chg_info("cool down limit, pd cannot be boosted\n");
-			chip->pd_action = OPLUS_ACTION_NULL;
-			goto set_curr;
-		}
 		if (spec->vbatt_pdqc_to_9v_thr > 0 &&
 		    chip->vbat_mv < spec->vbatt_pdqc_to_9v_thr) {
 			chg_info("pd starts to boost, retry count %d, vbus_status %d.\n", chip->pd_retry_count, chip->vbus_status);
@@ -1339,6 +1391,8 @@ static void oplus_wired_gauge_update_work(struct work_struct *work)
 
 	oplus_wired_strategy_update(chip);
 	oplus_wired_vbus_check(chip);
+	if (chip->qc_curr_check_support)
+		oplus_wired_qc_curr_abnormal_check(chip);
 	if (!chip->vooc_started)
 		oplus_wired_kick_wdt(chip->wired_topic);
 	if (oplus_wired_is_usb_aicl_enhance() && chip->chg_type == OPLUS_CHG_USB_TYPE_CDP &&
@@ -1558,7 +1612,7 @@ static void oplus_common_power_check(struct oplus_chg_wired *chip)
 
 		if (temp_ui_soc >= COMMON_POWER_CHECK_MIN_SOC &&
 		    ((real_type == OPLUS_CHG_USB_TYPE_UNKNOWN && chg_type == OPLUS_CHG_USB_TYPE_UNKNOWN) ||
-		    (real_type == OPLUS_CHG_USB_TYPE_PD))) {
+		    (real_type == OPLUS_CHG_USB_TYPE_PD) || (real_type == OPLUS_CHG_USB_TYPE_PD_SDP))) {
 			chip->need_common_power_check = true;
 			vote(chip->icl_votable, COMMON_POWER_CHECK, true, 100, false);
 			cancel_delayed_work(&chip->common_power_check_recover_work);
@@ -1584,6 +1638,7 @@ static void oplus_wired_plugin_work(struct work_struct *work)
 				false);
 	chip->chg_online = data.intval;
 	if (chip->chg_online) {
+		oplus_gauge_set_plugin_status();
 		oplus_common_power_check(chip);
 		chip->retention_state_ready = false;
 		oplus_wired_set_awake(chip, true);
@@ -1637,6 +1692,7 @@ static void oplus_wired_plugin_work(struct work_struct *work)
 		chip->need_common_power_check = false;
 		chip->pd_retry_count = 0;
 		chip->qc_retry_count = 0;
+		chip->curr_abnormal_cnt = 0;
 		chip->vbus_status = chip->pdqc12v_support ? VBUS_STS_12V_REQ : VBUS_STS_DEFAULT;
 		chip->qc_action = OPLUS_ACTION_NULL;
 		chip->pd_action = OPLUS_ACTION_NULL;
@@ -1796,6 +1852,7 @@ static void oplus_wired_qc_check_work(struct work_struct *work)
 		chg_info("cpa protocol not qc, return\n");
 		return;
 	}
+	chip->chg_type = oplus_wired_get_chg_type();
 	if (chip->chg_type == OPLUS_CHG_USB_TYPE_QC2 ||
 	    chip->chg_type == OPLUS_CHG_USB_TYPE_QC3) {
 		chg_info("type is qc charging  not retry\n");
@@ -1993,6 +2050,16 @@ static void oplus_wired_subscribe_retention_topic(struct oplus_mms *topic,
 	if (rc >= 0)
 		chip->pdqc_connect_error_count = data.intval;
 }
+
+#if IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP)
+static void oplus_wired_subscribe_keep_topic(struct oplus_mms *topic,
+					     void *prv_data)
+{
+	struct oplus_chg_wired *chip = prv_data;
+
+	chip->keep_topic = topic;
+}
+#endif
 
 #define SALE_MODE_PDQC_DELAY msecs_to_jiffies(200)
 static void oplus_wired_sale_mode_buckboost_work(struct work_struct *work)
@@ -2613,6 +2680,7 @@ static int oplus_wired_parse_dt(struct oplus_chg_wired *chip)
 	chip->pdqc12v_support = of_property_read_bool(node, "oplus,pdqc12v-support");
 	chip->adjust_pdqc_vol_thr_support = of_property_read_bool(node,
 						"oplus,adjust-pdqc-vol-thr-support");
+	chip->qc_curr_check_support = of_property_read_bool(node, "oplus,qc-curr-check-support");
 
 	rc = of_property_read_u32(node, "oplus_spec,pd-iclmax-ma",
 				  &spec->pd_iclmax_ma);
@@ -2931,6 +2999,9 @@ static int oplus_wired_probe(struct platform_device *pdev)
 	oplus_mms_wait_topic("vooc", oplus_wired_subscribe_vooc_topic, chip);
 	oplus_mms_wait_topic("cpa", oplus_wired_subscribe_cpa_topic, chip);
 	oplus_mms_wait_topic("retention", oplus_wired_subscribe_retention_topic, chip);
+#if IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP)
+	oplus_mms_wait_topic("state_keep", oplus_wired_subscribe_keep_topic, chip);
+#endif
 
 #if IS_ENABLED(CONFIG_OPLUS_DYNAMIC_CONFIG_CHARGER)
 	(void)oplus_wired_reg_debug_config(chip);

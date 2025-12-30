@@ -3881,6 +3881,11 @@ try:
 		if (device_type == DEVICE_TYPE_NFG8011B)
 			chip->batt_nfg8011b = true;
 	}
+
+	if (chip->batt_nfg8011b && device_type != DEVICE_TYPE_NFG8011B &&
+	    device_type != DEVICE_TYPE_BQ27541)
+		chip->gauge_type_error = true;
+
 	chg_info("device_type : 0x%04x\n", device_type);
 }
 
@@ -6073,7 +6078,10 @@ static int bq28z610_get_term_volt(struct chip_bq27541 *chip, int *volt)
 	int value = 0;
 	u8 read_data[BQ28Z610_DEEP_DISCHG_SIZE] = { 0 };
 
-	if (!chip || is_return_pre_value(chip) || (!chip->batt_bq28z610 && !chip->batt_bq27z561)) {
+	if (!chip)
+		return -EINVAL;
+
+	if (is_return_pre_value(chip) || (!chip->batt_bq28z610 && !chip->batt_bq27z561)) {
 		*volt = chip->deep_term_volt_pre;
 		return rc;
 	}
@@ -6103,7 +6111,10 @@ static int bq28z610_get_deep_dischg_num(struct chip_bq27541 *chip)
 	int dischg_num = 0;
 	u8 read_data[BQ28Z610_DEEP_DISCHG_SIZE] = { 0, 0, 0, 0, 0 };
 
-	if (!chip || is_return_pre_value(chip) || (!chip->batt_bq28z610 && !chip->batt_bq27z561)) {
+	if (!chip)
+		return -EINVAL;
+
+	if (is_return_pre_value(chip) || (!chip->batt_bq28z610 && !chip->batt_bq27z561)) {
 		return chip->deep_dischg_count_pre;
 	}
 
@@ -6272,7 +6283,10 @@ static int bq28z610_get_last_cc(struct chip_bq27541 *chip)
 	int cc = 0;
 	u8 read_data[BQ28Z610_DEEP_DISCHG_SIZE] = { 0, 0, 0, 0, 0 };
 
-	if (!chip || is_return_pre_value(chip) || (!chip->batt_bq28z610 && !chip->batt_bq27z561))
+	if (!chip)
+		return -EINVAL;
+
+	if (is_return_pre_value(chip) || (!chip->batt_bq28z610 && !chip->batt_bq27z561))
 		return chip->last_cc_pre;
 
 	mutex_lock(&chip->bq28z610_alt_manufacturer_access);
@@ -6357,7 +6371,10 @@ static int bq28z610_get_vct(struct chip_bq27541 *chip)
 	int value = 0;
 	bool cc_check = false;
 
-	if (!chip || is_return_pre_value(chip) || !chip->batt_bq28z610)
+	if (!chip)
+		return -EINVAL;
+
+	if (is_return_pre_value(chip) || !chip->batt_bq28z610)
 		return chip->vct_pre;
 
 	mutex_lock(&chip->bq28z610_alt_manufacturer_access);
@@ -7281,7 +7298,12 @@ static bool bq27541_sha256_hmac_result_check(struct chip_bq27541 *chip)
 		ret =  false;
 	} else {
 		chg_info("gauge authenticate succeed\n");
-		ret = true;
+		if (chip->gauge_type_error) {
+			chg_err("gauge_type_error\n");
+			ret = false;
+		} else {
+			ret = true;
+		}
 	}
 
 	return ret;
@@ -7719,6 +7741,28 @@ static int oplus_bq27541_get_batt_soc_centi(struct oplus_chg_ic_dev *ic_dev, int
 	chip = oplus_chg_ic_get_drvdata(ic_dev);
 	*soc_centi = bq27541_get_battery_soc_centi(chip);
 
+	return 0;
+}
+
+static int oplus_bq27541_get_sn_match(struct oplus_chg_ic_dev *ic_dev, bool *match)
+{
+	struct chip_bq27541 *chip;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+	if (chip == NULL) {
+		chg_err("chip is NULL");
+		return -ENODEV;
+	}
+
+	if (!chip->sn_match)
+		chip->sn_match = battery_sn_match(chip->dev->of_node, chip->battinfo.batt_serial_num);
+
+	*match = chip->sn_match;
 	return 0;
 }
 
@@ -8309,9 +8353,9 @@ static int bq28z610_get_battery_gauge_type_for_bcc(struct oplus_chg_ic_dev *ic_d
 static int bq28z610_get_battery_dod0(struct oplus_chg_ic_dev *ic_dev, int index, int *dod0)
 {
 	struct chip_bq27541 *chip;
-	int dod0_1;
-	int dod0_2;
-	int dod_passed_q;
+	int dod0_1 = 0;
+	int dod0_2 = 0;
+	int dod_passed_q = 0;
 
 	if (ic_dev == NULL || dod0 == NULL) {
 		chg_err("oplus_chg_ic_dev is NULL");
@@ -8390,9 +8434,9 @@ static int bq28z610_get_battery_dod0_passed_q(struct oplus_chg_ic_dev *ic_dev, i
 static int bq28z610_get_battery_qmax(struct oplus_chg_ic_dev *ic_dev, int index, int *qmax)
 {
 	struct chip_bq27541 *chip;
-	int qmax_1;
-	int qmax_2;
-	int qmax_passed_q;
+	int qmax_1 = 0;
+	int qmax_2 = 0;
+	int qmax_passed_q = 0;
 	int retry = RETRY_CNT;
 
 	if (ic_dev == NULL || qmax == NULL) {
@@ -9020,6 +9064,18 @@ RETRY:
 		chg_err("get sn failed");
 	}
 
+	return 0;
+}
+
+static int oplus_bq27541_init_sn_match(struct chip_bq27541 *chip)
+{
+	if (chip->i2c_err || oplus_is_rf_ftm_mode()) {
+		chip->sn_match = true;
+		chg_info("i2c error or rf mode, sn_match set to true\n");
+		return 0;
+	}
+
+	chip->sn_match = battery_sn_match(chip->dev->of_node, chip->battinfo.batt_serial_num);
 	return 0;
 }
 
@@ -10137,6 +10193,10 @@ static void *oplus_chg_get_func(struct oplus_chg_ic_dev *ic_dev,
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_BATT_SOC_CENTI,
 			oplus_bq27541_get_batt_soc_centi);
 		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_SN_MATCH:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_SN_MATCH,
+			oplus_bq27541_get_sn_match);
+		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);
 		func = NULL;
@@ -10377,6 +10437,7 @@ rerun:
 	}
 
 	oplus_bq27541_get_batt_sn(fg_ic);
+	oplus_bq27541_init_sn_match(fg_ic);
 	atomic_set(&fg_ic->locked, 0);
 	bq28z610_afi_param_update(fg_ic);
 	rc = of_property_read_u32(fg_ic->dev->of_node, "oplus,ic_type",

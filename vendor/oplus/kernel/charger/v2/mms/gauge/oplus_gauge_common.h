@@ -132,6 +132,7 @@ struct oplus_mms_gauge {
 	bool wired_online;
 	bool wls_online;
 	bool hmac;
+	bool sn_match;
 	bool parallel_hamc;
 	bool support_subboard_ntc;
 	bool check_subboard_ntc_err;

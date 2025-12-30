@@ -682,7 +682,7 @@ struct chip_bq27541 {
 
 	bool support_sha256_hmac;
 	bool support_extern_cmd;
-
+	bool gauge_type_error;
 	bool support_eco_design;
 
 	struct delayed_work check_iic_recover;
@@ -723,6 +723,7 @@ struct chip_bq27541 {
 	unsigned long rst_ing;
 	int gauge_type;
 	int bq28z610_seal_flag;
+	bool sn_match;
 };
 
 struct gauge_track_info_reg {

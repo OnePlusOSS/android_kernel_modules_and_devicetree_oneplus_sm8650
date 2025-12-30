@@ -35,8 +35,6 @@
 #define PDE_DATA pde_data
 #endif
 
-#define LCD_CTL_AOD_ON 0x02
-
 #define TP_SUPPORT_MAX 3
 #define TP_NAME_SIZE_MAX 30
 
@@ -366,6 +364,7 @@ typedef enum lcd_event_type {
 	LCD_CTL_IRQ_ON,
 	LCD_CTL_IRQ_OFF,
 	LCD_CTL_AOD_OFF,
+	LCD_CTL_AOD_ON,
 } lcd_event_type;
 
 typedef enum {

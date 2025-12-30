@@ -117,10 +117,8 @@ UX_PRIORITY_PROTECT: Lowest priority protected ux type
 #define UX_PRIORITY_TOP_APP		0x0A000000
 
 #define UX_PRIORITY_AUDIO		0x0A000000
-#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
 #define UX_PRIORITY_PIPELINE_UI 0x06000000
 #define UX_PRIORITY_PIPELINE    0x05000000
-#endif
 
 /* define for sched assist scene type, keep same as the define in java file */
 #define SA_SCENE_OPT_CLEAR			(0)
@@ -147,6 +145,7 @@ extern pid_t save_audio_tgid;
 extern pid_t save_top_app_tgid;
 extern unsigned int top_app_type;
 extern int global_lowend_plat_opt;
+extern bool global_less_prime_cpu_arch;
 
 #ifdef CONFIG_OPLUS_SCHED_HALT_MASK_PRT
 /* This must be the same as the definition of pause_type in walt_halt.c */

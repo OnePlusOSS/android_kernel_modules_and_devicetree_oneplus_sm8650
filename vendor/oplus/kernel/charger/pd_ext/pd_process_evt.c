@@ -544,7 +544,7 @@ static inline bool pe_is_valid_pd_msg_id(struct pd_port *pd_port,
 	uint8_t sop_type = pd_msg->frame_type;
 	uint8_t msg_id = pd_get_msg_hdr_id(pd_port);
 	struct tcpc_device __maybe_unused *tcpc = pd_port->tcpc;
-	uint32_t chip_id;
+	uint32_t chip_id, chip_pid;
 	bool is_sc2150a = false;
 	int rc;
 
@@ -584,7 +584,8 @@ static inline bool pe_is_valid_pd_msg_id(struct pd_port *pd_port,
 	}
 
 	rc = tcpci_get_chip_id(tcpc, &chip_id);
-	if (!rc && chip_id == SC2150A_DID)
+	rc = tcpci_get_chip_pid(tcpc, &chip_pid);
+	if (!rc && chip_id == SC2150A_DID && chip_pid == SC2150A_PID)
 		is_sc2150a = true;
 
 	if (is_sc2150a && ((pd_port->pe_data.msg_id_rx[sop_type] + 2) %

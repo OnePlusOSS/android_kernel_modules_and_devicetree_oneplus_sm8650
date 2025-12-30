@@ -18,7 +18,7 @@ static struct ilitek_protocol_info protocol_info[PROTOCL_VER_NUM] = {
 	[7] = {PROTOCOL_VER_570, 9, 4, 14, 30, 5, 5, 3, 8, 15, 14},
 };
 
-#define FUNC_CTRL_NUM   24
+#define FUNC_CTRL_NUM   25
 static struct ilitek_ic_func_ctrl func_ctrl[FUNC_CTRL_NUM] = {
 	/* cmd[3] = cmd, func, ctrl */
 	[0] = {"sense", {0x1, 0x1, 0x0}, 3},
@@ -45,6 +45,7 @@ static struct ilitek_ic_func_ctrl func_ctrl[FUNC_CTRL_NUM] = {
 	[21] = {"int_trigger", {0x1, 0x1B, 0x0}, 3},
 	[22] = {"aod", {0x1, 0xD, 0x0}, 3},
 	[23] = {"underwater", {0x01 , 0x29 , 0x00}, 3},
+	[24] = {"waterproof", {0xDA, 0x00, 0x01, 0x02}, 4},
 };
 
 #define CHIP_SUP_NUM    5
@@ -896,8 +897,13 @@ int ili_ic_get_tp_info(void)
 		buf[6] = ilits->fw_info[11];
 		buf[7] = ilits->fw_info[12];
 		buf[8] = ilits->fw_info[14];
-		buf[11] = buf[7];
-		buf[12] = buf[8];
+		if (ilits->chip->core_ver >= CORE_VER_1700) {
+			buf[11] = ilits->fw_info[13];
+			buf[12] = ilits->fw_info[15];
+		} else {
+			buf[11] = buf[7];
+			buf[12] = buf[8];
+		}
 		goto out;
 	}
 

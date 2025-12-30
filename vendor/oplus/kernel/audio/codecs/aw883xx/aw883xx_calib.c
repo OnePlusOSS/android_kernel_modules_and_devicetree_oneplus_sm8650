@@ -1868,6 +1868,32 @@ static ssize_t aw_f0_range_show(struct device *dev,
 	return len;
 }
 
+static ssize_t aw_r_impedance_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	int ret = -1, i = 0;
+	struct aw883xx *aw883xx = dev_get_drvdata(dev);
+	struct aw_device *aw_dev = aw883xx->aw_pa;
+	ssize_t len = 0;
+	int32_t re[AW_DEV_CH_MAX] = { 0 };
+
+	if (is_single_cali) {
+		len += snprintf(buf+len, PAGE_SIZE-len, "dev[%u]: %umOhms \n",
+				aw_dev->channel, aw_dev->cali_desc.cali_re);
+	} else {
+		ret = aw_cali_svc_get_devs_cali_val(aw_dev, GET_RE_TYPE, re, AW_DEV_CH_MAX);
+		if (ret <= 0) {
+			aw_dev_err(aw_dev->dev, "get re failed");
+		} else {
+			for (i = 0; i < ret; i++)
+				len += snprintf(buf+len, PAGE_SIZE-len, "dev[%d]: %umOhms ", i, re[i]);
+
+			len += snprintf(buf+len, PAGE_SIZE-len, " \n");
+		}
+	}
+
+	return len;
+}
 
 static DEVICE_ATTR(cali_time, S_IWUSR | S_IRUGO,
 			aw_cali_attr_time_show, aw_cali_attr_time_store);
@@ -1881,6 +1907,8 @@ static DEVICE_ATTR(re_range, S_IRUGO,
 			aw_re_range_show, NULL);
 static DEVICE_ATTR(f0_range, S_IRUGO,
 			aw_f0_range_show, NULL);
+static DEVICE_ATTR(r_impedance, S_IRUGO,
+			aw_r_impedance_show, NULL);
 
 static struct attribute *aw_cali_attr[] = {
 	&dev_attr_cali_time.attr,
@@ -1889,6 +1917,7 @@ static struct attribute *aw_cali_attr[] = {
 	&dev_attr_cali_f0_q.attr,
 	&dev_attr_re_range.attr,
 	&dev_attr_f0_range.attr,
+	&dev_attr_r_impedance.attr,
 	NULL
 };
 

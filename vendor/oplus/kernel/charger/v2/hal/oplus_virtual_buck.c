@@ -2168,6 +2168,60 @@ static int oplus_chg_vb_get_cc_orientation(struct oplus_chg_ic_dev *ic_dev, int 
 	return rc;
 }
 
+#define VOLTAGE_3600MV  3600
+#define HWDETECT_DONE_INTERVAL 200
+#define HWDETECT_DONE_MAX_INTERVAL 5
+static void oplus_audio_hwdetect_init_done(struct oplus_virtual_buck_ic *chip, int *detected)
+{
+	int i;
+	int rc = 0;
+	static bool first_check_high = false, first_check = false;
+	static bool first_check_low = false, hwdetect_check_done = false;
+	int vol_mv = 0;
+	static unsigned long hwdetect_done_max_jiffies = 0, hwdetect_done_jiffies = 0;
+
+	if (!first_check) {
+		hwdetect_done_max_jiffies = jiffies +
+			   (unsigned long)(HWDETECT_DONE_MAX_INTERVAL * HZ);
+		first_check = true;
+		if (*detected == 0)
+			first_check_low = true;
+	}
+	if (first_check_low || *detected || hwdetect_check_done)
+		return;
+	if (time_is_before_jiffies(hwdetect_done_max_jiffies)) {
+		hwdetect_check_done = true;
+		return;
+	}
+	for (i = 0; i < chip->child_num; i++) {
+		if (!func_is_support(&chip->child_list[i], OPLUS_IC_FUNC_BUCK_GET_INPUT_VOL)) {
+			vol_mv = 0;
+			continue;
+		}
+		rc = oplus_chg_ic_func(
+			chip->child_list[i].ic_dev,
+			OPLUS_IC_FUNC_BUCK_GET_INPUT_VOL,
+			&vol_mv);
+		if (rc < 0) {
+			chg_err("child ic[%d] get hw detect error, rc=%d\n", i, rc);
+			return;
+		}
+	}
+
+	if (!first_check_high) {
+		first_check_high = true;
+		hwdetect_done_jiffies = jiffies + msecs_to_jiffies(HWDETECT_DONE_INTERVAL);
+	}
+	if (time_is_after_jiffies(hwdetect_done_jiffies) && vol_mv > VOLTAGE_3600MV)
+		*detected = 1;
+	else
+		hwdetect_check_done = true;
+
+	chg_info("hw_detect=%d, vol = %d, first_check_high = %d, hwdetect_check_done = %d\n",
+		*detected, vol_mv, first_check_high, hwdetect_check_done);
+
+}
+
 static int oplus_chg_vb_get_hw_detect(struct oplus_chg_ic_dev *ic_dev, int *detected, bool recheck)
 {
 	struct oplus_virtual_buck_ic *vb;
@@ -2182,6 +2236,7 @@ static int oplus_chg_vb_get_hw_detect(struct oplus_chg_ic_dev *ic_dev, int *dete
 	vb = oplus_chg_ic_get_drvdata(ic_dev);
 	if (oplus_vc_ccdetect_gpio_support(vb)) {
 		*detected = !gpio_get_value(vb->misc_gpio.ccdetect_gpio);
+		oplus_audio_hwdetect_init_done(vb, detected);
 		chg_info("hw_detect=%d\n", *detected);
 		return 0;
 	}

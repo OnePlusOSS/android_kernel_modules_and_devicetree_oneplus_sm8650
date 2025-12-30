@@ -57,12 +57,10 @@ int hbp_init_pinctrl(struct device *dev, struct hbp_device *hbp_dev)
 	return 0;
 }
 
-
-int hbp_init_power(struct device *dev, struct hbp_device *hbp_dev)
+int hbp_init_avdd(struct device *dev, struct hbp_device *hbp_dev)
 {
 	int ret = 0;
 	struct device_node *np = dev->of_node;
-	hbp_info("%s start.\n", dev->of_node->name);
 
 	/*for avdd control init, instead of regulator_get which may return dummy regulator*/
 	hbp_dev->hw.avdd_reg = regulator_get_optional(dev, "power,avdd");
@@ -83,15 +81,23 @@ int hbp_init_power(struct device *dev, struct hbp_device *hbp_dev)
 					    hbp_dev->hw.avdd_volt.max);
 		if (ret < 0) {
 			hbp_err("failed to set voltage of avdd %d\n", ret);
-			goto exit;
+			return ret;
 		}
 
 		ret = regulator_set_load(hbp_dev->hw.avdd_reg, 200000); /*uA*/
 		if (ret < 0) {
 			hbp_err("failed to set load of avdd %d\n", ret);
-			goto exit;
+			return ret;
 		}
 	}
+
+	return 0;
+}
+
+int hbp_init_vddi(struct device *dev, struct hbp_device *hbp_dev)
+{
+	int ret = 0;
+	struct device_node *np = dev->of_node;
 
 	/* for vddi control init, instead of regulator_get *
 	** which may return dummy regulator */
@@ -114,14 +120,35 @@ int hbp_init_power(struct device *dev, struct hbp_device *hbp_dev)
 					    hbp_dev->hw.vddi_volt.max);
 		if (ret < 0) {
 			hbp_err("failed to set voltage of vddi %d\n", ret);
-			goto exit;
+			return ret;
 		}
 
 		ret = regulator_set_load(hbp_dev->hw.vddi_reg, 200000); /*uA*/
 		if (ret < 0) {
 			hbp_err("failed to set load of avdd %d\n", ret);
-			goto exit;
+			return ret;
 		}
+	}
+
+	return 0;
+}
+
+int hbp_init_power(struct device *dev, struct hbp_device *hbp_dev)
+{
+	int ret = 0;
+	hbp_info("%s start.\n", dev->of_node->name);
+
+	/*for avdd control init, instead of regulator_get which may return dummy regulator*/
+	ret = hbp_init_avdd(dev, hbp_dev);
+	if (ret < 0) {
+		goto exit;
+	}
+
+	/* for vddi control init, instead of regulator_get *
+	** which may return dummy regulator */
+	ret = hbp_init_vddi(dev, hbp_dev);
+	if (ret < 0) {
+		goto exit;
 	}
 
 	return 0;
@@ -212,7 +239,7 @@ void hbp_power_ctrl(struct hbp_device *hbp_dev, struct power_sequeue sq[])
 	int i = 0;
 
 	for (i = 0; i < MAX_POWER_SEQ; i++) {
-		hbp_debug("power type:0x%x en:%d delay:%dms\n", sq[i].type, sq[i].en, sq[i].msleep);
+		hbp_info("power type:0x%x en:%d delay:%dms\n", sq[i].type, sq[i].en, sq[i].msleep);
 		switch (sq[i].type) {
 		case POWER_AVDD:
 			hbp_power_ctrl_avdd(hbp_dev, sq[i].en);
@@ -233,6 +260,27 @@ void hbp_power_ctrl(struct hbp_device *hbp_dev, struct power_sequeue sq[])
 		if (sq[i].msleep) {
 			msleep(sq[i].msleep);
 		}
+	}
+}
+
+void hbp_power_type_ctrl(struct hbp_device *hbp_dev, enum power_type type, bool en)
+{
+	hbp_info("power type:0x%x en:%d\n", type, en);
+	switch (type) {
+	case POWER_AVDD:
+		hbp_power_ctrl_avdd(hbp_dev, en);
+		break;
+	case POWER_VDDI:
+		hbp_power_ctrl_vddi(hbp_dev, en);
+		break;
+	case POWER_RESET:
+		hbp_power_ctrl_reset(hbp_dev, en);
+		break;
+	case POWER_BUS:
+		hbp_power_ctrl_bus(hbp_dev, en);
+		break;
+	default:
+		return;
 	}
 }
 

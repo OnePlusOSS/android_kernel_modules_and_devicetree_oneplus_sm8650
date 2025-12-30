@@ -658,7 +658,11 @@ static void aw8693xs_play_mode(struct aw_haptic *aw_haptic, uint8_t play_mode)
 		i2c_w_bits(aw_haptic, AW8693XS_REG_PLAYCFG3,
 					 AW8693XS_BIT_PLAYCFG3_PLAY_MODE_MASK,
 					 AW8693XS_BIT_PLAYCFG3_PLAY_MODE_RAM);
+#ifndef OPLUS_FEATURE_CHG_BASIC
 		aw8693xs_auto_brake_mode(aw_haptic, false);
+#else
+		aw8693xs_auto_brake_mode(aw_haptic, true);
+#endif
 		aw8693xs_bst_mode_config(aw_haptic, AW_BST_BOOST_MODE);
 		aw8693xs_vbat_mode_config(aw_haptic, AW_CONT_VBAT_SW_COMP_MODE);
 		break;

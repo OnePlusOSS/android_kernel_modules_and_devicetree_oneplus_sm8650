@@ -211,7 +211,7 @@ static struct msm_cvp_common_data sm8650_common_data[] = {
 	},
 	{
 		.key = "qcom,domain-attr-non-fatal-faults",
-		.value = 0,
+		.value = 1,
 	},
 	{
 		.key = "qcom,max-secure-instances",

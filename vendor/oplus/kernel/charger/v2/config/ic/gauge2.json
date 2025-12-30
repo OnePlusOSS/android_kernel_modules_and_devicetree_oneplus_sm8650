@@ -265,8 +265,59 @@
                 },
                 "overwrite": false
             }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_GAUGE_GET_SN_MATCH",
+            "desc": {
+                "zh": "获取SN是否匹配"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["bool *"],
+            "parameter_desc": [
+                {
+                    "range": "0-1",
+                    "type": "out",
+                    "desc": {
+                        "zh": "0:不匹配, 1:匹配"
+                    }
+                }
+            ],
+            "vict": {
+                "read": {
+                    "cmd": "vict -f {id} -G vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                },
+                "write": false,
+                "overwrite": {
+                    "cmd": "vict -f {id} -O {val} vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                }
+            }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_GAUGE_SYNC_PLUGIN",
+            "desc": {
+                "zh": "通知MTK电量计, 插入状态"
+            },
+            "auto_debug_code": true,
+            "parameter_list": [],
+            "parameter_desc": [],
+            "vict": {
+                "read": false,
+                "write": {
+                    "cmd": "vict -f {id} -S vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                },
+                "overwrite": false
+            }
         }
     ],
 
-    "version": "V5.5:9:135cdb303cac914c48dec4f4d37e480e29d6cc7f239657885a126ed2c8895a74"
+    "version": "V6.1:11:62bb2a4abafd34f37d6973d70b379e98a6872be17ac17d9816bc36568b80c895"
 }

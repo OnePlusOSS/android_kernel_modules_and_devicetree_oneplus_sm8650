@@ -25,6 +25,7 @@
 
 #include "hbp_power.h"
 extern void hbp_power_ctrl(struct hbp_device *hbp_dev, struct power_sequeue sq[]);
+extern void hbp_power_type_ctrl(struct hbp_device *hbp_dev, enum power_type type, bool en);
 
 struct hbp_core *g_hbp;
 struct task_struct *suspend_task = NULL;
@@ -156,8 +157,6 @@ int hbp_register_devices(void *priv,
 		return -ENODEV;
 	}
 
-	hbp->active_id = id;
-
 	if (hbp->devices[id]) {
 		hbp_info("device already registered\n");
 		return 0;
@@ -224,31 +223,29 @@ bool hbp_power_on_in_suspend(int index)
 }
 EXPORT_SYMBOL(hbp_power_on_in_suspend);
 
-void hbp_dev_ctrl_power_reconfig(void)
+void hbp_dev_power_type_ctrl(void *priv, enum power_type type, bool en)
 {
-	hbp_info("%s is called.\n", __func__);
+	struct hbp_device *hbp_dev = __hbp_find_device(priv);
 
-	if (!g_hbp) {
-		hbp_err("%s: g_hbp is null.\n", __func__);
+	if (hbp_dev) {
+		hbp_power_type_ctrl(hbp_dev, type, en);
 	} else {
-		hbp_info("%s active_id is %d.\n", __func__, g_hbp->active_id);
-		hbp_power_ctrl(g_hbp->devices[g_hbp->active_id], power_reconfig);
+		hbp_err("%s: hbp_dev is null.\n", __func__);
 	}
 }
-EXPORT_SYMBOL(hbp_dev_ctrl_power_reconfig);
+EXPORT_SYMBOL(hbp_dev_power_type_ctrl);
 
-void hbp_dev_ctrl_hw_reset(void)
+void hbp_dev_healthinfo_report(void *priv, char *report)
 {
-	hbp_info("%s is called.\n", __func__);
+	struct hbp_device *hbp_dev = __hbp_find_device(priv);
 
-	if (!g_hbp) {
-		hbp_err("%s: g_hbp is null.\n", __func__);
+	if (hbp_dev) {
+		hbp_healthinfo_report(&hbp_dev->monitor_data, report);
 	} else {
-		hbp_info("%s active_id is %d.\n", __func__, g_hbp->active_id);
-		hbp_power_ctrl(g_hbp->devices[g_hbp->active_id], hw_reset_config);
+		hbp_err("%s: hbp_dev is null.\n", __func__);
 	}
 }
-EXPORT_SYMBOL(hbp_dev_ctrl_hw_reset);
+EXPORT_SYMBOL(hbp_dev_healthinfo_report);
 
 static int hbp_sync_with_daemon(struct hbp_core *hbp, int id, hbp_panel_event event)
 {
@@ -280,6 +277,23 @@ static int hbp_sync_with_daemon(struct hbp_core *hbp, int id, hbp_panel_event ev
 	return 0;
 }
 
+hbp_panel_event hbp_panel_event_convert(hbp_panel_event event)
+{
+	//TODO:
+	//(1) if oncell panel, ignore suspend event, only use early suspend event
+	//to avoid repeat early suspend or suspend event
+	//(2) if tddi ic, need update
+	if (event == HBP_PANEL_EVENT_SUSPEND) {
+		return HBP_PANEL_EVENT_EARLY_SUSPEND;
+	}
+
+	if (event == HBP_PANEL_EVENT_RESUME) {
+		return HBP_PANEL_EVENT_EARLY_RESUME;
+	}
+
+	return event;
+}
+
 void hbp_state_notify(struct hbp_core *hbp, int id, hbp_panel_event event)
 {
 	hbp_debug("notify id %d event %d\n", id, event);
@@ -289,17 +303,7 @@ void hbp_state_notify(struct hbp_core *hbp, int id, hbp_panel_event event)
 		return;
 	}
 
-	//TODO:
-	//(1) if oncell panel, ignore suspend event, only use early suspend event
-	//to avoid repeat early suspend or suspend event
-	//(2) if tddi ic, need update
-	if (event == HBP_PANEL_EVENT_SUSPEND) {
-		event = HBP_PANEL_EVENT_EARLY_SUSPEND;
-	}
-
-	if (event == HBP_PANEL_EVENT_RESUME) {
-		event = HBP_PANEL_EVENT_EARLY_RESUME;
-	}
+	event = hbp_panel_event_convert(event);
 
 	if (hbp->states[id].id == id &&
 		hbp->states[id].state == event) {

@@ -265,23 +265,9 @@ int fhp_write(u8 *writebuf, u32 writelen)
 	return fhp_chip_write(g_fts, writebuf, writelen);
 }
 
-int fhp_write_reg(u8 addr, u8 value)
-{
-	u8 writebuf[2] = { 0 };
-
-	writebuf[0] = addr;
-	writebuf[1] = value;
-	return fhp_write(writebuf, 2);
-}
-
 int fhp_read(u8 *cmd, u32 cmdlen, u8 *data, u32 datalen)
 {
 	return fhp_chip_read(g_fts, cmd, cmdlen, data, datalen);
-}
-
-int fhp_read_reg(u8 addr, u8 *value)
-{
-	return fhp_read(&addr, 1, value, 1);
 }
 
 
@@ -324,12 +310,13 @@ struct fod_info {
 	int fp_x;
 	int fp_y;
 	int fp_area_rate;
+	int fp_time;
 };
 
 static int fhp_read_fod_info(struct fts_core *ts_data, struct fod_info *fod)
 {
 #define FT3681_REG_FOD_INFO (0xE1)
-#define FT3681_REG_FOD_INFO_LEN (9)
+#define FT3681_REG_FOD_INFO_LEN (10)
 	int ret = 0;
 	u8 cmd = FT3681_REG_FOD_INFO;
 	u8 val[FT3681_REG_FOD_INFO_LEN] = { 0 };
@@ -354,7 +341,7 @@ static int fhp_read_fod_info(struct fts_core *ts_data, struct fod_info *fod)
 	fod->fp_area_rate = val[2];
 	fod->fp_x = (val[4] << 8) + val[5];
 	fod->fp_y = (val[6] << 8) + val[7];
-
+	fod->fp_time = val[9];
 	return 0;
 }
 

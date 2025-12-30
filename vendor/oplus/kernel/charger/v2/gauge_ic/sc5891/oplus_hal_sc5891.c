@@ -29,6 +29,7 @@
 #include <linux/workqueue.h>
 
 #include <oplus_chg.h>
+#include <oplus_mms.h>
 #include <oplus_chg_module.h>
 #include <oplus_chg_ic.h>
 #include "uecc_lib/uecc_wrapper.h"
@@ -46,6 +47,12 @@
 #define SC5891_PRIKEY_DEFAULT_INDEX		0
 #define SC5891_PULL_DOWN_I2C_DURATION_MS	2000
 #define SC5891_SHUTDOWN_WAIT_TIME_MS		5
+
+#define ECO_BATT_SN_OFFSET			6
+#define BATT_SN_LEN				12
+#define FULL_BATT_SN_LEN			25
+#define BATT_SN_MAX				5
+#define MAX_SN_SIZE				BATT_SN_MAX * BATT_SN_LEN
 
 struct sc5891_track_bundle {
 	int batt_max;
@@ -71,6 +78,9 @@ struct sc5891_device {
 	struct work_struct gauge_update_work;
 	struct delayed_work hardware_init_work;
 
+	struct wakeup_source *rw_wake_lock;
+	atomic_t pm_suspended;
+
 	struct oplus_mms *gauge_topic;
 	struct mms_subscribe *gauge_subs;
 
@@ -83,6 +93,11 @@ struct sc5891_device {
 	bool hardware_init_ok;
 	bool prikey_ok;
 	int prikey_index;
+	int batt_info_num;
+	uint8_t dt_batt_info[BATT_SN_MAX][BATT_SN_LEN + 1];
+	uint8_t batt_info[BATT_SN_LEN + 1];
+	uint8_t full_batt_sn[FULL_BATT_SN_LEN + 1];
+	bool sn_match;
 
 	/*debugfs*/
 	struct dentry *debugfs_sc5891;
@@ -144,6 +159,11 @@ static int sc5891_i2c_write(struct sc5891_device *chip, const struct sc5891_tans
 		.buf = (uint8_t *)data,
 	};
 
+	if (atomic_read(&chip->pm_suspended) == 1) {
+		chg_err("in suspend");
+		return -EAGAIN;
+	}
+
 	rc = i2c_transfer(chip->i2c->adapter, &msg, 1);
 	if (rc < 0)
 		chg_err("i2c write failed, rc = %d\n", rc);
@@ -161,6 +181,11 @@ static int sc5891_i2c_read(struct sc5891_device *chip, struct sc5891_tansfer_dat
 		.buf = (uint8_t *)data,
 	};
 	memset(data, 0x00, sizeof(struct sc5891_tansfer_data));
+
+	if (atomic_read(&chip->pm_suspended) == 1) {
+		chg_err("in suspend");
+		return -EAGAIN;
+	}
 
 	rc = i2c_transfer(chip->i2c->adapter, &msg, 1);
 	if (rc < 0)
@@ -329,8 +354,6 @@ static int sc5891_post_check_recv_data(struct sc5891_device *chip, struct sc5891
 	uint16_t crc = 0;
 	int rc = 0;
 
-	if (chip->debug_sc5891_dump_log)
-		sc5891_dump((uint8_t *)recv_data, recv_data->len + 3);
 	crc = do_crc(&(recv_data->cmd), recv_data->len);
 	if (crc != ((recv_data->data[recv_data->len] << 8) | recv_data->data[recv_data->len - 1])) {
 		chg_err("recv data crc error\n");
@@ -379,6 +402,10 @@ static int sc5891_send_cmd(struct sc5891_device *chip, struct sc5891_tansfer_dat
 		rc = -SC5891_RESULT_I2C_FAIL;
 		goto i2c_err;
 	}
+
+	if (chip->debug_sc5891_dump_log)
+		sc5891_dump((uint8_t *)recv_data, recv_data->len + 3);
+
 	if (recv_data->result != SC5891_RESULT_SUCCESS) {
 		rc = -recv_data->result;
 		goto out;
@@ -558,7 +585,7 @@ static int sc5891_ic_mem_read(struct sc5891_device *chip, uint8_t page_id, uint8
 
 	send_data.data[0] = page_id;
 
-	rc =  sc5891_send_cmd(chip, &send_data, &recv_data);
+	rc = sc5891_send_cmd(chip, &send_data, &recv_data);
 	if (rc < 0) {
 		chg_err("read page[%d] fail, cmd res = %d\n", page_id, rc);
 		goto err_track;
@@ -767,14 +794,17 @@ static int sc5891_read_data(struct sc5891_device *chip, int id,
 	}
 
 	mutex_lock(&chip->flow_lock);
+	__pm_stay_awake(chip->rw_wake_lock);
 	for (i = 0; i < cfg->page_num; i++) {
 		rc = __sc5891_read_page(chip, cfg->page_id + i, page_buf + i * SC5891_INFO_PAGE_SIZE);
 		if (rc < 0) {
 			mutex_unlock(&chip->flow_lock);
+			__pm_relax(chip->rw_wake_lock);
 			goto err;
 		}
 	}
 	sc5891_ic_enter_shutdown(chip);
+	__pm_relax(chip->rw_wake_lock);
 	mutex_unlock(&chip->flow_lock);
 
 	if (cfg->need_checksum && !sc5891_verify_checksum(page_buf, cfg)) {
@@ -967,6 +997,7 @@ static int sc5891_write_data(struct sc5891_device *chip, int id,
 	cfg = &sc5891_data_cfg_table[id];
 
 	mutex_lock(&chip->flow_lock);
+	__pm_stay_awake(chip->rw_wake_lock);
 	rc = sc5891_ic_mem_unlock(chip);
 	if (rc < 0)
 		goto err;
@@ -975,7 +1006,9 @@ static int sc5891_write_data(struct sc5891_device *chip, int id,
 		rc = __sc5891_update_data_in_multi_pages(chip, id, data);
 	else
 		rc = __sc5891_update_data_in_one_page(chip, id, data);
+
 err:
+	__pm_relax(chip->rw_wake_lock);
 	sc5891_ic_enter_shutdown(chip);
 	mutex_unlock(&chip->flow_lock);
 	return rc;
@@ -1254,6 +1287,7 @@ static int sc5891_write_page(struct oplus_chg_ic_dev *ic_dev,
 	}
 
 	mutex_lock(&chip->flow_lock);
+	__pm_stay_awake(chip->rw_wake_lock);
 	rc = sc5891_ic_mem_unlock(chip);
 	if (rc < 0)
 		goto err_out;
@@ -1269,6 +1303,7 @@ static int sc5891_write_page(struct oplus_chg_ic_dev *ic_dev,
 	rc = __sc5891_write_page(chip, page_id, data);
 
 err_out:
+	__pm_relax(chip->rw_wake_lock);
 	sc5891_ic_enter_shutdown(chip);
 	mutex_unlock(&chip->flow_lock);
 	return rc;
@@ -1393,7 +1428,66 @@ static int sc5891_enter_shutdown(struct oplus_chg_ic_dev *ic_dev, bool *valid)
 	return rc;
 }
 
-static int sc5891_get_batt_auth(struct oplus_chg_ic_dev *ic_dev, bool *auth)
+static int sc5891_get_batt_info_from_ic(struct sc5891_device *chip)
+{
+	const struct sc5891_data_cfg *cfg = &sc5891_data_cfg_table[SC5891_DATA_ID_BATT_SN];
+	uint8_t *buf;
+	int rc;
+	int len;
+
+	if (chip == NULL) {
+		chg_err("chip is NULL\n");
+		return -EINVAL;
+	}
+
+	buf = kzalloc(cfg->data_len, GFP_KERNEL);
+	if (buf == NULL) {
+		chg_err("alloc page mem error\n");
+		return -ENOMEM;
+	}
+
+	rc = sc5891_read_data(chip, SC5891_DATA_ID_BATT_SN, buf, &len);
+	if (rc < 0) {
+		chg_err("fail to read batt_sn, rc = %d\n", rc);
+		kfree(buf);
+		return rc;
+	}
+
+	memmove(chip->full_batt_sn, buf, FULL_BATT_SN_LEN);
+	chip->full_batt_sn[FULL_BATT_SN_LEN] = '\0';
+	/* batt sn for authentication starts from index 2 */
+	memmove(chip->batt_info, buf + 2, BATT_SN_LEN);
+	chip->batt_info[BATT_SN_LEN] = '\0';
+	kfree(buf);
+	return 0;
+}
+
+static bool sc5891_check_batt_info(struct sc5891_device *chip)
+{
+	int i;
+	int rc;
+
+	if (chip == NULL) {
+		chg_err("chip is NULL");
+		return false;
+	}
+
+	rc = sc5891_get_batt_info_from_ic(chip);
+	if (rc < 0) {
+		chg_err("get batt_info from IC failed!\n");
+		return false;
+	}
+	chg_info("batt_info in IC: %s", chip->batt_info);
+
+	for (i = 0; i < chip->batt_info_num; ++i) {
+		if (memcmp(chip->batt_info, chip->dt_batt_info[i], BATT_SN_LEN) == 0)
+			return true;
+	}
+
+	return false;
+}
+
+static int sc5891_get_batt_hmac(struct oplus_chg_ic_dev *ic_dev, bool *hmac)
 {
 	struct sc5891_device *chip;
 
@@ -1403,11 +1497,21 @@ static int sc5891_get_batt_auth(struct oplus_chg_ic_dev *ic_dev, bool *auth)
 		return -ENODEV;
 	}
 
+	chip->sn_match = sc5891_check_batt_info(chip);
+
+	if (!chip->sn_match) {
+		chg_err("batt_info not match.");
+		*hmac = false;
+		return 0;
+	}
+
 	if (!chip->cert_valid)
 		sc5891_ecdsa(ic_dev, &chip->cert_valid);
 
-	/*upload only on KM, return errno to avoid result available*/
-	return -ENOTSUPP;
+	chg_info("batt_info match. hmac:%d", chip->cert_valid);
+	*hmac = chip->cert_valid;
+
+	return 0;
 }
 
 static int sc5891_set_prikey(struct oplus_chg_ic_dev *ic_dev, int index,
@@ -1438,6 +1542,80 @@ static int sc5891_get_prikey_index(struct oplus_chg_ic_dev *ic_dev, int *index)
 	}
 
 	*index = chip->prikey_index;
+	return 0;
+}
+
+static int sc5891_get_eco_batt_sn(struct oplus_chg_ic_dev *ic_dev, char buf[], int len)
+{
+	struct sc5891_device *chip;
+	int rc;
+
+	chip = oplus_chg_ic_get_priv_data(ic_dev);
+
+	if (buf == NULL || len < OPLUS_BATT_SERIAL_NUM_SIZE)
+		return -EINVAL;
+
+	if (chip->cert_valid) {
+		memmove(buf, chip->full_batt_sn + ECO_BATT_SN_OFFSET, OPLUS_BATT_SERIAL_NUM_SIZE);
+		buf[OPLUS_BATT_SERIAL_NUM_SIZE - 1] = '\0';
+		return 0;
+	}
+
+	rc = sc5891_get_batt_info_from_ic(chip);
+	if (rc < 0) {
+		chg_err("get batt_info from ic failed, rc:%d", rc);
+		return rc;
+	}
+
+	memmove(buf, chip->full_batt_sn + ECO_BATT_SN_OFFSET, OPLUS_BATT_SERIAL_NUM_SIZE);
+	buf[OPLUS_BATT_SERIAL_NUM_SIZE - 1] = '\0';
+	return 0;
+}
+
+static int sc5891_get_sn_match(struct oplus_chg_ic_dev *ic_dev, bool *match)
+{
+	struct sc5891_device *chip;
+
+	chip = oplus_chg_ic_get_priv_data(ic_dev);
+
+	if (chip == NULL) {
+		chg_err("chip is NULL");
+		return -ENODEV;
+	}
+
+	if (!chip->sn_match)
+		chip->sn_match = sc5891_check_batt_info(chip);
+
+	*match = chip->sn_match;
+	return 0;
+}
+
+static int sc5891_get_full_batt_sn(struct oplus_chg_ic_dev *ic_dev, char buf[], int len)
+{
+	struct sc5891_device *chip;
+	int rc;
+
+	chip = oplus_chg_ic_get_priv_data(ic_dev);
+	if (chip == NULL) {
+		chg_err("chip is NULL");
+		return -ENODEV;
+	}
+
+	if (buf == NULL || len < FULL_BATT_SN_LEN)
+		return -EINVAL;
+
+	if (chip->cert_valid) {
+		memmove(buf, chip->full_batt_sn, FULL_BATT_SN_LEN);
+		return 0;
+	}
+
+	rc = sc5891_get_batt_info_from_ic(chip);
+	if (rc < 0) {
+		chg_err("get batt_info from ic failed, rc:%d", rc);
+		return rc;
+	}
+
+	memmove(buf, chip->full_batt_sn, FULL_BATT_SN_LEN);
 	return 0;
 }
 
@@ -1517,7 +1695,11 @@ static void *sc5891_ic_get_func(struct oplus_chg_ic_dev *ic_dev,
 		break;
 	case OPLUS_IC_FUNC_GAUGE_GET_BATT_AUTH:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_BATT_AUTH,
-			sc5891_get_batt_auth);
+			sc5891_get_batt_hmac);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_BATT_HMAC:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_BATT_HMAC,
+			sc5891_get_batt_hmac);
 		break;
 	case OPLUS_IC_FUNC_GAUGE_SEC_SET_PRIKEY:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_SEC_SET_PRIKEY,
@@ -1526,6 +1708,18 @@ static void *sc5891_ic_get_func(struct oplus_chg_ic_dev *ic_dev,
 	case OPLUS_IC_FUNC_GAUGE_SEC_GET_PRIKEY_INDEX:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_SEC_GET_PRIKEY_INDEX,
 			sc5891_get_prikey_index);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_BATT_SN:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_BATT_SN,
+			sc5891_get_eco_batt_sn);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_SN_MATCH:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_SN_MATCH,
+			sc5891_get_sn_match);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_BATT_IC_SN:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_BATT_IC_SN,
+			sc5891_get_full_batt_sn);
 		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);
@@ -1541,6 +1735,39 @@ static struct oplus_chg_ic_virq sc5891_virq_table[] = {
 	{ .virq_id = OPLUS_IC_VIRQ_OFFLINE },
 	{ .virq_id = OPLUS_IC_VIRQ_RESUME },
 };
+
+static void sc5891_parse_batt_info(struct sc5891_device *chip)
+{
+	unsigned char sn_total[MAX_SN_SIZE] = {0};
+	int len;
+	int rc;
+	int i;
+
+	if (chip == NULL) {
+		chg_err("chip is NULL");
+		return;
+	}
+
+	len = of_property_count_u8_elems(chip->dev->of_node, "oplus,batt_info");
+	if (len < 0 || len > MAX_SN_SIZE) {
+		chg_info("Count oplus,batt_info failed, len = %d\n", len);
+		return;
+	}
+
+	rc = of_property_read_u8_array(chip->dev->of_node, "oplus,batt_info", sn_total,
+		len > MAX_SN_SIZE ? MAX_SN_SIZE : len);
+	if (rc) {
+		chg_err("Get oplus,batt_info failed %d\n", rc);
+		return;
+	}
+
+	chip->batt_info_num = len / BATT_SN_LEN;
+	for (i = 0; i < chip->batt_info_num; i++) {
+		memmove(chip->dt_batt_info[i], &sn_total[i * BATT_SN_LEN], BATT_SN_LEN);
+		chip->dt_batt_info[i][BATT_SN_LEN] = '\0';
+		chg_info("dt_batt_info_%d: %s\n", i, chip->dt_batt_info[i]);
+	}
+}
 
 static void sc5891_ic_unregister(struct sc5891_device *chip)
 {
@@ -1565,6 +1792,7 @@ static int sc5891_ic_register(struct sc5891_device *chip)
 	rc = of_property_read_u32(chip->dev->of_node, "oplus,prikey_index", &chip->prikey_index);
 	if (rc < 0)
 		chip->prikey_index = SC5891_PRIKEY_DEFAULT_INDEX;
+	sc5891_parse_batt_info(chip);
 
 	ic_cfg.name = chip->dev->of_node->name;
 	ic_cfg.index = ic_index;
@@ -1662,6 +1890,8 @@ static void sc5891_upload_gauge_data(struct sc5891_device *chip)
 	int len;
 	char *track_buf = NULL;
 	uint8_t page_buf[SC5891_INFO_PAGE_SIZE] = {0};
+	struct mms_msg *msg;
+	struct oplus_mms *err_topic;
 
 	if(chip == NULL) {
 		chg_err("chip is NULL\n");
@@ -1691,9 +1921,25 @@ static void sc5891_upload_gauge_data(struct sc5891_device *chip)
 			offset += scnprintf(track_buf + offset, SC5891_UPLOAD_GAUGE_BUF_LEN - offset,
 				  "%02x", page_buf[j]);
 	}
+	track_buf[offset] = '\0';
 
-	oplus_chg_ic_creat_err_msg(chip->ic_dev, OPLUS_IC_ERR_GAUGE, SEC_IC_MEM_REC, track_buf);
-	oplus_chg_ic_virq_trigger(chip->ic_dev, OPLUS_IC_VIRQ_ERR);
+	err_topic = oplus_mms_get_by_name("error");
+	if (!err_topic) {
+		chg_err("error topic not found\n");
+		goto err_out;
+	}
+
+	msg = oplus_mms_alloc_str_msg(MSG_TYPE_ITEM, MSG_PRIO_LOW, ERR_ITEM_SEC_IC_MEM_INFO, track_buf);
+	if (msg == NULL) {
+		chg_err("oplus_mms_alloc_str_msg fail\n");
+		goto  err_out;
+	}
+	rc = oplus_mms_publish_msg_sync(err_topic, msg);
+	if (rc < 0) {
+		chg_err("publish error msg error, rc=%d,\n", rc);
+		kfree(msg);
+	}
+
 err_out:
 	kfree(track_buf);
 }
@@ -1845,6 +2091,7 @@ const struct i2c_device_id *id)
 	mutex_init(&chip->flow_lock);
 	INIT_WORK(&chip->gauge_update_work, sc5891_gauge_update_work);
 	INIT_DELAYED_WORK(&chip->hardware_init_work, sc5891_hardware_init_work);
+	chip->rw_wake_lock = wakeup_source_register(chip->dev, "sc5891_rw_wakeup");
 	rc = sc5891_pinctrl_init(chip);
 	if (rc < 0) {
 		chg_err("pinctrl init error, rc=%d\n", rc);
@@ -1872,6 +2119,7 @@ const struct i2c_device_id *id)
 debugfs_err:
 	sc5891_ic_unregister(chip);
 error_exit:
+	wakeup_source_unregister(chip->rw_wake_lock);
 	devm_kfree(&client->dev, chip);
 	return rc;
 }
@@ -1897,6 +2145,7 @@ static void sc5891_remove(struct i2c_client *client)
 	sc5891_debugfs_remove(chip);
 	sc5891_ic_unregister(chip);
 	sc5891_pinctrl_release(chip);
+	wakeup_source_unregister(chip->rw_wake_lock);
 	mutex_destroy(&chip->cmd_rw_lock);
 	mutex_destroy(&chip->pinctrl_lock);
 	mutex_destroy(&chip->flow_lock);
@@ -1931,6 +2180,35 @@ static const struct i2c_device_id sc5891_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, sc5891_id);
 
+static int sc5891_pm_suspend(struct device *dev_chip)
+{
+	struct i2c_client *client  = container_of(dev_chip, struct i2c_client, dev);
+	struct sc5891_device *chip = i2c_get_clientdata(client);
+
+	if (chip == NULL)
+		return 0;
+
+	atomic_set(&chip->pm_suspended, 1);
+	return 0;
+}
+
+static int sc5891_pm_resume(struct device *dev_chip)
+{
+	struct i2c_client *client  = container_of(dev_chip, struct i2c_client, dev);
+	struct sc5891_device *chip = i2c_get_clientdata(client);
+
+	if (chip == NULL)
+		return 0;
+
+	atomic_set(&chip->pm_suspended, 0);
+	return 0;
+}
+
+static const struct dev_pm_ops sc5891_pm_ops = {
+	.resume = sc5891_pm_resume,
+	.suspend = sc5891_pm_suspend,
+};
+
 static struct i2c_driver sc5891_i2c_driver = {
 	.probe = sc5891_probe,
 	.remove = sc5891_remove,
@@ -1938,6 +2216,7 @@ static struct i2c_driver sc5891_i2c_driver = {
 	.driver = {
 		.name = "sc5891-driver",
 		.of_match_table = of_match_ptr(sc5891_of_match),
+		.pm = &sc5891_pm_ops,
 	}
 };
 

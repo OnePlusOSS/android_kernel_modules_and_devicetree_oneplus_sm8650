@@ -859,6 +859,13 @@
                     "str": "oplus,eco_region_list"
                 },
                 {
+                    "lable": "COMMON_CHG_SUPPORT_REGION",
+                    "desc": {
+                        "zh": "common chg认证需求支持区域"
+                    },
+                    "str": "oplus,common_chg_region_list"
+                },
+                {
                     "lable": "REGION_INDEX_MAX",
                     "desc": {
                         "zh": "支持的数量"
@@ -1100,6 +1107,13 @@
                         "zh": "旁路等待"
                     },
                     "str": "wait"
+                },
+                {
+                    "lable": "PLC_STATUS_TIMEOUT",
+                    "desc": {
+                        "zh": "旁路超时"
+                    },
+                    "str": "timeout"
                 },
                 {
                     "lable": "PLC_STATUS_MAX",

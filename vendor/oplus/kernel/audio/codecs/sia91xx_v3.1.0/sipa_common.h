@@ -36,7 +36,7 @@
 #include <linux/version.h>
 
 
-#define SIPA_DRIVER_VERSION					("3.1.0d-0506")
+#define SIPA_DRIVER_VERSION					("3.1.0e-0916")
 #define SIPA_MAX_CHANNEL_SUPPORT			(8)
 
 struct sipa_err {
@@ -186,6 +186,7 @@ enum {
 	CHIP_TYPE_SIA8001,
 	CHIP_TYPE_SIA8102,
 	CHIP_TYPE_SIA8150,
+	CHIP_TYPE_SIA8168,
 	// add compatible chip type here
 	CHIP_TYPE_UNKNOWN,
 	CHIP_TYPE_INVALID
@@ -220,6 +221,8 @@ enum {
 #define SIA81XX_REG_W_O						(0x00000001 << 1)
 #define SIA81XX_REG_RW						(SIA81XX_REG_R_O | SIA81XX_REG_W_O)
 
+#define SIA8168_REG_ALGE_EN					(0x02)
+#define SIA8168_REG_PAR_CFG2					(0x16)
 
 /* error list */
 /* pulse width time out */

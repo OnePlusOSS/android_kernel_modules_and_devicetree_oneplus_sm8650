@@ -1289,6 +1289,15 @@ int dsi_display_check_status(struct drm_connector *connector, void *display,
 		goto release_panel_lock;
 
 #ifdef OPLUS_FEATURE_DISPLAY
+	if (panel->oplus_priv.doze_disable_esdcheck) {
+		if (oplus_ofp_get_aod_state()) {
+			DSI_WARN("[ESD] Panel in aod state, skip esd check!\n");
+			goto release_panel_lock;
+		}
+	}
+#endif /* OPLUS_FEATURE_DISPLAY */
+
+#ifdef OPLUS_FEATURE_DISPLAY
 	if (panel->oplus_priv.dozedisable_esdcheck_delay) {
 		time_gap = ktime_to_us(ktime_sub(ktime_get(), oplus_get_doze_disable_time()));
 		if (time_gap > 0 && time_gap <= DOZE_DISABLE_TIME_US) {

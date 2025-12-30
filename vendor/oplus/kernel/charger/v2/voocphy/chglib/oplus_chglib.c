@@ -461,6 +461,44 @@ int oplus_chglib_notify_ap(struct device *dev, int event)
 	return 0;
 }
 
+/* this function inform mtk tcpc to ignore pd vbus irq.
+This vooc charge break issue will trigger when below condition satisfy:
+  1. Cancel primary usb switch
+  2. adapter type is VOOC
+  3. battery voltage is low(< 3600mv)
+  The function's purpose is inform typec to ignore pd vbus irq.
+*/
+void oplus_chglib_set_vooc_startup(struct device *dev, int status)
+{
+	struct vphy_chip *chip = oplus_chglib_get_vphy_chip(dev);
+	struct mms_msg *msg;
+	int rc;
+	static int last_status = 0;
+
+	if (!chip->vooc_topic) {
+		chg_err("vooc topic is null\n");
+		return;
+	}
+
+	if (last_status == status)
+		return;
+
+	chg_err("set vooc2/3.0 status: %d\n", status);
+	last_status = status;
+	msg = oplus_mms_alloc_int_msg(MSG_TYPE_ITEM, MSG_PRIO_MEDIUM,
+					VOOC_ITEM_OLD_ADAPTER_STATUS, status);
+	if (msg == NULL) {
+		chg_err("alloc old vooc status msg error\n");
+		return;
+	}
+
+	rc = oplus_mms_publish_msg_sync(chip->vooc_topic, msg);
+	if (rc < 0) {
+		chg_err("publish old vooc status msg error, rc=%d\n", rc);
+		kfree(msg);
+	}
+}
+
 int oplus_chglib_push_break_code(struct device *dev, int code)
 {
 	struct vphy_chip *chip = oplus_chglib_get_vphy_chip(dev);
@@ -746,6 +784,9 @@ static void oplus_chglib_subscribe_wired_topic(struct oplus_mms *topic, void *pr
 	if (IS_ERR_OR_NULL(chip->wired_subs))
 		chg_err("subscribe gauge topic error, rc=%ld\n",
 			PTR_ERR(chip->wired_subs));
+
+	oplus_mms_get_item_data(chip->wired_topic, WIRED_ITEM_PRESENT, &data, true);
+	chip->is_wired_present = !!data.intval;
 
 	oplus_mms_get_item_data(chip->wired_topic,
 				WIRED_TIME_ABNORMAL_ADAPTER, &data, true);
@@ -1304,6 +1345,20 @@ static int vphy_get_frame_head(struct oplus_chg_ic_dev *ic_dev, int *head)
 	return rc;
 }
 
+static int vphy_get_fastchg_commu_ing(struct oplus_chg_ic_dev *ic_dev, bool *fastchg_commu_ing)
+{
+	struct vphy_chip *chip;
+
+	if (!ic_dev->online)
+		return 0;
+	chip = oplus_chglib_get_vphy_chip(ic_dev->dev);
+
+	if (chip && chip->vinf && chip->vinf->vphy_get_fastchg_commu_ing && fastchg_commu_ing)
+		*fastchg_commu_ing = chip->vinf->vphy_get_fastchg_commu_ing(chip->dev);
+
+	return 0;
+}
+
 static void *vphy_get_func(struct oplus_chg_ic_dev *ic_dev,
 			    enum oplus_chg_ic_func func_id)
 {
@@ -1397,6 +1452,10 @@ static void *vphy_get_func(struct oplus_chg_ic_dev *ic_dev,
 	case OPLUS_IC_FUNC_VOOCPHY_GET_FRAME_HEAD:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_VOOCPHY_GET_FRAME_HEAD,
 					       vphy_get_frame_head);
+		break;
+	case OPLUS_IC_FUNC_VOOCPHY_GET_FASTCHG_COMMU_ING:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_VOOCPHY_GET_FASTCHG_COMMU_ING,
+					       vphy_get_fastchg_commu_ing);
 		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);

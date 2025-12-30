@@ -421,21 +421,7 @@ static inline void syna_pal_mutex_free(syna_pal_mutex_t *ptr)
 {
 	/* do nothing */
 }
-/**
- * syna_pal_mutex_trylock()
- *
- * Acquire/lock the mutex without waiting.
- *
- * @param
- *    [ in] ptr: a mutex handle
- *
- * @return
- *    none.
- */
-static inline int syna_pal_mutex_trylock(syna_pal_mutex_t *ptr)
-{
-	return mutex_trylock((struct mutex *)ptr);
-}
+
 /**
  * syna_pal_mutex_lock()
  *
@@ -474,9 +460,6 @@ static inline void syna_pal_mutex_unlock(syna_pal_mutex_t *ptr)
  * @brief: syna_pal_completion_alloc
  *         Allocate a completion event
  *
- * @brief: syna_pal_completion_free
- *         Release the completion event previously allocated
- *
  * @brief: syna_pal_completion_complete
  *         Complete the completion event being waiting for
  *
@@ -506,21 +489,7 @@ static inline int syna_pal_completion_alloc(syna_pal_completion_t *ptr)
 	init_completion((struct completion *)ptr);
 	return 0;
 }
-/**
- * syna_pal_completion_free()
- *
- * Release the completion event previously allocated
- *
- * @param
- *    [ in] ptr: the completion event previously allocated
- event
- * @return
- *    none.
- */
-static inline void syna_pal_completion_free(syna_pal_completion_t *ptr)
-{
-	/* do nothing */
-}
+
 /**
  * syna_pal_completion_complete()
  *
@@ -589,9 +558,6 @@ static inline int syna_pal_completion_wait_for(syna_pal_completion_t *ptr,
  *
  * @brief: syna_pal_sleep_us
  *         Sleep for a range of time in microseconds
- *
- * @brief: syna_pal_busy_delay_ms
- *         Busy wait for a fixed amount of time in milliseconds
  */
 
 /**
@@ -625,21 +591,6 @@ static inline void syna_pal_sleep_us(int time_us_min, int time_us_max)
 {
 	usleep_range(time_us_min, time_us_max);
 }
-/**
- * syna_pal_busy_delay_ms()
- *
- * Busy wait for a fixed amount of time in milliseconds
- *
- * @param
- *    [ in] time_ms: time frame in milliseconds
- *
- * @return
- *    none.
- */
-static inline void syna_pal_busy_delay_ms(int time_ms)
-{
-	mdelay(time_ms);
-}
 
 
 /**
@@ -647,9 +598,6 @@ static inline void syna_pal_busy_delay_ms(int time_ms)
  *
  * @brief: syna_pal_str_len
  *         Return the length of C string
- *
- * @brief: syna_pal_str_cpy:
- *         Ensure the safe size before doing C string copy
  *
  * @brief: syna_pal_str_cmp:
  *         Compare whether the given C strings are equal or not
@@ -670,37 +618,7 @@ static inline unsigned int syna_pal_str_len(const char *str)
 {
 	return (unsigned int)strlen(str);
 }
-/**
- * syna_pal_str_cpy()
- *
- * Copy the C string pointed by source into the array pointed by destination.
- *
- * @param
- *    [ in] dest:      pointer to the destination C string
- *    [ in] dest_size: size of destination C string
- *    [out] src:       pointer to the source of C string to be copied
- *    [ in] src_size:  size of source C string
- *    [ in] num:       number of bytes to copy
- *
- * @return
- *    0 on success; otherwise, on error.
- */
-static inline int syna_pal_str_cpy(char *dest, unsigned int dest_size,
-		const char *src, unsigned int src_size, unsigned int num)
-{
-	if (dest == NULL || src == NULL)
-		return -1;
 
-	if (num > dest_size || num > src_size) {
-		LOGE("Invalid size. src:%d, dest:%d, num:%d\n",
-			src_size, dest_size, num);
-		return -1;
-	}
-
-	strncpy(dest, src, num);
-
-	return 0;
-}
 /**
  * syna_pal_str_cmp()
  *

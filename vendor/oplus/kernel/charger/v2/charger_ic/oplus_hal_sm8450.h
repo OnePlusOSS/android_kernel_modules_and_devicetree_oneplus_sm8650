@@ -507,6 +507,7 @@ enum usb_property_id {
 	USB_SET_GET_SRC,
 	USB_SET_AICL_VOL,
 	USB_GET_AICL_VOL,
+	USB_OTG_BOOST_CURRENT,
 #endif /*OPLUS_FEATURE_CHG_BASIC*/
 	USB_PROP_MAX,
 };
@@ -591,6 +592,7 @@ enum usb_property_id {
 	USB_SET_GET_SRC,
 	USB_SET_AICL_VOL,
 	USB_GET_AICL_VOL,
+	USB_OTG_BOOST_CURRENT,
 #endif /*OPLUS_FEATURE_CHG_BASIC*/
 	USB_PROP_MAX,
 };
@@ -941,6 +943,7 @@ struct battery_chg_dev {
 	enum oplus_dpdm_switch_mode dpdm_switch_mode;
 	int read_by_reg;
 	bool ufcs_run_check_support;
+	int ext_gauge_fake_rbatt;
 #endif
 	int batt_full_para[CHARGING_TYPE_MAX][QBG_TEMP_MAX];
 	int batt_full_temp[QBG_TEMP_MAX];

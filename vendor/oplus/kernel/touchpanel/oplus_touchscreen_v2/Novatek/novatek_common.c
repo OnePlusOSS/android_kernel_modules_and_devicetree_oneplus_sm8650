@@ -619,6 +619,7 @@ static int nvt_before_autotest(struct seq_file *s, struct touchpanel_data *ts,
 	p_nvt_testdata->pos = &ts->com_test_data.result_cur_len;
 	p_nvt_testdata->fw = fw;
 	p_nvt_testdata->test_item = test_head->test_item;
+	p_nvt_testdata->raw_cap_restriction = ts->com_test_data.raw_cap_restriction;
 	return 0;
 }
 
@@ -856,6 +857,7 @@ static int nvt_before_black_screen_autotest(struct seq_file *s,
 	p_nvt_testdata->pos = &ts->com_test_data.bs_result_cur_len;
 	p_nvt_testdata->fw = fw;
 	p_nvt_testdata->test_item = test_head->test_item;
+	p_nvt_testdata->raw_cap_restriction = ts->com_test_data.raw_cap_restriction;
 	TPD_INFO("%s - \n", __func__);
 	return 0;
 }

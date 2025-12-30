@@ -514,6 +514,24 @@ def define_oplus_chg_v2_module():
                 "v2/charger_ic/oplus_hal_sgm41515.c"
             ],
         },
+        "CONFIG_OPLUS_CHG_RECOVERY": {
+            True: [
+                "v2/recovery/oplus_chg_recovery.c",
+            ],
+        },
+        "CONFIG_OPLUS_CHG_STATE_KEEP": {
+            True: [
+                "v2/recovery/state_keep/state_keep.c",
+                "v2/recovery/state_keep/detection/wired_disconnect_detection.c",
+                "v2/recovery/state_keep/detection/vooc_disconnect_detection.c",
+                "v2/monitor/track/oplus_track_state_keep.c",
+            ],
+        },
+        "CONFIG_OPLUS_DEBUG_AUTH": {
+            True: [
+                "v2/debug/oplus_debug_auth.c",
+            ],
+        },
     }
 
 

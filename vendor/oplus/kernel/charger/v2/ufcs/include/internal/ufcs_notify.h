@@ -27,6 +27,7 @@ enum ufcs_notify_state_value {
 	UFCS_NOTIFY_RESTART_FROM_CRASH,
 	UFCS_NOTIFY_FGRESET_EXIT_COMM,
 	UFCS_NOTIFY_FGRESET_RESTART_COMM,
+	UFCS_NOTIFY_UFCS_RESET_NOTIFY,
 };
 #if IS_ENABLED(CONFIG_OPLUS_UFCS_CLASS)
 int ufcs_reg_event_notifier(struct notifier_block *nb);

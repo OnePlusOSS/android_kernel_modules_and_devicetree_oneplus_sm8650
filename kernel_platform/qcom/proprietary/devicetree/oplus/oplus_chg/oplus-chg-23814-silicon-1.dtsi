@@ -1,6 +1,9 @@
 //ifdef OPLUS_FEATURE_CHG_BASIC
 &oplus_mms_gauge {
 	silicon_1 {
+		oplus,fcl_support;
+		oplus,fcl_index = <0>;
+		oplus,vb_offset = <0>;
 		deep_spec,support;
 		deep_spec,uv_thr = <3000>;
 		deep_spec,count_thr = <50>;
@@ -236,6 +239,9 @@
 
 &oplus_chg_comm {
 	silicon_1 {
+		oplus_spec,dec_step = <20>;
+		oplus_spec,dec-vol-cc-full-thr = <0 400 600 800 1000 1200>;
+		oplus_spec,dec-vol-fv-full-mv = <0 20 20 40 40 40>;
 		oplus_spec,batt-them-thr = <(-100) 0 50 120 160 350 450 530>;
 		oplus_spec,iterm-ma = <160>;
 		oplus_spec,fv-mv = <4500 4500 4500 4500 4500 4500 4485 4130 4130>;
@@ -288,6 +294,7 @@
 		oplus,gauge_stuck_threshold = <15>;
 		oplus,gauge_stuck_time = <50>;
 
+		oplus_spec,batt_full_time = <300>;
 		oplus,smooth_switch;
 		oplus,reserve_chg_soc = <3>;
 		oplus,reserve_dis_soc = <3>;

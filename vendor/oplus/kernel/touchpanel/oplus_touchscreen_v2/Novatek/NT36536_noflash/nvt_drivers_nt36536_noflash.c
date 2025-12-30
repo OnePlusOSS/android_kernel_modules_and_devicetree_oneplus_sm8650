@@ -34,6 +34,7 @@ static int32_t nvt_ts_point_data_checksum(uint8_t *buf, uint8_t length);
 
 static void nvt_ts_read_history_log(void *chip_data);
 static int32_t nvt_ts_pen_data_checksum(uint8_t *buf, uint8_t length);
+static int32_t raw_cap_data_restriction(int32_t val, int raw_cap_restriction);
 
 extern int (*tp_cs_gpio_notifier)(bool enable, unsigned int tp_index);
 /***************************** start of id map table******************************************/
@@ -1939,6 +1940,7 @@ static unsigned int nvt_trigger_reason(void *chip_data, int gesture_enable, int 
 	uint8_t palm_flag = 0;
 	uint8_t raw_flag = 0;
 	uint8_t diff_abnormal = 0;
+	uint8_t uplink_status = 0;
 	uint8_t down_thd = 0;
 	uint8_t up_thd = 0;
 	int16_t maxdiff = 0;
@@ -1969,6 +1971,7 @@ static unsigned int nvt_trigger_reason(void *chip_data, int gesture_enable, int 
 	palm_flag = ((point_data[1] & 0x7) == 0x5) ? 1 : 0;
 	raw_flag = (point_data[109] >> 6) & 0x01;
 	diff_abnormal = (point_data[109] >> 7) & 0x01;
+	uplink_status = (point_data[109] >> 3) & 0x01;
 	down_thd = point_data[112];
 	up_thd = point_data[113];
 	maxdiff = point_data[115] + (point_data[114] << 8);
@@ -1976,8 +1979,8 @@ static unsigned int nvt_trigger_reason(void *chip_data, int gesture_enable, int 
 	pos_cnt = point_data[118];
 	neg_cnt = point_data[119];
 
-	TPD_SPECIFIC_PRINT(point_num1, "fw_status: %d, water_mode: %d, er_prevent: %d, bending: %d, palm: %d, raw_flag: %d, diff_abnormal: %d\n",
-		fw_status, water_mode, er_prevent, bending, palm_flag, raw_flag, diff_abnormal);
+	TPD_SPECIFIC_PRINT(point_num1, "fw_status: %d, water_mode: %d, er_prevent: %d, bending: %d, palm: %d, raw_flag: %d, diff_abnormal: %d, uplink_status: %d\n",
+		fw_status, water_mode, er_prevent, bending, palm_flag, raw_flag, diff_abnormal, uplink_status);
 	TPD_SPECIFIC_PRINT(point_num2, "down_thd: %d, up_thd: %d, maxdiff: %d, mindiff: %d, pos_cnt: %d, neg_cnt: %d\n",
 		down_thd, up_thd, maxdiff, mindiff, pos_cnt, neg_cnt);
 
@@ -2019,6 +2022,10 @@ static unsigned int nvt_trigger_reason(void *chip_data, int gesture_enable, int 
 
 	if ((point_data[109] > 0) || (point_data[110] > 0) || (point_data[111] > 0)) {
 		irq_reason = irq_reason | IRQ_FW_HEALTH;
+	}
+
+	if (palm_flag == 1 && !chip_info->ts->is_suspended) {
+		irq_reason = irq_reason | IRQ_PALM;
 	}
 
 	if ((gesture_enable == 1) && (is_suspended == 1)) {
@@ -4898,6 +4905,7 @@ static int nvt_lpwg_rawdata_test(struct seq_file *s, void *chip_data,
 				 struct auto_testdata *nvt_testdata, struct test_item_info *p_test_item_info)
 {
 	struct chip_data_nt36536 *chip_info = (struct chip_data_nt36536 *)chip_data;
+	int32_t rawdata;
 	int32_t *raw_data = NULL;
 	int32_t iArrayIndex = 0;
 	int8_t rawdata_result = -NVT_MP_UNKNOWN;
@@ -4955,22 +4963,20 @@ static int nvt_lpwg_rawdata_test(struct seq_file *s, void *chip_data,
 				for (i = 0; i < tx_num; i++) {
 					iArrayIndex = j * tx_num + i;
 					TPD_DEBUG_NTAG("%d, ", raw_data[iArrayIndex]);
-
-					if ((raw_data[iArrayIndex] >
-							chip_info->p_nvt_test_para->config_lmt_lpwg_rawdata_p) \
-							|| (raw_data[iArrayIndex] <
-								chip_info->p_nvt_test_para->config_lmt_lpwg_rawdata_n)) {
+					rawdata = raw_cap_data_restriction(raw_data[iArrayIndex], nvt_testdata->raw_cap_restriction);
+					if ((rawdata > chip_info->p_nvt_test_para->config_lmt_lpwg_rawdata_p) \
+						|| (rawdata < chip_info->p_nvt_test_para->config_lmt_lpwg_rawdata_n)) {
 						rawdata_result = -NVT_MP_FAIL;
 						raw_record[iArrayIndex] = 1;
-						TPD_INFO("LPWG_Rawdata Test failed at rawdata[%d][%d] = %d[%d %d]\n",
-							 i, j, raw_data[iArrayIndex],
+						TPD_INFO("LPWG_Rawdata Test failed at rawdata[%d][%d] = %d restriction[%d] [%d %d]\n",
+							 i, j, raw_data[iArrayIndex], rawdata,
 							 chip_info->p_nvt_test_para->config_lmt_lpwg_rawdata_n,
 							 chip_info->p_nvt_test_para->config_lmt_lpwg_rawdata_p);
 
 						if (!err_cnt) {
 							TPD_INFO(
-								"LPWG Rawdata[%d][%d] = %d[%d %d]\n",
-								i, j, raw_data[iArrayIndex],
+								"LPWG Rawdata[%d][%d] = %d restriction[%d] [%d %d]\n",
+								i, j, raw_data[iArrayIndex], rawdata,
 								chip_info->p_nvt_test_para->config_lmt_lpwg_rawdata_n,
 								chip_info->p_nvt_test_para->config_lmt_lpwg_rawdata_p);
 						}
@@ -4987,20 +4993,18 @@ static int nvt_lpwg_rawdata_test(struct seq_file *s, void *chip_data,
 				for (i = 0; i < tx_num; i++) {
 					iArrayIndex = j * tx_num + i;
 					TPD_DEBUG_NTAG("%d, ", raw_data[iArrayIndex]);
-
-					if ((raw_data[iArrayIndex] >
-							chip_info->p_nvt_autotest_offset->lpwg_rawdata_p[iArrayIndex]) \
-							|| (raw_data[iArrayIndex] <
-								chip_info->p_nvt_autotest_offset->lpwg_rawdata_n[iArrayIndex])) {
+					rawdata = raw_cap_data_restriction(raw_data[iArrayIndex], nvt_testdata->raw_cap_restriction);
+					if ((rawdata > chip_info->p_nvt_autotest_offset->lpwg_rawdata_p[iArrayIndex]) \
+						|| (rawdata < chip_info->p_nvt_autotest_offset->lpwg_rawdata_n[iArrayIndex])) {
 						rawdata_result = -NVT_MP_FAIL;
 						raw_record[iArrayIndex] = 1;
-						TPD_INFO("LPWG_Rawdata Test failed at rawdata[%d][%d] = %d\n", i, j,
-							 raw_data[iArrayIndex]);
+						TPD_INFO("LPWG_Rawdata Test failed at rawdata[%d][%d] = %d restriction[%d]\n", i, j,
+							 raw_data[iArrayIndex], rawdata);
 
 						if (!err_cnt) {
 							TPD_INFO(
-								"LPWG Rawdata[%d][%d] = %d[%d %d]\n",
-								i, j, raw_data[iArrayIndex],
+								"LPWG Rawdata[%d][%d] = %d restriction[%d] [%d %d]\n",
+								i, j, raw_data[iArrayIndex], rawdata,
 								chip_info->p_nvt_autotest_offset->lpwg_rawdata_n[iArrayIndex],
 								chip_info->p_nvt_autotest_offset->lpwg_rawdata_p[iArrayIndex]);
 						}
@@ -5949,6 +5953,19 @@ static void nvt_aiunit_game_info(void *chip_data)
 	}
 }
 
+static void nvt_inject_wdt_reset(void *chip_data, int value)
+{
+	int8_t ret = -1;
+	struct chip_data_nt36536 *chip_info = (struct chip_data_nt36536 *)chip_data;
+
+	TPD_INFO("%s: %s inject watchdog reset.\n", __func__, value ? "Enter" : "Exit");
+
+	if (value) {
+		ret = nvt_cmd_store(chip_info, EVENTBUFFER_INJECT_WDT_RESET);
+	}
+	return;
+}
+
 static struct oplus_touchpanel_operations nvt_ops = {
 	.ftm_process              = nvt_ftm_process,
 	.reset                    = nvt_reset,
@@ -5972,6 +5989,7 @@ static struct oplus_touchpanel_operations nvt_ops = {
 	.pen_sensitive_lv_set     = nvt_set_pen_jitter_para,
 	.notify_keyboard_open     = nvt_notify_keyboard_open,
 	.aiunit_game_info         = nvt_aiunit_game_info,
+	.inject_wdt_reset         = nvt_inject_wdt_reset,
 	.ftm_process_extra        = NULL,
 };
 
@@ -6745,6 +6763,7 @@ static int32_t nvt_read_fw_open(struct chip_data_nt36536 *chip_info,
 static int nvt_fw_rawdata_test(struct seq_file *s, void *chip_data,
 				   struct auto_testdata *nvt_testdata, struct test_item_info *p_test_item_info)
 {
+	int32_t rawdata;
 	int32_t *raw_data = NULL;
 	int32_t *pen_tip_x_data = NULL;
 	int32_t *pen_tip_y_data = NULL;
@@ -6812,21 +6831,19 @@ static int nvt_fw_rawdata_test(struct seq_file *s, void *chip_data,
 		for (j = 0; j < rx_num; j++) {
 			for (i = 0; i < tx_num; i++) {
 				iArrayIndex = j * tx_num + i;
-
-				if ((raw_data[iArrayIndex] >
-						chip_info->p_nvt_autotest_offset->fw_rawdata_p[iArrayIndex]) \
-						|| (raw_data[iArrayIndex] <
-							chip_info->p_nvt_autotest_offset->fw_rawdata_n[iArrayIndex])) {
+				rawdata = raw_cap_data_restriction(raw_data[iArrayIndex], nvt_testdata->raw_cap_restriction);
+				if ((rawdata > chip_info->p_nvt_autotest_offset->fw_rawdata_p[iArrayIndex]) \
+					|| (rawdata < chip_info->p_nvt_autotest_offset->fw_rawdata_n[iArrayIndex])) {
 					rawdata_result = -NVT_MP_FAIL;
 					raw_record[iArrayIndex] = 1;
-					TPD_INFO("rawdata Test failed at rawdata[%d][%d] = %d [%d,%d]\n",
-						i, j, raw_data[iArrayIndex],
+					TPD_INFO("rawdata Test failed at rawdata[%d][%d] = %d restriction[%d] [%d,%d]\n",
+						i, j, raw_data[iArrayIndex], rawdata,
 						chip_info->p_nvt_autotest_offset->fw_rawdata_n[iArrayIndex],
 						chip_info->p_nvt_autotest_offset->fw_rawdata_p[iArrayIndex]);
 
 					if (!err_cnt) {
-						seq_printf(s, "rawdata Test failed at rawdata[%d][%d] = %d [%d,%d]\n",
-								i, j, raw_data[iArrayIndex],
+						seq_printf(s, "rawdata Test failed at rawdata[%d][%d] = %d restriction[%d] [%d,%d]\n",
+								i, j, raw_data[iArrayIndex], rawdata,
 								chip_info->p_nvt_autotest_offset->fw_rawdata_n[iArrayIndex],
 								chip_info->p_nvt_autotest_offset->fw_rawdata_p[iArrayIndex]);
 					}
@@ -9215,6 +9232,10 @@ static int nvt_autotest_endoperation(struct seq_file *s, void *chip_data,
 	return 0;
 }
 
+static int32_t raw_cap_data_restriction(int32_t val, int raw_cap_restriction)
+{
+	return val * raw_cap_restriction / 100;
+}
 
 #ifdef CONFIG_OPLUS_TP_APK
 

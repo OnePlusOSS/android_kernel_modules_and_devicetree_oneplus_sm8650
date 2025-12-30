@@ -1559,6 +1559,7 @@ void oplus_turn_off_power_when_adsp_crash(void)
 	bcdev->otg_online = false;
 	oplus_chg_ic_virq_trigger(bcdev->buck_ic, OPLUS_IC_VIRQ_SVID);
 
+	schedule_delayed_work(&bcdev->plugin_irq_work, 0);
 	if (bcdev->otg_online == true) {
 		bcdev->otg_online = false;
 		if (bcdev->otg_boost_src == OTG_BOOST_SOURCE_EXTERNAL) {
@@ -1598,6 +1599,7 @@ void oplus_adsp_crash_recover_work(void)
 		return;
 	}
 
+	chg_info("oplus_adsp_crash_recover_work");
 	schedule_delayed_work(&bcdev->adsp_crash_recover_work,
 			      round_jiffies_relative(msecs_to_jiffies(1500)));
 }
@@ -1622,6 +1624,7 @@ static void oplus_adsp_crash_recover_func(struct work_struct *work)
 	struct battery_chg_dev *bcdev =
 		container_of(work, struct battery_chg_dev, adsp_crash_recover_work.work);
 
+	chg_info("oplus_adsp_crash_recover_func");
 	if (oplus_chg_get_voocphy_support(bcdev) == ADSP_VOOCPHY) {
 		oplus_ap_init_adsp_gague(bcdev);
 		oplus_adsp_voocphy_reset_status();
@@ -1631,6 +1634,7 @@ static void oplus_adsp_crash_recover_func(struct work_struct *work)
 	schedule_delayed_work(&bcdev->otg_init_work, 0);
 	schedule_delayed_work(&bcdev->voocphy_enable_check_work,
 			      round_jiffies_relative(msecs_to_jiffies(0)));
+	schedule_delayed_work(&bcdev->plugin_irq_work, 0);
 }
 
 static bool is_chg_disable_votable_available(struct battery_chg_dev *bcdev)
@@ -1935,10 +1939,14 @@ int qti_battery_charger_get_prop(const char *name,
 
 	switch (prop_id) {
 	case BATTERY_RESISTANCE:
-		pst = &bcdev->psy_list[PSY_TYPE_BATTERY];
-		rc = read_property_id(bcdev, pst, BATT_RESISTANCE);
-		if (!rc)
-			*val = pst->prop[BATT_RESISTANCE];
+		if (bcdev->ext_gauge_fake_rbatt) {
+			*val = bcdev->ext_gauge_fake_rbatt;
+		} else {
+			pst = &bcdev->psy_list[PSY_TYPE_BATTERY];
+			rc = read_property_id(bcdev, pst, BATT_RESISTANCE);
+			if (!rc)
+				*val = pst->prop[BATT_RESISTANCE];
+		}
 		break;
 	default:
 		break;
@@ -4609,10 +4617,7 @@ static unsigned int oplus_update_batt_full_para(struct battery_chg_dev *bcdev)
 			charging_status = CHARGING_TYPE_UNKNOW;
 	}
 
-	if (charging_status < CHARGING_TYPE_MAX && temp_region < QBG_TEMP_MAX)
-		ibatt_full_cur = bcdev->batt_full_para[charging_status][temp_region];
-	else
-		goto exit;
+	ibatt_full_cur = bcdev->batt_full_para[charging_status][temp_region];
 
 	if (pre_ibatt_full_cur == ibatt_full_cur)
 		goto exit;
@@ -5482,7 +5487,7 @@ static int oplus_chg_set_input_current(struct battery_chg_dev *bcdev, int curren
 	struct oplus_mms *gauge_topic;
 	bool present;
 	int max_pdo_current;
-	int batt_volt;
+	int batt_volt = 0;
 	int type = 0;
 
 	prop_id = get_property_id(pst, POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT);
@@ -5973,9 +5978,34 @@ static int oplus_chg_8350_set_otg_boost_vol(struct oplus_chg_ic_dev *ic_dev, int
 	return 0;
 }
 
+#define MAX_OTG_CURRENT_MA	3000
 static int oplus_chg_8350_set_otg_boost_curr_limit(struct oplus_chg_ic_dev *ic_dev, int curr_ma)
 {
-	return 0;
+	struct battery_chg_dev *bcdev;
+	struct psy_state *pst = NULL;
+	int rc = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL\n");
+		return -ENODEV;
+	}
+
+	if (curr_ma > MAX_OTG_CURRENT_MA) {
+		chg_err("invalid curr_ma = %d\n", curr_ma);
+		return -EINVAL;
+	}
+
+	bcdev = oplus_chg_ic_get_drvdata(ic_dev);
+
+	pst = &bcdev->psy_list[PSY_TYPE_USB];
+	rc = write_property_id(bcdev, pst, USB_OTG_BOOST_CURRENT, curr_ma);
+	if (rc) {
+		chg_err("set otg boost curr limit %d mA failed, rc=%d\n", curr_ma, rc);
+		return rc;
+	}
+	chg_info("set otg boost curr limit %d mA\n", curr_ma);
+
+	return rc;
 }
 
 static int oplus_chg_8350_aicl_enable(struct oplus_chg_ic_dev *ic_dev, bool en)
@@ -8861,6 +8891,12 @@ static int battery_chg_probe(struct platform_device *pdev)
 	if (rc < 0) {
 		chg_err("can't get oplus,batt_num, rc=%d\n", rc);
 		bcdev->batt_num = 1;
+	}
+
+	rc = of_property_read_u32(dev->of_node, "oplus,ext_gauge_fake_rbatt", &bcdev->ext_gauge_fake_rbatt);
+	if (rc < 0) {
+		chg_err("can't get oplus,ext_gauge_fake_rbatt, rc=%d\n", rc);
+		bcdev->ext_gauge_fake_rbatt = 0;
 	}
 
 	bcdev->voocphy_bidirect_cp_support = of_property_read_bool(dev->of_node,

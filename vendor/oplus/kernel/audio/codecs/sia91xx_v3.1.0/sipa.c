@@ -181,7 +181,8 @@ static const char *support_chip_type_name_table[] = {
 	[CHIP_TYPE_SIA9177]  = "sia9177",
 	[CHIP_TYPE_SIA917X]  = "sia917x",
 	[CHIP_TYPE_SIA8150]  = "sia8150",
-	[CHIP_TYPE_SIA8157]  = "sia8157"
+	[CHIP_TYPE_SIA8157]  = "sia8157",
+	[CHIP_TYPE_SIA8168]  = "sia8167,sia8168,sia8169"
 };
 
 static sipa_dev_t *g_default_sia_dev;
@@ -795,7 +796,8 @@ static bool sipa_is_chip_en(sipa_dev_t *si_pa)
 				return true;
 		} else if (si_pa->chip_type == CHIP_TYPE_SIA8157 ||
 					si_pa->chip_type == CHIP_TYPE_SIA8159 ||
-					si_pa->chip_type == CHIP_TYPE_SIA8159A) {
+					si_pa->chip_type == CHIP_TYPE_SIA8159A ||
+					si_pa->chip_type == CHIP_TYPE_SIA8168) {
 			if ((SIA81XX_ENABLE_LEVEL == gpio_get_value(si_pa->rst_pin))
 				&& sipa_regmap_get_chip_en(si_pa))
 				return true;
@@ -2626,7 +2628,9 @@ static void put_sipa_dev(sipa_dev_t *si_pa)
 static unsigned int get_chip_type(const char *name)
 {
 	int i = 0, len = 0;
-
+	char *temp, *copy_p;
+	const char *delim = ",";
+	char chip_type_copy[64];
 	if (NULL == name)
 		return CHIP_TYPE_UNKNOWN;
 
@@ -2634,11 +2638,27 @@ static unsigned int get_chip_type(const char *name)
 		LOG_FLAG, __func__, name);
 
 	len = strlen(name);
-	for (i = 0; i < ARRAY_SIZE(support_chip_type_name_table); i++) {
-		if (strlen(support_chip_type_name_table[i]) == len &&
-			0 == memcmp(support_chip_type_name_table[i], name, len)) {
-			pr_info("[ info][%s] %s: chip_type = %d\r\n", LOG_FLAG, __func__, i);
-			return i;
+		for (i = 0; i < ARRAY_SIZE(support_chip_type_name_table); i++) {
+		if (strstr(support_chip_type_name_table[i], delim) == NULL) {
+			if (strlen(support_chip_type_name_table[i]) == len &&
+				0 == memcmp(support_chip_type_name_table[i], name, len)) {
+				pr_info("[ info][%s] %s: chip_type = %d\r\n", LOG_FLAG, __func__, i);
+				return i;
+			}
+		}
+		else {
+			memcpy((void *)chip_type_copy, support_chip_type_name_table[i], strlen(support_chip_type_name_table[i]));
+			copy_p = chip_type_copy;
+			temp = strsep(&copy_p, delim);
+
+			while (temp) {
+				if (strcmp(temp, name)) {
+					temp = strsep(&copy_p, delim);
+				}
+				else {
+					return i;
+				}
+			}
 		}
 	}
 
@@ -2647,6 +2667,7 @@ static unsigned int get_chip_type(const char *name)
 
 /* CHIP_TYPE_SIA81X9 */
 static const uint32_t sia81x9_list[] = {
+	CHIP_TYPE_SIA8168,
 	CHIP_TYPE_SIA8157,
 	CHIP_TYPE_SIA8159,
 	CHIP_TYPE_SIA8159A,

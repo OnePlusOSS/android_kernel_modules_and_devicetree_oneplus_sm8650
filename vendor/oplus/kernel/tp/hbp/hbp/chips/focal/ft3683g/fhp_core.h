@@ -73,7 +73,7 @@
 #define FT3681_REG_FOD_ERROR_INFO           (0xE0)
 #define FT3681_REG_FOD_ERROR_INFO_LEN       (14)
 #define FT3681_REG_FOD_INFO                 (0xE1)
-#define FT3681_REG_FOD_INFO_LEN             (9)
+#define FT3681_REG_FOD_INFO_LEN             (10)
 #define FT3681_REG_AOD_INFO                 (0xD3)
 #define FT3681_REG_AOD_INFO_LEN             (6)
 
@@ -158,6 +158,7 @@ struct fod_info {
 	int fp_x;
 	int fp_y;
 	int fp_area_rate;
+	int fp_time;
 };
 
 struct aod_info {
