@@ -114,6 +114,13 @@ void android_vh_free_task_handler(void *unused, struct task_struct *tsk)
 	list_del_init(&ots->fbg_list);
 	atomic_set(&ots->is_vip_mvp, 0);
 	ots->task = NULL;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
+	RB_CLEAR_NODE(&ots->ddl_node);
+	ots->ddl = ots->ddl_active_ts = 0;
+	memset(&ots->state, 0, sizeof(unsigned long));
+#endif
+
 #if IS_ENABLED(CONFIG_ARM64_AMU_EXTN) && IS_ENABLED(CONFIG_OPLUS_FEATURE_CPU_JANKINFO)
 	ots->uid_struct = NULL;
 #endif
@@ -174,6 +181,10 @@ static void init_oplus_task_struct(void *ptr)
 	memset(&ots->lkinfo, 0, sizeof(struct locking_info));
 	INIT_LIST_HEAD(&ots->lkinfo.node);
 /*#endif*/
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
+	RB_CLEAR_NODE(&ots->ddl_node);
+#endif
 
 #ifdef CONFIG_LOCKING_PROTECT
 	INIT_LIST_HEAD(&ots->locking_entry);

@@ -170,6 +170,8 @@ static int kcompressd(void *para)
 			}
 		}
 
+		usleep_range(1000, 2000);
+
 	}
 
 	tsk->flags &= ~(PF_MEMALLOC | PF_KSWAPD);

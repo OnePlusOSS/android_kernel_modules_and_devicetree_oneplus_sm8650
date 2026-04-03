@@ -39,6 +39,7 @@ dtbo-y += oplus/caihong-23926-display-pineapple-overlay.dtbo
 dtbo-y += oplus/corvette-23814-display-pineapple-overlay.dtbo
 dtbo-y += oplus/giulia-23851-display-pineapple-overlay.dtbo
 dtbo-y += oplus/Lexus-24881-display-cliffs-overlay.dtbo
+dtbo-y += oplus/Prado-25811-display-volcano-overlay.dtbo
 #PLUS_DTS_OVERLAY end
 
 else

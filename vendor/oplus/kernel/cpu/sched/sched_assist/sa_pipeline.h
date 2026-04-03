@@ -18,6 +18,7 @@ void mtk_rearrange_pipeline_preferred_cpus(struct task_struct *p, const struct c
 bool oplus_is_pipeline_scene(void);
 bool oplus_pipeline_task_skip_cpu(struct task_struct *task, unsigned int dst_cpu);
 bool oplus_pipeline_rt_skip_prime_cpu(unsigned int dst_cpu);
+bool oplus_lowend_platform_pipeline_task_ux(struct task_struct *task);
 
 typedef int (*core_ctl_set_boost_t)(bool boost);
 typedef int (*core_ctl_set_cluster_boost_t)(int idx, bool boost);

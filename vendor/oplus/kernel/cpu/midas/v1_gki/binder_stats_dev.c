@@ -374,6 +374,7 @@ static void store_binder_stats_to_kernel(struct binder_notify *data) {
 
 				/* service name */
 				strncpy(find_item->service_name, data->service_name, OPLUS_MAX_SERVICE_NAME_LEN);
+				find_item->service_name[OPLUS_MAX_SERVICE_NAME_LEN-1] = '\0';
 
 				/* binder proc comm */
 				if (NULL != binder_task->group_leader)
@@ -693,6 +694,7 @@ static int user_binder_stats_add_intreresting_svr_name(struct binder_stats_user_
 		return -1;
 	}
 	strncpy(hash_node_srv_name->service_name, filter_srv_name->service_name, OPLUS_MAX_SERVICE_NAME_LEN);
+	hash_node_srv_name->service_name[OPLUS_MAX_SERVICE_NAME_LEN-1] = '\0';
 	hash_node_srv_name->intreresting = filter_srv_name->intreresting;
 	hash_add(context_ptr->intre_srv_name_hash, &hash_node_srv_name->hentry,
 		hash_key_for_str(hash_node_srv_name->service_name, strlen(hash_node_srv_name->service_name)));

@@ -1124,6 +1124,7 @@ struct touchpanel_data {
 	/******For gesture area********/
 	bool disable_gesture_ctrl;                          /*when lcd_trigger_load_tp_fw start no need to control gesture*/
 	int irq_need_dev_resume_time;                       /*control setting of wait resume time*/
+	int bus_ready_wait_dev_spend_time;                  /*bus_ready setting of wait dev spend time*/
 	int gesture_enable;                                 /*control state of black gesture*/
 	struct gesture_info    gesture;                     /*gesture related info*/
 	int gesture_enable_indep;                         /*independent control state of black gesture*/
@@ -1179,6 +1180,7 @@ struct touchpanel_data {
 	struct touchpanel_snr   snr[MAX_FINGER_NUM];        /*snr data*/
 	struct touchpanel_last_x_y_point   last_x_y_point[MAX_FINGER_NUM];        /*last_x_y_point data*/
 	struct exception_data    exception_data;			/*exception_data monitor data*/
+	struct irq_desc *tp_irq_desc;
 
 	/******For Game Hot Zone*******/
 	struct tp_aiunit_game_info tp_ic_aiunit_game_info[MAX_AIUNIT_SET_NUM];    /*tp ic aiunit game info*/
@@ -1533,6 +1535,7 @@ struct debug_info_proc_operations {
 	void (*get_delta_data)(void *chip_data, int32_t *deltadata);
 	void (*delta_snr_read)(struct seq_file *s, void *chip_data, uint32_t count);
 	void (*tp_data_record_write)(void *chip_data, int32_t count);
+	void (*tp_data_debug_info_print)(void *chip_data);
 };
 
 /*********PART3:function or variables for other files**********************/

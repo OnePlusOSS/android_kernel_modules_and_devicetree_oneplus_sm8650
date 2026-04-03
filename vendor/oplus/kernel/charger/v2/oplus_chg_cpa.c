@@ -30,6 +30,7 @@
 #include <oplus_chg_voter.h>
 #include <oplus_chg_state_retention.h>
 #include <recovery/state_keep.h>
+#include <oplus_mms_gauge.h>
 
 #if IS_ENABLED(CONFIG_OPLUS_DYNAMIC_CONFIG_CHARGER)
 #include "oplus_cfg.h"
@@ -88,6 +89,7 @@ struct oplus_cpa {
 	struct work_struct wired_offline_work;
 	struct work_struct wired_online_work;
 	struct work_struct switch_end_work;
+	struct work_struct wait_bc12_completed_work;
 #if IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP)
 	struct work_struct power_change_work;
 	struct work_struct state_keep_wired_offline_work;
@@ -147,8 +149,11 @@ struct oplus_cpa {
 
 	bool pd_comleted;
 	bool protocol_wait_support;
+	bool bc12_completed;
+	u32 bc12_check_timeout_ms;
 	int protocol_wait_cnt;
 	struct completion pd_completed_ack;
+	struct completion bc12_completed_ack;
 	struct oplus_cpa_protocol_wait_info protocol_wait_table[CHG_PROTOCOL_MAX];
 
 #if IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP)
@@ -285,7 +290,7 @@ static int oplus_cpa_protocol_wait(struct oplus_cpa *cpa, enum oplus_chg_protoco
 				chg_debug("timeout waiting for pd_ack\n");
 				rc = -ETIMEDOUT;
 			} else {
-				chg_info("exit pd wait. left time = %lu\n", left);
+				chg_info("exit pd wait. left time = %u\n", jiffies_to_msecs(left));
 			}
 		}
 	}
@@ -963,6 +968,14 @@ static void oplus_cpa_wired_offline_work(struct work_struct *work)
 		return;
 	}
 
+	if (cpa->bc12_check_timeout_ms > 0) {
+		cpa->bc12_completed = false;
+		complete_all(&cpa->bc12_completed_ack);
+		cancel_work_sync(&cpa->wait_bc12_completed_work);
+		reinit_completion(&cpa->bc12_completed_ack);
+		vote(cpa->req_lock_votable, BC12_VOTER, true, true, false);
+	}
+
 #if IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP)
 	oplus_cpa_state_keep_offline_check(cpa);
 #endif
@@ -978,6 +991,24 @@ static bool oplus_wired_offline_clear_cpa_queue(struct oplus_cpa *cpa)
 
 	old_time = cpa->wired_plugout_time + msecs_to_jiffies(WIRED_PLUGOUT_TO_PRESENT_MS);
 	return time_is_before_jiffies(old_time);
+}
+
+static void oplus_cpa_wait_bc12_completed_work(struct work_struct *work)
+{
+	struct oplus_cpa *cpa =
+		container_of(work, struct oplus_cpa, wait_bc12_completed_work);
+	int rc;
+
+	if (cpa->bc12_completed) {
+		vote(cpa->req_lock_votable, BC12_VOTER, false, false, false);
+		return;
+	}
+	rc = wait_for_completion_timeout(&cpa->bc12_completed_ack,
+		msecs_to_jiffies(cpa->bc12_check_timeout_ms));
+	if (!rc)
+		chg_err("wait bc1.2 completed timeout");
+
+	vote(cpa->req_lock_votable, BC12_VOTER, false, false, false);
 }
 
 static void oplus_cpa_wired_online_work(struct work_struct *work)
@@ -1015,6 +1046,8 @@ static void oplus_cpa_wired_online_work(struct work_struct *work)
 	cpa->wired_online = true;
 	WRITE_ONCE(cpa->status_reset, false);
 
+	if (cpa->bc12_check_timeout_ms > 0)
+		schedule_work(&cpa->wait_bc12_completed_work);
 	rc = oplus_mms_get_item_data(cpa->wired_topic, WIRED_ITEM_REAL_CHG_TYPE, &data, false);
 	if ((rc < 0) || (data.intval == OPLUS_CHG_USB_TYPE_UNKNOWN))
 		return;
@@ -1078,6 +1111,10 @@ static void oplus_cpa_wired_subs_callback(struct mms_subscribe *subs,
 			oplus_mms_get_item_data(cpa->wired_topic, id, &data, false);
 			cpa->pd_comleted = data.intval;
 			oplus_cpa_pd_completed_set(cpa, cpa->pd_comleted);
+			break;
+		case WIRED_ITEM_BC12_COMPLETED:
+			cpa->bc12_completed = true;
+			complete_all(&cpa->bc12_completed_ack);
 			break;
 		case WIRED_ITEM_PRESENT:
 			oplus_mms_get_item_data(cpa->wired_topic, id, &data, false);
@@ -1771,7 +1808,7 @@ static int oplus_cpa_parse_dt(struct oplus_cpa *cpa)
 {
 #define PPS_REGION_COUNT_MAX 16
 
-	struct device_node *cpa_node = cpa->dev->of_node;
+	struct device_node *cpa_node = oplus_get_node_by_child_gauge(cpa->dev->of_node);
 	struct device_node *node = cpa_node;
 	struct device_node *child;
 	int rc, num, i;
@@ -1938,6 +1975,14 @@ FOUND_NODE:
 		}
 	}
 
+	rc = of_property_read_u32(node, "oplus,bc12_check_timeout_ms", &cpa->bc12_check_timeout_ms);
+	if (rc < 0) {
+		chg_err("read oplus,bc12_check_timeout_ms failed");
+		cpa->bc12_check_timeout_ms = 0;
+	} else {
+		chg_info("bc12_check_timeout_ms=%u", cpa->bc12_check_timeout_ms);
+	}
+
 	return 0;
 }
 
@@ -1968,9 +2013,11 @@ static int oplus_cpa_probe(struct platform_device *pdev)
 	cpa->request_locked = false;
 	cpa->status_reset = true;
 	cpa->region_id = DEFAULT_REGION_ID;
+	cpa->bc12_completed = false;
 	mutex_init(&cpa->cpa_request_lock);
 	mutex_init(&cpa->start_lock);
 	init_completion(&cpa->pd_completed_ack);
+	init_completion(&cpa->bc12_completed_ack);
 #if IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP)
 	mutex_init(&cpa->keep.ready_lock);
 #endif
@@ -1988,6 +2035,7 @@ static int oplus_cpa_probe(struct platform_device *pdev)
 #endif
 	INIT_DELAYED_WORK(&cpa->protocol_switch_timeout_work, oplus_cpa_protocol_switch_timeout_work);
 	INIT_DELAYED_WORK(&cpa->protocol_ready_timeout_work, oplus_cpa_protocol_ready_timeout_work);
+	INIT_WORK(&cpa->wait_bc12_completed_work, oplus_cpa_wait_bc12_completed_work);
 
 	cpa->req_lock_votable = create_votable("CPA_REQ_LOCK", VOTE_SET_ANY,
 				oplus_cpa_request_lock_vote_callback,
@@ -1998,6 +2046,8 @@ static int oplus_cpa_probe(struct platform_device *pdev)
 		goto votable_init_err;
 	}
 	vote(cpa->req_lock_votable, DEF_VOTER, true, 1, false);
+	if (cpa->bc12_check_timeout_ms > 0)
+		vote(cpa->req_lock_votable, BC12_VOTER, true, true, false);
 
 	rc = oplus_cpa_topic_init(cpa);
 	if (rc < 0)

@@ -407,6 +407,7 @@ typedef struct mem_cgroup_hybridswap {
 	bool in_swapin;
 	bool force_swapout;
 #endif
+	bool css_alloc;
 }memcg_hybs_t;
 
 #define MEMCGRP_ITEM_DATA(memcg) ((memcg_hybs_t *)(memcg)->android_oem_data1[0])
@@ -530,7 +531,7 @@ bool hybridswap_reach_life_protect(void);
 struct workqueue_struct *hybridswap_get_reclaim_workqueue(void);
 extern struct mem_cgroup *get_next_memcg(struct mem_cgroup *prev);
 extern void get_next_memcg_break(struct mem_cgroup *prev);
-extern memcg_hybs_t *hybridswap_cache_alloc(struct mem_cgroup *memcg, bool atomic);
+extern memcg_hybs_t *hybridswap_cache_alloc(struct mem_cgroup *memcg, bool atomic, bool css_alloc);
 extern void memcg_app_score_resort(void);
 extern unsigned long memcg_anon_pages(struct mem_cgroup *memcg);
 

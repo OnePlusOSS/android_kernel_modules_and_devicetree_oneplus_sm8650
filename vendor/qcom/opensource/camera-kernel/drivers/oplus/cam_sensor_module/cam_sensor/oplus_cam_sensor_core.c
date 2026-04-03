@@ -1048,6 +1048,14 @@ void cam_sensor_get_dt_data(struct cam_sensor_ctrl_t *s_ctrl)
 		{
 			CAM_INFO(CAM_SENSOR, "read is_update_wide_to_sleep success, value:%d", s_ctrl->is_update_wide_to_sleep);
 		}
+
+		rc = of_property_read_u32(of_node, "enable_tele_streamoff_delay", &s_ctrl->enable_tele_streamoff_delay);
+		if (rc < 0) {
+			s_ctrl->enable_tele_streamoff_delay = 0;
+			CAM_ERR(CAM_SENSOR, "get enable_tele_streamoff_delay failed rc:%d, default %d", rc, s_ctrl->enable_tele_streamoff_delay);
+		} else {
+			CAM_INFO(CAM_SENSOR, "read enable_tele_streamoff_delay success, value:%d", s_ctrl->enable_tele_streamoff_delay);
+		}
 }
 
 #ifdef OPLUS_FEATURE_CAMERA_COMMON

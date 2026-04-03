@@ -45,20 +45,32 @@ static bool is_system_process(struct task_struct *t)
 	return false;
 }
 
+static bool is_top_thirdparty_process(struct task_struct *t)
+{
+	if (!strcmp(t->comm, "hinamworld.main")
+		|| !strcmp(t->comm, "m.taobao.taobao")
+		|| !strcmp(t->comm, "droid.ugc.aweme")) {
+		return true;
+	}
+	return false;
+}
+
 static bool is_key_process(struct task_struct *t)
 {
 	struct pid *pgrp;
 	struct task_struct *taskp;
 
 	if (t->pid == t->tgid) {
-		if (is_system_process(t) || is_root_process(t)) {
+		if (is_system_process(t) || is_root_process(t)
+			|| is_top_thirdparty_process(t)) {
 			return true;
 		}
 	} else {
 		pgrp = get_task_pid(t->group_leader, PIDTYPE_PID);
 		if (pgrp != NULL) {
 			taskp = pid_task(pgrp, PIDTYPE_PID);
-			if (taskp != NULL && (is_system_process(taskp) || is_root_process(taskp))) {
+			if (taskp != NULL && (is_system_process(taskp)
+				|| is_root_process(taskp)|| is_top_thirdparty_process(taskp))) {
 				return true;
 			}
 		}

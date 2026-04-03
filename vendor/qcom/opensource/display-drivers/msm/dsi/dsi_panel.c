@@ -799,6 +799,7 @@ int dsi_panel_tx_cmd_set(struct dsi_panel *panel,
 		if (oplus_panel_pwm_switch_cmdq_delay_handle(panel, type))
 			return rc;
 	}
+	oplus_panel_video_mode_aod_off_cmd_switch(panel, &type);
 	oplus_panel_cmdq_pack_handle(panel, type, true);
 	oplus_panel_vid_cmdp_handle(panel, type);
 	oplus_panel_cmd_print(panel, type);
@@ -2409,6 +2410,10 @@ const char *cmd_set_prop_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-lp1-command",
 	"qcom,mdss-dsi-lp2-command",
 	"qcom,mdss-dsi-nolp-command",
+	"qcom,mdss-dsi-nolp-60hz-command",
+	"qcom,mdss-dsi-nolp-90hz-command",
+	"qcom,mdss-dsi-nolp-120hz-command",
+	"qcom,mdss-dsi-nolp-144hz-command",
 	"qcom,mdss-dsi-nolp-onepulse-command",
 	"PPS not parsed from DTSI, generated dynamically",
 	"ROI not parsed from DTSI, generated dynamically",
@@ -2646,6 +2651,10 @@ const char *cmd_set_state_map[DSI_CMD_SET_MAX] = {
 	"qcom,mdss-dsi-lp1-command-state",
 	"qcom,mdss-dsi-lp2-command-state",
 	"qcom,mdss-dsi-nolp-command-state",
+	"qcom,mdss-dsi-nolp-60hz-command-state",
+	"qcom,mdss-dsi-nolp-90hz-command-state",
+	"qcom,mdss-dsi-nolp-120hz-command-state",
+	"qcom,mdss-dsi-nolp-144hz-command-state",
 	"qcom,mdss-dsi-nolp-onepulse-command-state",
 	"PPS not parsed from DTSI, generated dynamically",
 	"ROI not parsed from DTSI, generated dynamically",
@@ -6512,6 +6521,7 @@ int oplus_panel_vid_cmdp_handle(void *dsi_panel, enum dsi_cmd_set_type type)
 	switch (type) {
 	case DSI_CMD_SET_ON:
 	case DSI_CMD_SET_OFF:
+	case DSI_CMD_SET_LP1:
 	case DSI_CMD_ESD_SWITCH_PAGE:
 	case DSI_CMD_DEFAULT_SWITCH_PAGE:
 	case DSI_CMD_SET_PPS:
@@ -6525,6 +6535,18 @@ int oplus_panel_vid_cmdp_handle(void *dsi_panel, enum dsi_cmd_set_type type)
 	case DSI_CMD_FPS_ENTER_165HZ:
 	case DSI_CMD_FPS_144HZ_ENTER_165HZ:
 	case DSI_CMD_FPS_ENTER_144HZ:
+	case DSI_CMD_LOADING_EFFECT_MODE1:
+	case DSI_CMD_LOADING_EFFECT_MODE2:
+	case DSI_CMD_LOADING_EFFECT_OFF:
+	case DSI_CMD_UIR_ON_LOADING_EFFECT_MODE1:
+	case DSI_CMD_UIR_ON_LOADING_EFFECT_MODE2:
+	case DSI_CMD_UIR_ON_LOADING_EFFECT_MODE3:
+	case DSI_CMD_UIR_OFF_LOADING_EFFECT_MODE1:
+	case DSI_CMD_UIR_OFF_LOADING_EFFECT_MODE2:
+	case DSI_CMD_UIR_OFF_LOADING_EFFECT_MODE3:
+	case DSI_CMD_LHBM_PRESSED_ICON_ON:
+		dsi_cmd_set_type_status = 0;
+		panel->oplus_priv.dsi_cmd_need_to_package = false;
 	break;
 	default:
 		if (count > 0) {

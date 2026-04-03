@@ -122,6 +122,7 @@ extern struct device *syna_request_managed_device(void);
 #define _EINVAL     (-EINVAL)    /* Invalid parameters */
 #define _ENODEV     (-ENODEV)    /* No such device */
 #define _ETIMEDOUT  (-ETIMEDOUT) /* execution timeout */
+#define _EAGAIN     (-EAGAIN)    /* try again */
 
 
 /**

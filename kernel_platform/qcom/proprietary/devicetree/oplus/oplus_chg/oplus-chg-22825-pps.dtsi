@@ -1,24 +1,4 @@
 //ifdef OPLUS_FEATURE_CHG_BASIC
-&oplus_cpa {
-	/* format: <protocol_type power_w> */
-	oplus,protocol_list = <CHG_PROTOCOL_VOOC 100
-			       CHG_PROTOCOL_PPS  33
-			       CHG_PROTOCOL_PD   18
-			       CHG_PROTOCOL_QC   18>;
-	oplus,default_protocol_list = <CHG_PROTOCOL_PD
-				       CHG_PROTOCOL_PPS
-				       CHG_PROTOCOL_VOOC>;
-
-	oplus,cpa_region_cfg_no_pps {
-		oplus,region_id = /bits/ 8 <0x97>;
-		oplus,protocol_list = <CHG_PROTOCOL_PD 18
-				   CHG_PROTOCOL_VOOC 100
-				   CHG_PROTOCOL_QC   18>;
-		oplus,default_protocol_list = <CHG_PROTOCOL_PD
-					   CHG_PROTOCOL_VOOC>;
-	};
-};
-
 &battery_charger {
 	oplus_adsp_pps: oplus,adsp_pps {
 		oplus,ic_type = <OPLUS_CHG_IC_PPS>;
@@ -69,6 +49,9 @@
 		oplus,pps_charge_strategy_soc = <0 20 35 50 75 85 90>;
 		oplus,pps_charge_strategy_temp = <0 50 120 200 350 440 530>;
 		oplus,pps_low_curr_full_strategy_temp = <0 200 350 440>;
+
+		oplus,plc_strategy-data = <&pps_simple_strategy>;
+		oplus,plc_strategy-names = "default";
 
 		pps_charge_low_curr_full {
 			strategy_temp_little_cool = 	<1550 4490 0

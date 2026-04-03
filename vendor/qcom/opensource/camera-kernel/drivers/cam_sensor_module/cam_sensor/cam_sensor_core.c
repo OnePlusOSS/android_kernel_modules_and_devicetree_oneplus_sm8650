@@ -1098,6 +1098,12 @@ int cam_sensor_stream_off(struct cam_sensor_ctrl_t *s_ctrl)
 		(s_ctrl->i2c_data.streamoff_settings.request_id == 0)) {
 		rc = cam_sensor_apply_settings(s_ctrl, 0,
 			CAM_SENSOR_PACKET_OPCODE_SENSOR_STREAMOFF);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if((strcmp(s_ctrl->sensor_name, "s5kjn5_tele") == 0) && (s_ctrl->enable_tele_streamoff_delay == 1)) {
+		msleep(33); // 33ms delay after stream-off
+		CAM_INFO(CAM_SENSOR, "sensor_name:%s enable_tele_streamoff_delay:%d", s_ctrl->sensor_name, s_ctrl->enable_tele_streamoff_delay);
+	}
+#endif
 		if (rc < 0)
 			CAM_ERR(CAM_SENSOR,
 				"cannot apply streamoff settings for %s",

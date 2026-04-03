@@ -1,0 +1,121 @@
+/**********************************************************************************
+ * Copyright (c)  2022-2024  Guangdong oplus Mobile Comm Corp., Ltd
+ * Description: oplus sensor dtsi
+ *
+ * Version: 1.0
+ * Date: 2022-07-04
+ *
+ * ------------------------------ Revision History: --------------------------------
+ * <version>         <date>        <author>                <desc>
+ ***********************************************************************************/
+#include <dt-bindings/regulator/qcom,rpmh-regulator-levels.h>
+
+/* overlay default config and enable ir spi config */
+&qupv3_se12_i2c {
+    status = "disabled";
+};
+
+&qupv3_se12_spi{
+    /delete-property/ pinctrl-0;
+    /delete-property/ pinctrl-1;
+    pinctrl-0 = <&qupv3_se12_spi_mosi_active>;
+    pinctrl-1 = <&qupv3_se12_spi_sleep>;
+};
+
+&soc {
+    //#ifdef OPLUS_FEATURE_SENSOR_SMEM
+sensor_fb: sensor_fb {
+               compatible = "oplus,sensor-feedback";
+               master-id  = <3>;
+               smem-id    = <608>;
+           };
+           ssc_interactive {
+               sup-power-fb;
+               sup-hbm-mode = <1>;
+               need_lb_algo = <1>;
+               receive_screenshot_info = <1>;
+               report_blank_mode = <1>;
+
+               primary_lb_brl_info {
+                    brl_thrd_num = <1>;
+                    brl_thrd = <1>;
+                    brl_l2h_thrd = <1>;
+               };
+           };
+           oplus_sensor {
+               compatible = "oplus,sensor-devinfo";
+               /*virtual sensor*/
+               mag_fusion {
+                   sensor-type = <6>;//OPLUS_MAG_FUSION
+                   is-virtual-sensor;
+                   fusion-type = <0>;//OPLUS_FUSION
+                   fold-feature = <0>;
+                   drop_zero = <1>;
+               };
+               camera_protect {
+                   sensor-type = <5>; //CAMERA_PROTECT
+                   is-virtual-sensor;
+                   layout_offset_x = <0>;
+                   layout_offset_y = <0>;
+                   init_pin = <0>;
+                   is_chip_pin = <0>;
+                   sup_gyro = <0>;
+                   sup_amd = <1>;
+               };
+           };
+           consumer_ir_core {
+               compatible = "oplus,kookong_ir_core";
+               status = "okay";
+               vdd-type = <0>; /*0: internal LDO , 1: external LOD*/
+               vdd-supply = <&L13B>;
+               vdd-min-vol = <3008000>;
+               vdd-max-vol = <3008000>;
+           };
+           //#endif /*OPLUS_FEATURE_SENSOR_SMEM*/
+};
+
+&tlmm {
+    qupv3_se12_spi_pins: qupv3_se12_spi_pins {
+        qupv3_se12_spi_mosi_active: qupv3_se12_spi_mosi_active {
+            mux {
+                pins = "gpio56";
+                function = "qup1_se5_l1";
+            };
+
+            config {
+                pins = "gpio56";
+                drive-strength = <6>;
+                bias-disable;
+            };
+        };
+
+        qupv3_se12_spi_sleep: qupv3_se12_spi_sleep {
+            mux {
+                pins = "gpio56";
+                function = "gpio";
+            };
+
+            config {
+                pins = "gpio56";
+                drive-strength = <2>;
+                bias-disable;
+            };
+        };
+    };
+};
+
+//add for oplus consumerIr SPI mode
+&qupv3_se12_spi{
+    status = "ok";
+    consumerIr@0 {
+        compatible = "oplus,kookong_ir_spi";
+        reg = <0>;
+        status = "ok";
+
+        spi-max-frequency = <5000000>;    /*4800000,9600000,15000000,19200000*/
+        ir-spi-mode = <0>;
+    };
+};
+
+
+

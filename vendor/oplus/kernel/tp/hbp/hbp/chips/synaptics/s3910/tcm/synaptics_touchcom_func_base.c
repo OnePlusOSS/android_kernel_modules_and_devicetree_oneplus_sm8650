@@ -648,12 +648,12 @@ int syna_tcm_detect_device(struct tcm_dev *tcm_dev)
 		retval = syna_tcm_get_app_info(tcm_dev, &tcm_dev->app_info);
 		if (retval < 0) {
 			hbp_err("Fail to get touch app info.\n");
-			return retval;
+			return _EAGAIN;
 		}
 		retval = syna_tcm_preserve_touch_report_config(tcm_dev);
 		if (retval < 0) {
 			hbp_err("Fail to preserve touch report config\n");
-			return retval;
+			return _EAGAIN;
 		}
 		break;
 	case MODE_BOOTLOADER:

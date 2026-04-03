@@ -290,6 +290,19 @@ def define_oplus_local_modules():
         includes = ["."],
     )
 
+    define_oplus_ddk_module(
+        name = "oplus_bsp_fg_protect",
+        srcs = native.glob([
+            "**/*.h",
+            "levelprotect/fgprotect.c",
+        ]),
+        ko_deps = [
+            "//vendor/oplus/kernel/mm:oplus_bsp_hybridswap_zram",
+        ],
+        includes = ["."],
+        local_defines = ["CONFIG_OPLUS_FG_PROTECT"],
+    )
+
     ddk_copy_to_dist_dir(
         name = "oplus_bsp_mm",
         module_list = [
@@ -298,6 +311,7 @@ def define_oplus_local_modules():
             "oplus_bsp_zram_opt",
             "oplus_exit_mm_optimize",
             "oplus_bsp_level_protect",
+            "oplus_bsp_fg_protect",
             "oplus_bsp_proactive_compact",
             "oplus_bsp_hybridswap_zram",
             "oplus_bsp_zsmalloc",
@@ -307,7 +321,7 @@ def define_oplus_local_modules():
             "oplus_bsp_zstdn",
             "oplus_bsp_zstdn_o",
             # TODO: qcom convert to GKI implementation
-            #"oplus_bsp_uxmem_opt",
-            #"oplus_bsp_dynamic_readahead",
+            "oplus_bsp_uxmem_opt",
+            "oplus_bsp_dynamic_readahead",
         ],
     )

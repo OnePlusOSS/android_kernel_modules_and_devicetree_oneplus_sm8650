@@ -1262,7 +1262,7 @@ static ssize_t haptic_proc_style_write(struct file *filp, const char __user *buf
 	int rc = 0;
 	int val;
 
-	if (count > sizeof(buffer)) {
+	if (count >= sizeof(buffer)) {
 		return -EFAULT;
 	}
 	if (buf == NULL) {
@@ -1273,10 +1273,11 @@ static ssize_t haptic_proc_style_write(struct file *filp, const char __user *buf
 		return -EFAULT;
 	}
 
+	buffer[count] = '\0';
 	oh_err("buffer=%s", buffer);
 	rc = kstrtoint(buffer, 0, &val);
 	if (rc < 0)
-		return count;
+		return rc;
 	oh_err("val = %d", val);
 	oh->vibration_style = val;
 	if (oh->haptic_common_ops->proc_vibration_style_write) {
@@ -1331,15 +1332,7 @@ static int haptic_file_mmap(struct file *filp, struct vm_area_struct *vma)
 	int ret = -1;
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 7, 0)
 	/* only accept PROT_READ, PROT_WRITE and MAP_SHARED from the API of mmap */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 89))
 	vm_flags_t vm_flags = calc_vm_prot_bits(PROT_READ|PROT_WRITE, 0);
-#elif (LINUX_VERSION_CODE > KERNEL_VERSION(6, 6, 0))
-	vm_flags_t vm_flags = calc_vm_prot_bits(PROT_READ|PROT_WRITE, 0) |
-		__calc_vm_flag_bits(MAP_SHARED);
-#else
-	vm_flags_t vm_flags = calc_vm_prot_bits(PROT_READ|PROT_WRITE, 0) |
-		calc_vm_flag_bits(MAP_SHARED);
-#endif
 	vm_flags |= current->mm->def_flags | VM_MAYREAD | VM_MAYWRITE |
 		VM_MAYEXEC | VM_SHARED | VM_MAYSHARE;
 	if (vma && (pgprot_val(vma->vm_page_prot) !=

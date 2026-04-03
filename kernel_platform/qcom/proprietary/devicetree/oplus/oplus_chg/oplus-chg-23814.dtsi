@@ -365,6 +365,11 @@
 		oplus_spec,ffc-temp-thr = <120 200 350 400>;
 		oplus_spec,wired-ffc-step-max = <2>;
 		oplus_spec,wired-ffc-fv-mv = <4560 4560>;
+		oplus_spec,bdd-vbatdiff-mv = <50>;
+		oplus_spec,bdd-enter-current-ma = <100>;
+		oplus_spec,bdd-enter-voltage-mv = <200>;
+		oplus_spec,bdd-vbatdiff-timeout-min = <10080>;
+
 		oplus_spec,wired-ffc-fv-cutoff-mv = <4505 4483 4483
 						     4485 4470 4470>;
 
@@ -381,7 +386,6 @@
 							10 20>;
 		oplus_spec,wired-aging-ffc-cycle-thr = <500 1000>;
 
-		oplus_spec,support_gauge_r_track;
 		oplus_spec,vbat_uv_thr_mv = <3300>;
 		oplus_spec,vbat_charging_uv_thr_mv = <3200>;
 
@@ -2051,6 +2055,7 @@
 		compatible = "oplus,plc_charge";
 		oplus,plc_support = <CHG_PROTOCOL_UFCS>;
 		oplus,plc_soc = <90>;
+		oplus,plc_support_timeout;
 		oplus,plc_strategy-data = <&buck_simple_strategy>;
 		oplus,plc_strategy-names = "default";
 

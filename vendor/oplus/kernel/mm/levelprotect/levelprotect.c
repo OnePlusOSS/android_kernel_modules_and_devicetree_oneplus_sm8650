@@ -46,6 +46,9 @@ LIST_HEAD(inode_protect_array);
 int inode_cur_num = 0;
 unsigned long memavail_noprotected = 0;
 extern void fput(struct file *file);
+#ifdef CONFIG_OPLUS_FG_PROTECT
+void page_should_be_fg_protect(struct folio *folio, bool *should_protect);
+#endif
 
 static inline bool folio_evictable(struct folio *folio) {
 	bool ret;
@@ -135,6 +138,13 @@ static void page_should_be_level_protect(void *data, struct folio *folio, unsign
 		*should_protect = 0;
 		return;
 	}
+
+#ifdef CONFIG_OPLUS_FG_PROTECT
+	page_should_be_fg_protect(folio, should_protect);
+	if (*should_protect == FOLIOREF_ACTIVATE) {
+		return;
+	}
+#endif
 
 	if (file && atomic_read(&level_protect_enable) && folio_mapping(folio)) {
 		struct inode_protect_struct *inode_protect = NULL;

@@ -334,6 +334,154 @@ static int oplus_gauge_get_deep_term_volt(struct oplus_mms_gauge *chip)
 	return volt_mv;
 }
 
+static void oplus_gauge_update_three_level_volt_data(struct oplus_mms_gauge *chip,
+	int volt_mv, unsigned char *data)
+{
+	struct gauge_three_level_term_volt_cfg *volt_cfg = NULL;
+	int delta_level_1_2_mv = 0;
+	int delta_level_1_3_mv = 0;
+
+	volt_cfg = &chip->three_level_term_volt_cfg;
+	/* term_volt_1 */
+	data[0] = (volt_mv & 0xff);
+	data[1] = ((volt_mv & 0xff00) >> 8);
+
+	/* term_volt_2*/
+	delta_level_1_2_mv = (volt_cfg->term_volt - volt_cfg->term_volt_2);
+	if (delta_level_1_2_mv > OPLUS_TERM_VOLT_1_2_DELTA_MAX_MV)
+	    delta_level_1_2_mv = OPLUS_TERM_VOLT_1_2_DELTA_MAX_MV;
+	if (delta_level_1_2_mv == 0)
+	    delta_level_1_2_mv = OPLUS_TERM_VOLT_1_2_DEFAULT_DELTA_MV;
+
+	if (delta_level_1_2_mv > 0) {
+	    data[2] = ((volt_mv - delta_level_1_2_mv) & 0xff);
+	    data[3] = (((volt_mv - delta_level_1_2_mv) & 0xff00) >> 8);
+	}
+
+	delta_level_1_3_mv = (volt_cfg->term_volt - volt_cfg->term_volt_3);
+	if (delta_level_1_3_mv > OPLUS_TERM_VOLT_1_3_DELTA_MAX_MV)
+	    delta_level_1_3_mv = OPLUS_TERM_VOLT_1_3_DELTA_MAX_MV;
+	if (delta_level_1_3_mv == 0)
+	    delta_level_1_3_mv = OPLUS_TERM_VOLT_1_3_DEFAULT_DELTA_MV;
+
+	/* term_volt_3*/
+	if (delta_level_1_3_mv > 0) {
+	    data[4] = ((volt_mv - delta_level_1_3_mv) & 0xff);
+	    data[5] = (((volt_mv - delta_level_1_3_mv) & 0xff00) >> 8);
+	}
+}
+
+static void oplus_gauge_update_three_level_ht_data(struct oplus_mms_gauge *chip,
+	unsigned char *data)
+{
+	struct gauge_three_level_term_volt_cfg *volt_cfg = NULL;
+
+	volt_cfg = &chip->three_level_term_volt_cfg;
+	data[6] = (volt_cfg->hold_time > 0) ? volt_cfg->hold_time : 0;
+	data[7] = (volt_cfg->hold_time_2 > 0) ? volt_cfg->hold_time_2 : 0;
+	data[8] = (volt_cfg->hold_time_3 > 0) ? volt_cfg->hold_time_3 : 0;
+	data[9] = (volt_cfg->time_to_drop_per1 > 0) ? volt_cfg->time_to_drop_per1 : 0;
+	data[10] = (volt_cfg->time_to_drop_per1_2 > 0) ? volt_cfg->time_to_drop_per1_2 : 0;
+	data[11] = (volt_cfg->time_to_drop_per1_3 > 0) ? volt_cfg->time_to_drop_per1_3 : 0;
+
+	if (volt_cfg->recover_term_volt) {
+		data[12] = volt_cfg->recover_term_volt & 0xff;
+		data[13] = ((volt_cfg->recover_term_volt & 0xff00) >> 8);
+	}
+	if (volt_cfg->recover_term_volt_2) {
+		data[14] = volt_cfg->recover_term_volt_2 & 0xff;
+		data[15] = ((volt_cfg->recover_term_volt_2 & 0xff00) >> 8);
+	}
+	data[16] = (volt_cfg->recover_hold_time_of_term_voltage > 0) ?
+			volt_cfg->recover_hold_time_of_term_voltage : 0;
+	data[17] = (volt_cfg->recover_hold_time_of_term_voltage_2 > 0) ?
+			volt_cfg->recover_hold_time_of_term_voltage_2 : 0;
+}
+
+#define VALID_TERM_VOLT 2000
+static void oplus_gauge_update_three_level_ht_and_term_volt(struct oplus_mms_gauge *chip)
+{
+	int func_rc = -ENOTSUPP;
+	unsigned char data[32] = {0};
+	struct gauge_three_level_term_volt_cfg *volt_cfg = NULL;
+	int current_volt = INVALID_MIN_VOLTAGE;
+	int reg_term_volt = 0;
+
+	if (!chip || !chip->deep_spec.support)
+		return;
+
+	func_rc = oplus_chg_ic_func(chip->gauge_ic, OPLUS_IC_FUNC_GAUGE_GET_THREE_LEVEL_TERM_VOLT,
+			data, OPLUS_GAUGE_THREE_LEVEL_TERM_VOLT_LEN);
+	if (func_rc != 0)
+		return;
+
+	chg_info("term_vol:[%x,%x,%x,%x,%x,%x],holdtime[%x,%x,%x],time_to_drop[%x,%x,%x]," \
+		 "recover_voltage[%x,%x,%x,%x],recover holdtime[%x,%x]\n",
+		 data[0], data[1], data[2], data[3], data[4], data[5],
+		 data[6], data[7], data[8],
+		 data[9], data[10], data[11],
+		 data[12], data[13], data[14], data[15],
+		 data[16], data[17]);
+
+	/* update the param based on the DTS config.*/
+	volt_cfg = &chip->three_level_term_volt_cfg;
+
+	/*
+	 * The 18 bytes three leve term volt param:
+	 * byte[0]: the low 8 bit of Term Voltage
+	 * byte[1]: the high 8 bit of Term voltage
+	 * byte[2]: the low 8 bit of Term Voltage_2
+	 * byte[3]: the high 8 bit of Term voltage_2
+	 * Byte[4]: the low 8 bit of Term Voltage_3
+	 * byte[5]: the high 8 bit of Term voltage_3
+	 * byte[6]: the hold time of Term Voltage
+	 * byte[7]: the hold time of Term voltage_2
+	 * byte[8]: the hold time of Term Voltage_3
+	 * byte[9]: the time_to_drop_per1%
+	 * byte[10]: the time_to_drop_per1%_2
+	 * byte[11]: the time_to_drop_per1%_3
+	 * byte[12]: the recover low 8 bit of Term Voltage
+	 * byte[13]: the recover high 8 bit of Term voltage
+	 * byte[14]: the recover low 8 bit of Term Voltage_2
+	 * byte[15]: the recover high 8 bit of Term voltage_2
+	 * byte[16]: the recover hold time of Term Voltage
+	 * byte[17]: the recover hold time of Term voltage_2
+	 */
+	func_rc = oplus_chg_ic_func(chip->gauge_ic, OPLUS_IC_FUNC_GAUGE_GET_DEEP_TERM_VOLT, &current_volt);
+	if (func_rc < 0)
+		chg_err("get batt deep term volt error, rc=%d\n", func_rc);
+
+	reg_term_volt = (data[1] << 8) + data[0];
+	chg_info("get term_volt = [%d, %d, %d], reg_term_volt[%d]\n", current_volt,
+		 chip->deep_spec.config.term_voltage,
+		 get_effective_result(chip->gauge_term_voltage_votable),
+		 reg_term_volt);
+	if ((volt_cfg->term_volt > current_volt) &&
+	    (reg_term_volt != volt_cfg->term_volt)) {
+		chg_info("set term_volt = %d\n", volt_cfg->term_volt);
+		vote(chip->gauge_term_voltage_votable, READY_VOTER, true, volt_cfg->term_volt, false);
+		return;
+	}
+
+	if (current_volt != reg_term_volt && current_volt > VALID_TERM_VOLT)
+		oplus_gauge_update_three_level_volt_data(chip, current_volt, data);
+
+	oplus_gauge_update_three_level_ht_data(chip, data);
+
+	chg_info("update term_volt[%x,%x,%x,%x,%x,%x], holdtime[%x,%x,%x],time_to_drop[%x,%x,%x]," \
+		 "recover_voltage[%x,%x,%x,%x],recover holdtime[%x,%x]\n",
+		 data[0], data[1], data[2], data[3], data[4], data[5],
+		 data[6], data[7], data[8],
+		 data[9], data[10], data[11],
+		 data[12], data[13], data[14], data[15], data[16], data[17]);
+
+	if (chip->three_level_term_volt_cfg.term_volt) {
+		func_rc = oplus_chg_ic_func(chip->gauge_ic, OPLUS_IC_FUNC_GAUGE_SET_THREE_LEVEL_TERM_VOLT,
+					data, OPLUS_GAUGE_THREE_LEVEL_TERM_VOLT_LEN);
+		chg_info(" func_rc = %d \n", func_rc);
+	}
+}
+
 static int oplus_gauge_set_last_cc(struct oplus_mms *mms, int cc)
 {
 	int rc = 0;
@@ -1284,7 +1432,7 @@ void oplus_gauge_get_ddrc_status(struct oplus_mms *mms)
 		} else {
 			last_cc = oplus_gauge_get_last_cc(mms);
 		}
-		if (last_cc <= 0 || *step_status || *cc < last_cc ||
+		if (last_cc <= 0 || *step_status || *cc < last_cc || vterm < current_volt ||
 		    (chip->sub_gauge && (sub_last_cc <= 0 || chip->deep_spec.sub_cc < sub_last_cc))) {
 			update_vterm = vterm;
 			update_vshut = vshut;
@@ -1807,10 +1955,10 @@ static void oplus_gauge_init_sili_status(struct oplus_mms_gauge *chip)
 		chip->deep_spec.sili_err, chip->deep_spec.support);
 }
 
-#ifdef CONFIG_OPLUS_CHARGER_MTK
 #define BAT_TYPE_MESSAGE_LEN       25
 #define OPLUS_SILICON_TYPE_TAG     "silicon"
 #define OPLUS_GRAPHITE_TYPE_TAG    "graphite"
+#define OPLUS_BATT_TYPE_TAG        "battery_type="
 
 static char __oplus_chg_cmdline[BAT_TYPE_MESSAGE_LEN];
 static char *oplus_chg_cmdline = __oplus_chg_cmdline;
@@ -1839,7 +1987,6 @@ static const char *oplus_battype_get_cmdline(void)
 
 	return oplus_chg_cmdline;
 }
-#endif
 
 int oplus_gauge_get_battery_type_str(char *type)
 {
@@ -1880,6 +2027,8 @@ int oplus_gauge_get_battery_type_str(char *type)
 	size_t smem_size;
 	static oplus_ap_feature_data *smem_data;
 	struct device_node *node;
+	char *str = NULL;
+	const char *cmd_line = NULL;
 
 	if (!type)
 		return -ENOTSUPP;
@@ -1887,23 +2036,40 @@ int oplus_gauge_get_battery_type_str(char *type)
 	node = of_find_node_by_path("/soc/oplus_chg_core");
 	if (node == NULL)
 		return -ENOTSUPP;
-	if (!of_property_read_bool(node, "oplus,battery_type_by_smem"))
+	if (of_property_read_bool(node, "oplus,battery_type_by_smem")) {
+		if (!smem_data) {
+			smem_data = (oplus_ap_feature_data *)qcom_smem_get(QCOM_SMEM_HOST_ANY, SMEM_OPLUS_CHG, &smem_size);
+			if (IS_ERR_OR_NULL(smem_data)) {
+				chg_err("unable to acquire smem oplus chg entry\n");
+				return -EINVAL;
+			}
+			if (smem_data->size != sizeof(oplus_ap_feature_data)) {
+				chg_err("size invalid %d %zu\n", smem_data->size, sizeof(oplus_ap_feature_data));
+				return -EINVAL;
+			}
+			chg_info("current battery type str = %s\n", smem_data->battery_type_str);
+		}
+
+		snprintf(type, OPLUS_BATTERY_TYPE_LEN, "%s", smem_data->battery_type_str);
+	} else if (of_property_read_bool(node, "oplus,battery_type_by_cmdline")) {
+		cmd_line = oplus_battype_get_cmdline();
+		if (NULL == cmd_line) {
+			chg_debug("oplus_battype_get_cmdline: cmdline is NULL!!!\n");
+			return -ENOTSUPP;
+		}
+
+		str = strstr(cmd_line, OPLUS_BATT_TYPE_TAG);
+		if (str == NULL) {
+			chg_err("get battery type is not supported!!!\n");
+			return -ENOTSUPP;
+		}
+		str += strlen(OPLUS_BATT_TYPE_TAG);
+		chg_debug("current battery type %s\n", str);
+
+		scnprintf(type, OPLUS_BATTERY_TYPE_LEN, "%s", str);
+	} else {
 		return -ENOTSUPP;
-
-	if (!smem_data) {
-		smem_data = (oplus_ap_feature_data *)qcom_smem_get(QCOM_SMEM_HOST_ANY, SMEM_OPLUS_CHG, &smem_size);
-		if (IS_ERR_OR_NULL(smem_data)) {
-			chg_err("unable to acquire smem oplus chg entry\n");
-			return -EINVAL;
-		}
-		if (smem_data->size != sizeof(oplus_ap_feature_data)) {
-			chg_err("size invalid %d %zu\n", smem_data->size, sizeof(oplus_ap_feature_data));
-			return -EINVAL;
-		}
-		chg_info("current battery type str = %s\n", smem_data->battery_type_str);
 	}
-
-	snprintf(type, OPLUS_BATTERY_TYPE_LEN, "%s", smem_data->battery_type_str);
 	return 0;
 #endif
 }
@@ -3305,8 +3471,19 @@ int oplus_mms_gauge_get_si_prop(struct oplus_mms *mms, union mms_msg_data *data)
 
 void oplus_mms_gauge_sili_init(struct oplus_mms_gauge *chip)
 {
+	int step_status_switch;
+	int temp_range;
+
 	if (!chip->deep_spec.support)
 		return;
+
+	if (chip->deep_spec.ddrc_strategy_v2) {
+		step_status_switch = chip->deep_spec.ddrc_temp_switch;
+		temp_range = chip->deep_spec.ddrc_temp_num;
+	} else {
+		step_status_switch = DDB_CURVE_TEMP_NORMAL;
+		temp_range = DDB_CURVE_TEMP_WARM;
+	}
 
 	vote(chip->gauge_shutdown_voltage_votable, READY_VOTER, true, INVALID_MAX_VOLTAGE, false);
 	vote(chip->gauge_term_voltage_votable, READY_VOTER, true, INVALID_MAX_VOLTAGE, false);
@@ -3316,11 +3493,15 @@ void oplus_mms_gauge_sili_init(struct oplus_mms_gauge *chip)
 	if (chip->sub_gauge)
 		chip->deep_spec.sub_counts = oplus_gauge_get_deep_dischg_count(chip, chip->gauge_ic_comb[__ffs(chip->sub_gauge)]);
 	chip->deep_spec.ddrc_tbatt.index_n = oplus_gauge_ddrc_get_temp_region(chip);
-	chip->deep_spec.ddrc_tbatt.index_p = chip->deep_spec.ddrc_tbatt.index_n;
+	if (chip->deep_spec.ddrc_tbatt.index_n < step_status_switch)
+		chip->deep_spec.ddrc_tbatt.index_p = temp_range;
+	else
+		chip->deep_spec.ddrc_tbatt.index_p = chip->deep_spec.ddrc_tbatt.index_n;
 	chip->deep_spec.ddbc_tbatt.index_n = oplus_gauge_ddbc_get_temp_region(chip);
 	oplus_gauge_get_ddrc_status(chip->gauge_topic);
 
 	vote(chip->gauge_term_voltage_votable, READY_VOTER, false, 0, false);
+	oplus_gauge_update_three_level_ht_and_term_volt(chip);
 	vote(chip->gauge_shutdown_voltage_votable, SUPER_ENDURANCE_MODE_VOTER,
 		!chip->super_endurance_mode_status, chip->deep_spec.config.term_voltage, false);
 	vote(chip->gauge_shutdown_voltage_votable, READY_VOTER, false, 0, false);
@@ -3418,6 +3599,7 @@ static int oplus_mms_gauge_push_soh_coeff(struct oplus_mms_gauge *chip, int coef
 }
 
 #define DEEP_DISCHG_UPDATE_VOLT_DELTA 100
+
 int oplus_gauge_term_voltage_vote_callback(struct votable *votable, void *data, int volt, const char *client,
 						  bool step)
 {

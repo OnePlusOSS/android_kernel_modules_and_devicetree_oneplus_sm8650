@@ -70,6 +70,7 @@ dtbo-y += volcano-audio.dtbo \
 		volcano6i-audio-mtp-moselle-wingmate.dtbo \
 		volcano6i-audio-qrd-moselle.dtbo
 #OPLUS_DTS_OVERLAY start
+dtbo-y += oplus/prado-25811-audio-volcano-overlay.dtbo
 #OPLUS_DTS_OVERLAY end
 endif
 

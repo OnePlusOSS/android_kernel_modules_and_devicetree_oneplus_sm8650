@@ -214,6 +214,7 @@ struct dsi_panel_oplus_privite {
 	u32 osc_clk_mode1_rate;
 	bool cabc_enabled;
 	bool dre_enabled;
+	bool aod_backlight_async;
 	bool is_apollo_support;
 	u32 sync_brightness_level;
 	bool dp_support;
@@ -283,6 +284,8 @@ struct dsi_panel_oplus_privite {
 	/* add for factory test fps switch, ignore some fps */
 	int ignore_mode_count;
 	u32 *ignore_mode;
+	/* add for aod mode cmd switch */
+	bool ramless_aod_mode_cmd_switch_support;
 };
 
 struct dsi_panel_oplus_serial_number {

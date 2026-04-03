@@ -154,6 +154,7 @@ struct oplus_gauge_operations {
 	void (*sync_plugin_state)(void);
 	int (*set_sili_ic_alg_term_volt)(int volt);
 	int (*get_sili_ic_alg_term_volt)(void);
+	void (*get_device_name)(char *name, int len);
 };
 
 /****************************************

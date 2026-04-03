@@ -34,6 +34,15 @@
 #define RESULT_FAIL_VERIFY				0x00
 
 #define RESULT_FAIL_COMMUNICATION		0xFF
+#define RESULT_FAIL_LENGTH                      66
+#define DELAY_WRITE_BIT_OUT_LOW                 500
+#define DELAY_READ_BIT_OUT_LOW                  300
+#define DELAY_CHECK_NUM                         30
+#define READ_MEMORY_RERTY_CNT                   5
+#define READ_MEM_LENGTH                         33
+#define PAG_DATE_LENGTH                         32
+#define STATUS_DATA_LENGTH_VERIFY               0x80
+#define MAX_TEMP_LENGTH                         67
 
 #define STRONG_PULL_UP	0xAA
 #define SKIP_CRC_CHECK	0xB001

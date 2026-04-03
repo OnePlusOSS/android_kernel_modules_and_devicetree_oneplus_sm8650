@@ -48,28 +48,9 @@ static struct ilitek_ic_func_ctrl func_ctrl[FUNC_CTRL_NUM] = {
 	[24] = {"waterproof", {0xDA, 0x00, 0x01, 0x02}, 4},
 };
 
-#define CHIP_SUP_NUM    5
-static u32 ic_sup_list[CHIP_SUP_NUM] = {
-	[0] = ILI9881_CHIP,
-	[1] = ILI7807_CHIP,
-	[2] = ILI9881N_AA,
-	[3] = ILI9881O_AA,
-	[4] = ILI9882_CHIP
-};
-
-static int ilitek_tddi_ic_check_support(u32 pid, u16 id)
+static int ilitek_tddi_ic_check_info(u32 pid, u32 id)
 {
-	int i = 0;
-
-	for (i = 0; i < CHIP_SUP_NUM; i++) {
-		if ((pid == ic_sup_list[i]) || (id == ic_sup_list[i])) {
-			break;
-		}
-	}
-
-	if (i >= CHIP_SUP_NUM) {
-		ILI_INFO("ERROR, ILITEK CHIP(0x%x) Not found !!\n", pid);
-	}
+	ILI_INFO("ILITEK CHIP found.\n");
 
 	ILI_INFO("ILITEK CHIP %X found.\n", pid);
 	ilits->chip->pid = pid;
@@ -758,6 +739,54 @@ out:
 	return ret;
 }
 
+int ili_ic_get_support_driver_ver(void)
+{
+	int ret = 0;
+	u8 cmd[2] = {0};
+	u8 buf[DRIVER_VERSION_POS_LEN] = {0};
+	int ver_len = DRIVER_VERSION_POS_LEN;
+
+	if (ilits->info_from_hex) {
+		buf[DRIVER_VERSION_POS1] = ilits->fw_info[ILI_FW_INFO_DRIVER_VERSION1];
+		buf[DRIVER_VERSION_POS2] = ilits->fw_info[ILI_FW_INFO_DRIVER_VERSION2];
+		buf[DRIVER_VERSION_POS3] = ilits->fw_info[ILI_FW_INFO_DRIVER_VERSION3];
+		buf[DRIVER_VERSION_POS4] = ilits->fw_info[ILI_FW_INFO_DRIVER_VERSION4];
+		goto out;
+	}
+
+	cmd[0] = P5_X_READ_DATA_CTRL;
+	cmd[1] = P5_X_GET_DRIVER_VERSION;
+
+	if (ilits->wrapper(cmd, sizeof(cmd), NULL, 0, OFF, OFF) < 0) {
+		ILI_ERR("Write pre cmd failed\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (ilits->wrapper(&cmd[1], sizeof(u8), buf, ver_len, ON,
+			   OFF) < 0) {
+		ILI_ERR("Write driver version cmd failed\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (buf[0] != P5_X_GET_DRIVER_VERSION) {
+		ILI_ERR("Invalid driver ver\n");
+		ret = -1;
+	}
+
+out:
+	if (!buf[DRIVER_VERSION_POS1]) {
+		ILI_INFO("get driver version failed\n");
+		return -EINVAL;
+	}
+	ILI_INFO("support driver version = %d.%d.%d.%d\n", buf[DRIVER_VERSION_POS1], buf[DRIVER_VERSION_POS2],
+		buf[DRIVER_VERSION_POS3], buf[DRIVER_VERSION_POS4]);
+	ilits->chip->support_driver_ver = buf[DRIVER_VERSION_POS1] << 24 | buf[DRIVER_VERSION_POS2] << 16 | buf[DRIVER_VERSION_POS3] << 8 | buf[DRIVER_VERSION_POS4];
+
+	return ret;
+}
+
 void ili_fw_uart_ctrl(u8 ctrl)
 {
 	u8 cmd[4] = {0};
@@ -1012,9 +1041,22 @@ out:
 		 (ilits->protocol->ver >> 8) & 0xFF, ilits->protocol->ver & 0xFF);
 	return ret;
 }
+
+static u8 ili_chip_id_translate_to_ascii(u8 data)
+{
+	u8 ret = 0;
+	if (data >= ILI_CHIP_START && data <= ILI_CHIP_END) {
+		ret = data + ILI_CHIP_ID_BASE1;
+	} else if (data >= ILI_CHIP_MIN && data <= ILI_CHIP_MAX) {
+		ret = data - ILI_CHIP_MIN + ILI_CHIP_ID_BASE2;
+	}
+	return ret;
+}
+
 int ili_ic_get_info(void)
 {
 	int ret = 0;
+	u8 tmp1 = 0, tmp2 = 0;
 
 	if (!atomic_read(&ilits->ice_stat)) {
 		ILI_ERR("ice mode doesn't enable\n");
@@ -1025,7 +1067,25 @@ int ili_ic_get_info(void)
 			      sizeof(u32)) < 0) {
 		ILI_ERR("Read chip pid error\n");
 	}
+	if (((ilits->chip->pid >> 28) & 0xF) == 0xF) {
+		/* Need to Read Second Chip ID */
+		if (ili_ice_mode_read(ilits->chip->second_pid_addr, &ilits->chip->second_pid, sizeof(u32)) < 0)
+			ILI_ERR("Read second chip pid error\n");
+		ilits->chip->id = ((ilits->chip->second_pid & 0x0000FFFF) << 12) + ((ilits->chip->pid & 0x0FFF0000) >> 16);
 
+		tmp1 = (ilits->chip->second_pid & 0xFF00) >> 8;
+		tmp2 = (ilits->chip->pid & 0x00FF0000) >> 16;
+		tmp1 = ili_chip_id_translate_to_ascii(tmp1);
+		tmp2 = ili_chip_id_translate_to_ascii(tmp2);
+		if (tmp1 == 0 || tmp2 == 0) {
+			ILI_ERR("Chip id translate error\n");
+		}
+		snprintf(ilits->chip->product_id, sizeof(ilits->chip->product_id), "%c%02X%X%c",
+			tmp1, ilits->chip->second_pid & 0xFF, (ilits->chip->pid & 0x0F000000) >> 24, tmp2);
+	} else {
+		ilits->chip->id = ilits->chip->pid >> 16;
+		snprintf(ilits->chip->product_id, sizeof(ilits->chip->product_id), "%04X", ilits->chip->id);
+	}
 	if (ili_ice_mode_read(ilits->chip->otp_addr, &ilits->chip->otp_id,
 			      sizeof(u32)) < 0) {
 		ILI_ERR("Read otp id error\n");
@@ -1037,13 +1097,12 @@ int ili_ic_get_info(void)
 	}
 
 	/*ilits->chip->pid = ilits->chip->pid;*/
-	ilits->chip->id = ilits->chip->pid >> 16;
 	ilits->chip->type = (ilits->chip->pid & 0x0000FF00) >> 8;
 	ilits->chip->ver = ilits->chip->pid & 0xFF;
 	ilits->chip->otp_id &= 0xFF;
 	ilits->chip->ana_id &= 0xFF;
-	ILI_INFO("CHIP: PID = %x\n", (ilits->chip->pid >> 8));
-	ret = ilitek_tddi_ic_check_support(ilits->chip->pid, ilits->chip->id);
+	ILI_INFO("CHIP ID = %s\n", ilits->chip->product_id);
+	ret = ilitek_tddi_ic_check_info(ilits->chip->pid, ilits->chip->id);
 	return ret;
 }
 
@@ -1090,6 +1149,7 @@ static struct ilitek_ic_info chip;
 void ili_ic_init(void)
 {
 	chip.pid_addr =         TDDI_PID_ADDR;
+	chip.second_pid_addr =  TDDI_SECOND_PID_ADDR;
 	chip.pc_counter_addr =      TDDI_PC_COUNTER_ADDR;
 	chip.pc_latch_addr =        TDDI_PC_LATCH_ADDR;
 	chip.otp_addr =         TDDI_OTP_ID_ADDR;

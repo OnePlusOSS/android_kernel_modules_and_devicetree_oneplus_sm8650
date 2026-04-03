@@ -33,6 +33,14 @@ extern const char *cmd_set_prop_map[DSI_CMD_SET_MAX];
 int oplus_panel_cmd_print(struct dsi_panel *panel, enum dsi_cmd_set_type type);
 
 /**
+ * oplus_panel_video_mode_aod_off_cmd_switch() - oplus panel command switch
+ * @panel: Display panel
+ * @type:  Pointer of command type
+ * Return: Zero on Success
+ */
+int oplus_panel_video_mode_aod_off_cmd_switch(struct dsi_panel *panel, enum dsi_cmd_set_type *type);
+
+/**
  * oplus_panel_cmd_switch() - oplus panel command switch
  * @panel: Display panel
  * @type:  Pointer of command type

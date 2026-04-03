@@ -1,0 +1,17 @@
+/dts-v1/;
+/plugin/;
+#include <dt-bindings/oplus/hw-id.h>
+#include "../display/volcano-sde-display-mtp-overlay.dts"
+
+#include "volcano-display-overlay-common.dtsi"
+#include "Prado-25811-display-volcano-overlay.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Volcano MTP,piaget";
+
+	oplus,project-id = <25811 25861 25862>;
+};
+
+&mdss_dsi_phy0 {
+	oplus,dsi-pll-ssc-disalbed;
+};

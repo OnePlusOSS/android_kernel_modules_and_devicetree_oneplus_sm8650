@@ -1,0 +1,111 @@
+/**********************************************************************************
+* Copyright (c)  2008-2020  Guangdong oplus Mobile Comm Corp., Ltd
+* Description: oplus pn560 nfc dtsi
+*
+***********************************************************************************/
+&tlmm {
+    nfc {
+        nfc_int_active: nfc_int_active {
+            /* active state */
+            mux {
+                /* NFC Read Interrupt */
+                pins = "gpio31";
+                function = "gpio";
+            };
+
+            config {
+                pins = "gpio31";
+                drive-strength = <2>; /* 2 MA */
+                bias-pull-down;
+            };
+        };
+
+        nfc_int_suspend: nfc_int_suspend {
+            /* sleep state */
+            mux {
+                /* NFC Read Interrupt */
+                pins = "gpio31";
+                function = "gpio";
+            };
+
+            config {
+                pins = "gpio31";
+                drive-strength = <2>; /* 2 MA */
+                bias-pull-down;
+            };
+        };
+
+        nfc_enable_active: nfc_enable_active {
+            mux {
+                /* Enable, Clock request gpios */
+                pins = "gpio6", "gpio7";
+                function = "gpio";
+            };
+
+            config {
+                pins = "gpio6", "gpio7";
+                drive-strength = <2>; /* 2 MA */
+                bias-disable;
+            };
+        };
+
+        nfc_enable_suspend: nfc_enable_suspend {
+            mux {
+                pins = "gpio6", "gpio7";
+                function = "gpio";
+            };
+
+            config {
+                pins = "gpio6", "gpio7";
+                drive-strength = <2>; /* 2 MA */
+                bias-disable;
+            };
+        };
+    };
+};
+
+
+&soc {
+    //add for nfc_chipset
+    //GPIO 80 -- pull-down, india,0, none nfc
+    //GPIO 80 -- pull-up, Europe ,1, pn560
+    nfc_chipset {
+        compatible = "oplus-nfc-chipset";
+        mixed-chipset = <1>;
+        id-gpio = <&tlmm 80 0x00>;
+        id_count = <2>;
+        id-0-key = <0>;
+        id-0-value-chipset = "none";
+        id-0-value-manifest-path = "/odm/etc/vintf/manifest_empty.xml";
+        id-0-value-feature-path = "/odm/etc/feature_empty.xml";
+        id-1-key = <1>;
+        id-1-value-chipset = "PN560";
+        id-1-value-manifest-path = "/odm/etc/vintf/manifest_dsnfc_pn560.xml";
+        id-1-value-feature-path = "/odm/etc/com.oplus.nfc_feature_pn560.xml";
+    };
+};
+
+&qupv3_se1_i2c {
+    status = "ok";
+    qcom,clk-freq-out = <400000>;
+    nq@28 {
+        compatible = "qcom,sn-nci";
+        mixed-chipset = <1>;
+        id-gpio = <&tlmm 80 0x00>;
+        id_count = <2>;
+        id-0-key = <0>;
+        id-0-value-chipset = "none";
+        id-1-key = <1>;
+        id-1-value-chipset = "PN560";
+        reg = <0x28>;
+        qcom,sn-irq = <&tlmm 31 0x00>;
+        qcom,sn-ven = <&tlmm 7 0x01>;
+        qcom,sn-clkreq = <&tlmm 6 0x00>;
+        interrupt-parent = <&tlmm>;
+        interrupts = <31 0>;
+        interrupt-names = "nfc_irq";
+        pinctrl-names = "nfc_active", "nfc_suspend";
+        pinctrl-0 = <&nfc_int_active &nfc_enable_active>;
+        pinctrl-1 = <&nfc_int_suspend &nfc_enable_suspend>;
+    };
+};

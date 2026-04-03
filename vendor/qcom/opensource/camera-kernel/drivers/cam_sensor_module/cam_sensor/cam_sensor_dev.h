@@ -190,6 +190,7 @@ struct cam_sensor_ctrl_t {
 	struct cam_sensor_qsc_setting  sensor_qsc_setting;
 	int                            is_update_wide_to_sleep;
 	bool                           is_surpport_wr_burst;
+	int                            enable_tele_streamoff_delay;
 #endif
 };
 

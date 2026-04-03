@@ -114,6 +114,8 @@ struct oplus_monitor {
 	struct oplus_mms *pps_topic;
 	struct mms_subscribe *keep_subs;
 	struct oplus_mms *keep_topic;
+	struct mms_subscribe *reverse_subs;
+	struct oplus_mms *reverse_topic;
 
 	struct oplus_chg_track *track;
 
@@ -137,6 +139,10 @@ struct oplus_monitor {
 	struct delayed_work chg_into_liquid_trigger_work_timeout;
 	struct delayed_work dischg_profile_update_work;
 	struct delayed_work dischg_profile_check_work;
+	struct delayed_work reverse_chg_info_check_work;
+	struct delayed_work reverse_led_info_check_work;
+	struct delayed_work reverse_delay_init_work;
+	struct delayed_work high_reverse_err_info_check_work;
 
 	struct votable *wired_icl_votable;
 	struct votable *wired_fcc_votable;
@@ -176,6 +182,7 @@ struct oplus_monitor {
 	int batt_fcc_comp;
 	int batt_soh_comp;
 	int uisoc_keep_2_err;
+	int uisoc_keep_3_err;
 	int batt_qmax;
 	int gauge_car_c;
 	struct super_endurance_mode_info sem_info;
@@ -303,6 +310,52 @@ struct oplus_monitor {
 	/* state keep */
 	bool switch_protocol;
 	bool keep_wired_online;
+
+	/* reverse */
+	bool reverse_state;
+	bool pre_reverse_state;
+	int high_reverse_err_flag;
+	int high_reverse_count;
+	int source_pdo_volt;
+	int source_pdo_curr;
+	int sink_req_volt;
+	int sink_req_curr;
+	int err_source_pdo_volt;
+	int err_source_pdo_curr;
+	int err_sink_req_volt;
+	int err_sink_req_curr;
+	int reverse_start_ui_soc;
+	int reverse_start_chip_soc;
+	int reverse_start_vbat;
+	int reverse_start_shell_temp;
+	int reverse_start_batt_temp;
+	int sink_svid;
+	int reverse_max_shell_temp;
+	int reverse_max_ibat;
+	int reverse_min_vbat;
+	int reverse_min_vbus;
+	u32 max_source_cap;
+	u32 max_sink_request;
+	int max_source_cap_current;
+	int max_source_cap_voltage;
+	int max_sink_request_current;
+	int max_sink_request_voltage;
+	unsigned long reverse_screen_on_time;
+	unsigned long reverse_screen_off_time;
+	int reverse_screen_on_count;
+	unsigned long reverse_total_time;
+	int reverse_end_ui_soc;
+	int reverse_end_chip_soc;
+	int reverse_end_vbat;
+	int reverse_end_shell_temp;
+	int reverse_end_batt_temp;
+	unsigned long led_on_start_time;
+	unsigned long led_on_end_time;
+	unsigned long on_start_time;
+	unsigned long on_end_time;
+	unsigned long reverse_on_time;
+	unsigned long reverse_end_time;
+	char reverse_str;
 };
 
 struct oplus_chg_into_l{

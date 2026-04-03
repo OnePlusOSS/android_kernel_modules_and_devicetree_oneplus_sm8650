@@ -1,0 +1,52 @@
+/dts-v1/;
+/plugin/;
+#include <dt-bindings/oplus/hw-id.h>
+#include <dt-bindings/input/linux-event-codes.h>
+#include "../qcom/volcano-mtp-overlay.dts"
+#include "volcano_overlay_common.dtsi"
+#include "prado_overlay_common.dtsi"
+#include "nfc/prado-nfc-thn31.dtsi"
+#include "oplus_fp/oplus_fp_25811_25861_25862.dtsi"
+#include "oplus_chg/oplus-chg-25811.dtsi"
+#include "tp/prado-oplus-tp-25811.dtsi"
+#include "sensor/prado-sensor-25811-25861.dtsi"
+#include "oplus_misc/oplus-misc-25811.dtsi"
+
+/ {
+    model = "Qualcomm Technologies, Inc. volcano MTP, Prado";
+
+    oplus,project-id = <25811>;
+    oplus,hw-id = <OPLUS_EVB1 OPLUS_T0 OPLUS_EVT1 OPLUS_DVT1 OPLUS_PVT1>;
+};
+&tlmm {
+  //#ifdef OPLUS_FEATURE_RF_CABLE_DETECT
+  //modify for rf_cable
+  rf_cable0_active: rf_cable0_active {
+    mux {
+      pins = "gpio78";
+      function = "gpio";
+    };
+    config {
+      pins = "gpio78";
+      drive-strength = <2>;
+      input-enable;
+      bias-pull-up;
+    };
+  };
+  //#endif /* OPLUS_FEATURE_RF_CABLE_DETECT */
+};
+
+&soc {
+  //#ifdef OPLUS_FEATURE_RF_CABLE_DETECT
+  //modify for rf_cable
+  oplus_rf_cable {
+    compatible = "oplus,rf_cable";
+    interrupt-parent = <&tlmm>;
+    rf_cable_support_num = <1>;
+    rf,cable0-gpio = <&tlmm 78 0>;
+    rf,cable-support-timer = <0>;
+    pinctrl-names = "rf_cable_active";
+    pinctrl-0 = <&rf_cable0_active>;
+  };
+  //#endif /* OPLUS_FEATURE_RF_CABLE_DETECT */
+};

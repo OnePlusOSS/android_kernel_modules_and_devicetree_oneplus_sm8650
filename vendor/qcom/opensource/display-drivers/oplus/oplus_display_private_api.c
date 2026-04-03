@@ -2418,6 +2418,9 @@ int oplus_display_set_power(struct drm_connector *connector,
 					DRM_PANEL_EVENT_BLANK, 0, true);
 		}
 
+		oplus_panel_event_data_notifier_trigger(display->panel, DRM_PANEL_EVENT_BLANK_LP, power_mode, true);
+		LCD_INFO("DRM_PANEL_EVENT_BLANK_LP");
+
 		__oplus_set_power_status(OPLUS_DISPLAY_POWER_DOZE_SUSPEND);
 		break;
 

@@ -60,10 +60,12 @@ pcc_strategy_alloc_by_node(struct device_node *node)
 	rc = of_property_read_u32(node, "oplus,chg_protocol", &data);
 	if (rc < 0) {
 		chg_err("oplus,chg_protocol read fail, rc=%d\n", rc);
+		kfree(pcc);
 		return ERR_PTR(-EINVAL);
 	} else {
 		if (data >= PCC_INVALID_PROTOCOL || data <= PCC_UNKNOW_PROTOCOL) {
 			chg_err("oplus,chg_protocol value not match, data=%d\n", data);
+			kfree(pcc);
 			return ERR_PTR(-EINVAL);
 		}
 		pcc->chg_protocol = data;

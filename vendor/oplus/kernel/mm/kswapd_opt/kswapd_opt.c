@@ -13,6 +13,7 @@
 #define CONFIG_ALLOC_ORDER_STAT 1
 #define CONFIG_KSWAPS_LOAD_STAT 1
 #define CONFIG_KSWAPD_NICE 1
+#define CONFIG_ORDER3_OPT 1
 #endif
 
 #include <linux/types.h>
@@ -26,16 +27,20 @@
 #ifdef CONFIG_ALLOC_ADJUST_FLAGS
 #include <trace/hooks/iommu.h>
 #endif
-#if defined(CONFIG_ALLOC_ORDER_STAT) || defined(CONFIG_ALLOC_ADJUST_FLAGS)
+#if defined(CONFIG_ALLOC_ORDER_STAT) || defined(CONFIG_ALLOC_ADJUST_FLAGS) \
+	|| defined(CONFIG_ORDER3_OPT)
 #include <trace/hooks/mm.h>
 #endif
 #ifdef CONFIG_KSWAPS_LOAD_STAT
 #include <trace/hooks/vmscan.h>
 #include <trace/events/vmscan.h>
 #endif
+#include "../../mm/internal.h"
 
-#if defined(CONFIG_ALLOC_ADJUST_FLAGS) || defined(CONFIG_ALLOC_ORDER_STAT) || defined(CONFIG_KSWAPS_LOAD_STAT)
+#if defined(CONFIG_ALLOC_ORDER_STAT) || defined(CONFIG_ALLOC_ADJUST_FLAGS) \
+	|| defined(CONFIG_ORDER3_OPT)
 #define KBUF_LEN 10
+
 static bool is_digit_str(const char *str)
 {
 	return strspn(str, "0123456789") == strlen(str);
@@ -584,6 +589,144 @@ static void remove_kswapd_nice_proc(void)
 }
 #endif
 
+#ifdef CONFIG_ORDER3_OPT
+ /* 0 for disabled, >= 1 for order3 optimization */
+static int g_order3_opt_status = 0;
+static struct proc_dir_entry *order3_opt_entry;
+
+static int order3_opt_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", g_order3_opt_status);
+	return 0;
+}
+
+static int order3_opt_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, order3_opt_show, NULL);
+}
+
+static ssize_t order3_opt_write(struct file *file, const char __user *buf,
+		size_t count, loff_t *ppos)
+{
+	char kbuf[KBUF_LEN] = {0};
+	char *str;
+	int val;
+
+	if (g_order3_opt_status < 0) {
+		pr_warn("unabled to set order3_opt");
+		return -EINVAL;
+	}
+
+	if (count > KBUF_LEN - 1) {
+		pr_warn("input too long\n");
+		return -EINVAL;
+	}
+
+	if (copy_from_user(kbuf, buf, count))
+		return -EINVAL;
+
+	kbuf[count] = 0;
+	str = strstrip(kbuf);
+	if (!str) {
+		pr_warn("input empty\n");
+		return -EINVAL;
+	}
+
+	if (!is_digit_str(str)) {
+		pr_warn("input invalid, not a digit string\n");
+		return -EINVAL;
+	}
+
+	if (kstrtoint(str, 0, &val)) {
+		pr_warn("not a valid number\n");
+		return -EINVAL;
+	}
+
+	g_order3_opt_status = val;
+	return count;
+}
+
+static const struct proc_ops proc_order3_opt_ops = {
+	.proc_open = order3_opt_open,
+	.proc_read = seq_read,
+	.proc_write = order3_opt_write,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
+};
+
+static void create_order3_opt_proc(void)
+{
+	order3_opt_entry = proc_create("oplus_mem/order3_opt",
+			0660, NULL, &proc_order3_opt_ops);
+
+	if (!order3_opt_entry) {
+		pr_err("order3_opt_proc create failed, ENOMEM\n");
+		return;
+	}
+}
+
+static void remove_order3_opt_proc(void)
+{
+	if (order3_opt_entry) {
+		proc_remove(order3_opt_entry);
+		order3_opt_entry = NULL;
+	}
+}
+
+static int mask_reclaim(struct kprobe *p, struct pt_regs *regs)
+{
+	gfp_t alloc_gfp  = (gfp_t)regs->regs[0];
+	unsigned int order = (unsigned int)regs->regs[1];
+
+	if ((g_order3_opt_status > 0) && (order == PAGE_FRAG_CACHE_MAX_ORDER) && !(alloc_gfp & __GFP_DMA32)) {
+		regs->regs[0] = (unsigned long)(alloc_gfp & ~__GFP_KSWAPD_RECLAIM);
+	}
+
+	return 0;
+}
+
+static struct kprobe __alloc_pages_slowpath_kp = {
+	.symbol_name = "__alloc_pages_slowpath",
+	.pre_handler = mask_reclaim,
+};
+
+static int register_customize_alloc_gfp(void)
+{
+	int ret = 0;
+
+	ret = register_kprobe(&__alloc_pages_slowpath_kp);
+	if (ret) {
+		pr_err("register__alloc_pages_slowpath_kp failed! ret=%d\n",
+				ret);
+		g_order3_opt_status = -1;
+	}
+
+	return ret;
+}
+
+static void unregister_customize_alloc_gfp(void)
+{
+	unregister_kprobe(&__alloc_pages_slowpath_kp);
+}
+#else
+
+static int register_customize_alloc_gfp(void)
+{
+	return 0;
+}
+static void unregister_customize_alloc_gfp(void)
+{
+}
+
+static void create_order3_opt_proc(void)
+{
+}
+
+static void remove_order3_opt_proc(void)
+{
+}
+#endif
+
 static int __init kswapd_opt_init(void)
 {
 	int ret = 0;
@@ -611,6 +754,12 @@ static int __init kswapd_opt_init(void)
 		create_kswapd_load_stat_proc();
 
 	create_kswapd_nice_proc();
+	ret = register_customize_alloc_gfp();
+	if (ret)
+		pr_err("customize_alloc_gfp vendor_hook register failed: %d\n", ret);
+	else
+		create_order3_opt_proc();
+
 	pr_info("%s init done\n", __func__);
 	return 0;
 }
@@ -625,6 +774,8 @@ static void __exit kswapd_opt_exit(void)
 	unregister_kswapd_load_stat();
 	remove_kswapd_load_stat_proc();
 	remove_kswapd_nice_proc();
+	unregister_customize_alloc_gfp();
+	remove_order3_opt_proc();
 	pr_info("%s exit\n", __func__);
 }
 

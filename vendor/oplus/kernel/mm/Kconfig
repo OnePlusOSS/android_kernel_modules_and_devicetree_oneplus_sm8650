@@ -96,6 +96,12 @@ config OPLUS_FEATURE_SIGKILL_DIAGNOSIS
 	help
 	  assist sigkill diagnosis. record kill reason category for athena
 
+config OPLUS_FG_PROTECT
+	tristate "fg protect file pages"
+	  default n
+	help
+	  define this config to protect fg file pages
+
 config OPLUS_EXIT_MM_OPTIMIZE
 	tristate "exit mm optimize"
 	  default n

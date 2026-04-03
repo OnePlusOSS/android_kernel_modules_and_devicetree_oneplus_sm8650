@@ -8938,7 +8938,7 @@ static ssize_t proc_vibration_style_write(struct file *filp, const char __user *
 	char buffer[5] = { 0 };
 	int rc = 0;
 	int val;
-	if (count > sizeof(buffer)) {
+	if (count >= sizeof(buffer)) {
 		return -EFAULT;
 	}
 	if (buf == NULL) {
@@ -8949,10 +8949,11 @@ static ssize_t proc_vibration_style_write(struct file *filp, const char __user *
 		return -EFAULT;
 	}
 
+	buffer[count] = '\0';
 	aw_dev_err("buffer=%s", buffer);
 	rc = kstrtoint(buffer, 0, &val);
 	if (rc < 0)
-		return count;
+		return rc;
 	aw_dev_err("val = %d", val);
 
 	if (val == 0) {

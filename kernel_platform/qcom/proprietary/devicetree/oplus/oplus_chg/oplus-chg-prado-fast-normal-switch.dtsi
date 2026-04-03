@@ -1,0 +1,55 @@
+&tlmm {
+	switch_ctrl_vooc: switch_ctrl_vooc {
+		mux {
+			pins = "gpio126";
+			function = "gpio";
+		};
+		conifg {
+			pins = "gpio126";
+			bias-pull-up; /* NO pull*/
+			drive-strength = <2>; /* 2 MA */
+			output-high;
+		};
+	};
+
+	switch_ctrl_ufcs: switch_ctrl_ufcs {
+		mux {
+			pins = "gpio126";
+			function = "gpio";
+		};
+		conifg {
+			pins = "gpio126";
+			bias-pull-down; /* NO pull*/
+			drive-strength = <2>; /* 2 MA */
+			output-low;
+		};
+	};
+
+	switch_ctrl_ap: switch_ctrl_ap {
+		mux {
+			pins = "gpio126";
+			function = "gpio";
+		};
+		conifg {
+			pins = "gpio126";
+			bias-pull-down; /* NO pull*/
+			drive-strength = <2>; /* 2MA */
+			output-low;
+		};
+	};
+};
+
+&soc {
+	oplus_virtual_dpdm_switch: oplus,virtual_dpdm_switch {
+		compatible = "oplus,virtual_dpdm_switch";
+
+		oplus,ic_type = <OPLUS_CHG_IC_MISC>;
+		oplus,ic_index = <0>;
+
+		oplus,switch_ctrl-gpio = <&tlmm 126 0x00>;
+		pinctrl-names = "switch_ctrl_ap", "switch_ctrl_vooc", "switch_ctrl_ufcs";
+		pinctrl-0 = <&switch_ctrl_ap>;
+		pinctrl-1 = <&switch_ctrl_vooc>;
+		pinctrl-2 = <&switch_ctrl_ufcs>;
+	};
+};

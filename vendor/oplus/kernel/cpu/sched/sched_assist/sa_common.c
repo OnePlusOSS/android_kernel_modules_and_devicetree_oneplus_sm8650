@@ -42,6 +42,10 @@
 #include <../kernel/oplus_cpu/sched/frame_boost/frame_group.h>
 #endif
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
+#include "sa_ddl.h"
+#endif
+
 #if IS_ENABLED(CONFIG_OPLUS_SCHED_TUNE)
 #include <../kernel/oplus_cpu/sched/sched_tune/tune.h>
 #endif
@@ -81,14 +85,18 @@
 
 #define SCHED_MAX_CPUSET 100ULL
 #define SCHED_MAX_CPUCTL 100ULL
-#define SCHED_MAX_CFS_R 1000ULL
+#define SCHED_MAX_CFS_R 100ULL
 #define SCHED_MAX_RT_R 10ULL
+#define SCHED_MAX_DDL_ACTIVE 10ULL
+#define SCHED_MAX_DDL_TASK 10ULL
 #define SCHED_MAX_AFFINITY_MASK 1000ULL
 #define MAX_PID (32768)
 #define CPUCTL_MULT_UNIT (SCHED_MAX_CPUSET)
 #define CFS_R_MULT_UNIT (CPUCTL_MULT_UNIT * SCHED_MAX_CPUCTL)
 #define RT_R_MULT_UNIT (CFS_R_MULT_UNIT * SCHED_MAX_CFS_R)
-#define AFFINITY_MASK_MULT_UNIT (RT_R_MULT_UNIT * SCHED_MAX_RT_R)
+#define DDL_ACTIVE_MULT_UNIT (RT_R_MULT_UNIT * SCHED_MAX_RT_R)
+#define DDL_TASK_MULT_UNIT (DDL_ACTIVE_MULT_UNIT * SCHED_MAX_DDL_ACTIVE)
+#define AFFINITY_MASK_MULT_UNIT (DDL_TASK_MULT_UNIT * SCHED_MAX_DDL_TASK)
 #define AFFINITY_SET_MULT_UNIT (AFFINITY_MASK_MULT_UNIT * SCHED_MAX_AFFINITY_MASK)
 
 #define SCHED_MAX_UCLAMP_MIN 1000ULL
@@ -169,6 +177,21 @@ bool is_webview(struct task_struct *p)
 	return false;
 }
 #endif
+
+struct oplus_rq *get_oplus_rq(struct rq *rq)
+{
+	struct oplus_rq *orq = NULL;
+
+	if (!rq)
+		return NULL;
+
+	orq = (struct oplus_rq *) READ_ONCE(rq->android_oem_data1[ORQ_IDX]);
+	if (IS_ERR_OR_NULL(orq))
+		return NULL;
+
+	return orq;
+}
+EXPORT_SYMBOL_GPL(get_oplus_rq);
 
 bool is_heavy_load_top_task(struct task_struct *p)
 {
@@ -526,7 +549,7 @@ void oplus_set_ux_state_lock(struct task_struct *t, int ux_state, int inherit_ty
 #endif
 
 set:
-	orq = (struct oplus_rq *) rq->android_oem_data1;
+	orq = get_oplus_rq(rq);
 	/* BUG 6523080
 	* 1. task T is migrating from rq1 -> rq2
 	* 2. set task T ux state to 0 without locking rq1
@@ -719,7 +742,7 @@ void ux_priority_systrace_c(unsigned int cpu, struct task_struct *t)
 	}
 
 	rq = cpu_rq(cpu);
-	orq = (struct oplus_rq *) rq->android_oem_data1;
+	orq = get_oplus_rq(rq);
 	value = orq->min_vruntime;
 	if (per_cpu(prev_min_vruntime, cpu) != value) {
 		char buf[256];
@@ -755,6 +778,11 @@ void sched_info_systrace_c(unsigned int cpu, struct task_struct *p)
 	unsigned int cfs_running = cfs_rq->h_nr_running;
 	unsigned int rt_running = rt_rq->rt_nr_running;
 	struct oplus_task_struct *ots = get_oplus_task_struct(p);
+	int ddl_hint = ots && test_bit(OTS_STATE_DDL_ACTIVE, &ots->state) ? 1 : 0;
+	int ddl_task = 0;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
+	ddl_task = ots && oplus_get_task_ddl(p) ? 1 : 0;
+#endif
 	u64 s_info = 0;
 	char buf[256];
 	struct css_set *cset;
@@ -776,6 +804,8 @@ void sched_info_systrace_c(unsigned int cpu, struct task_struct *p)
 	s_info += cpu_cid * CPUCTL_MULT_UNIT;
 	s_info += cfs_running * CFS_R_MULT_UNIT;
 	s_info += rt_running * RT_R_MULT_UNIT;
+	s_info += ddl_hint * DDL_ACTIVE_MULT_UNIT;
+	s_info += ddl_task * DDL_TASK_MULT_UNIT;
 	s_info += ((u8)cpumask_bits(&p->cpus_mask)[0]) * AFFINITY_MASK_MULT_UNIT;
 	if (cpumask_weight(&p->cpus_mask) < nr_cpu_ids) {
 		if (ots && likely(test_bit(OTS_STATE_SET_AFFINITY, &ots->state))
@@ -887,7 +917,12 @@ void sched_assist_init_oplus_rq(void)
 			ux_err("failed to init oplus rq(%d)", cpu);
 			continue;
 		}
-		orq = (struct oplus_rq *) rq->android_oem_data1;
+		orq = kzalloc_node(sizeof(struct oplus_rq), GFP_KERNEL, cpu_to_node(cpu));
+		if (!orq) {
+			pr_err("alloc oplus_rq%d failed %lu\n", cpu, sizeof(struct oplus_rq));
+			continue;
+		}
+
 		orq->ux_list = RB_ROOT_CACHED;
 		orq->exec_timeline = RB_ROOT_CACHED;
 		orq->ux_list_lock = kmalloc(sizeof(spinlock_t), GFP_KERNEL);
@@ -895,6 +930,12 @@ void sched_assist_init_oplus_rq(void)
 		orq->nr_running = 0;
 		orq->min_vruntime = 0;
 		orq->load_weight = 0;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
+		orq->ddl_root = RB_ROOT_CACHED;
+		spin_lock_init(&orq->ddl_lock);
+#endif
+
 #ifdef CONFIG_LOCKING_PROTECT
 		INIT_LIST_HEAD(&orq->locking_thread_list);
 		orq->locking_list_lock = kmalloc(sizeof(spinlock_t), GFP_KERNEL);
@@ -920,6 +961,8 @@ void sched_assist_init_oplus_rq(void)
 #ifdef CONFIG_OPLUS_FEATURE_TICK_GRAN
 		orq->resched_timer = kmalloc(sizeof(struct hrtimer), GFP_KERNEL);
 #endif
+		smp_mb();
+		WRITE_ONCE(rq->android_oem_data1[ORQ_IDX], (u64) orq);
 	}
 
 #ifdef CONFIG_OPLUS_FEATURE_SCHED_SPREAD
@@ -961,29 +1004,6 @@ bool oplus_task_misfit(struct task_struct *tsk, int cpu)
 	return false;
 }
 
-inline bool test_task_is_fair(struct task_struct *task)
-{
-	DEBUG_BUG_ON(!task);
-
-	/* valid CFS priority is MAX_RT_PRIO..MAX_PRIO-1 */
-	if ((task->prio >= MAX_RT_PRIO) && (task->prio <= MAX_PRIO-1))
-		return true;
-	return false;
-}
-
-inline bool test_task_is_rt(struct task_struct *task)
-{
-	DEBUG_BUG_ON(!task);
-
-	/* valid RT priority is 0..MAX_RT_PRIO-1 */
-	if ((task->prio >= 0) && (task->prio <= MAX_RT_PRIO-1))
-		return true;
-
-	return false;
-}
-EXPORT_SYMBOL_GPL(test_task_is_fair);
-EXPORT_SYMBOL_GPL(test_task_is_rt);
-
 unsigned int ux_task_exec_limit(struct task_struct *p)
 {
 	int ux_state = oplus_get_ux_state(p);
@@ -998,6 +1018,13 @@ unsigned int ux_task_exec_limit(struct task_struct *p)
 		exec_limit *= 30;
 		return exec_limit;
 	}
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_PIPELINE)
+	if (oplus_lowend_platform_pipeline_task_ux(p)) {
+		exec_limit *= 40;
+		return exec_limit;
+	}
+#endif
 
 	exec_limit = ux_max_exec_time(ux_state);
 	return exec_limit;
@@ -1096,7 +1123,7 @@ bool is_multiple_ux(struct oplus_task_struct *ots)
 
 /*s64 __maybe_unused account_ux_runtime(struct rq *rq, struct task_struct *curr)
 {
-	struct oplus_rq *orq = (struct oplus_rq *) rq->android_oem_data1;
+	struct oplus_rq *orq = get_oplus_rq(rq);
 	struct oplus_task_struct *ots = get_oplus_task_struct(curr);
 	s64 delta;
 	unsigned int limit;
@@ -1161,7 +1188,7 @@ static void enqueue_ux_thread(struct rq *rq, struct task_struct *p)
 	if (!test_task_is_fair(p) || !oplus_rbnode_empty(&ots->ux_entry))
 		return;
 
-	orq = (struct oplus_rq *) rq->android_oem_data1;
+	orq = get_oplus_rq(rq);
 	spin_lock_irqsave(orq->ux_list_lock, irqflag);
 	smp_mb__after_spinlock();
 	if (!oplus_rbnode_empty(&ots->ux_entry)) {
@@ -1205,7 +1232,7 @@ static void dequeue_ux_thread(struct rq *rq, struct task_struct *p)
 	if (IS_ERR_OR_NULL(ots))
 		return;
 
-	orq = (struct oplus_rq *) rq->android_oem_data1;
+	orq = get_oplus_rq(rq);
 	spin_lock_irqsave(orq->ux_list_lock, irqflag);
 	smp_mb__after_spinlock();
 	if (!oplus_rbnode_empty(&ots->ux_entry)) {
@@ -1506,7 +1533,7 @@ void adjust_rt_lowest_mask(struct task_struct *p, struct cpumask *local_cpu_mask
 
 		/* unlocked access */
 		rq = cpu_rq(drop_cpu);
-		orq = (struct oplus_rq *) rq->android_oem_data1;
+		orq = get_oplus_rq(rq);
 		task = rcu_dereference(rq->curr);
 
 		if (!task || (task->flags & PF_EXITING)) {
@@ -1635,7 +1662,7 @@ EXPORT_SYMBOL(adjust_rt_lowest_mask);
 bool sa_skip_rt_sync(struct rq *rq, struct task_struct *p, bool *sync)
 {
 	int cpu = cpu_of(rq);
-	struct oplus_rq *orq = (struct oplus_rq *) rq->android_oem_data1;
+	struct oplus_rq *orq = get_oplus_rq(rq);
 	struct oplus_task_struct *ots;
 	unsigned long irqflag;
 
@@ -1680,7 +1707,7 @@ bool sa_rt_skip_ux_cpu(int cpu)
 #endif
 
 	rq = cpu_rq(cpu);
-	orq = (struct oplus_rq *) rq->android_oem_data1;
+	orq = get_oplus_rq(rq);
 	curr = rq->curr;
 
 	/* skip running ux */
@@ -1858,6 +1885,10 @@ void android_rvh_schedule_handler(void *unused, unsigned int sched_mode, struct 
 	if (unlikely(global_debug_enabled & DEBUG_SYSTRACE) && likely(prev != next))
 		LOCKING_CALL_OP(state_systrace_c, cpu_of(rq), next);
 #endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
+	oplus_task_ddl_tint(rq, next);
+#endif
 }
 EXPORT_SYMBOL(android_rvh_schedule_handler);
 
@@ -2025,8 +2056,40 @@ void android_vh_sched_setaffinity_early_handler(void *unused, struct task_struct
 #endif
 
 #if IS_ENABLED(CONFIG_OPLUS_SCHED_GROUP_OPT)
-void android_rvh_cpu_cgroup_online_handler(void *unused, struct cgroup_subsys_state *css)
+static inline void update_load_set(struct load_weight *lw, unsigned long w)
 {
-	oplus_update_tg_map(css);
+	lw->weight = w;
+	lw->inv_weight = 0;
+}
+
+void android_vh_reweight_entity_handler(void *unused, struct sched_entity *se)
+{
+	if (!(global_sched_group_enabled & 0x1))
+		return;
+
+	if (!entity_is_task(se)) {
+		struct cfs_rq *gcfs_rq = NULL;
+		struct task_group *tg = NULL;
+		struct css_tg_map *oplus_tg = NULL;
+		unsigned long group_weight = 0;
+		gcfs_rq = group_cfs_rq(se);
+		if (!gcfs_rq)
+			return;
+
+		tg = gcfs_rq->tg;
+		oplus_tg = get_oplus_tg_map(tg);
+		if (!oplus_tg || !oplus_tg->sg_info || !oplus_tg->sg_info->dynamic_share)
+			return;
+
+		group_weight = clamp(gcfs_rq->load.weight,
+			se->load.weight, scale_load(MAX_SHARES));
+		if (group_weight == se->load.weight)
+			return;
+
+		trace_printk("tg[%s] weight[%lu->%lu]\n", oplus_tg->sg_info->tg_name,
+				scale_load_down(se->load.weight), scale_load_down(group_weight));
+
+		update_load_set(&se->load, group_weight);
+	}
 }
 #endif

@@ -124,6 +124,34 @@ int oplus_panel_cmd_print(struct dsi_panel *panel, enum dsi_cmd_set_type type)
 	return 0;
 }
 
+int oplus_panel_video_mode_aod_off_cmd_switch(struct dsi_panel *panel, enum dsi_cmd_set_type *type)
+{
+	unsigned int refresh_rate = 0;
+
+	if (!panel->oplus_priv.ramless_aod_mode_cmd_switch_support) {
+		LCD_DEBUG("video mode 30hz aod not enabled, no need to update aod type\n");
+		return 0;
+	}
+
+	OPLUS_LCD_TRACE_BEGIN("oplus_panel_video_mode_aod_off_cmd_switch");
+
+	refresh_rate = panel->cur_mode->timing.refresh_rate;
+	if (*type == DSI_CMD_SET_NOLP) {
+		if (refresh_rate == 60) {
+			*type = DSI_CMD_SET_NOLP_60HZ;
+		} else if (refresh_rate == 90) {
+			*type = DSI_CMD_SET_NOLP_90HZ;
+		} else if (refresh_rate == 120) {
+			*type = DSI_CMD_SET_NOLP_120HZ;
+		}  else if (refresh_rate == 144) {
+			*type = DSI_CMD_SET_NOLP_144HZ;
+		}
+	}
+
+	OPLUS_LCD_TRACE_END("oplus_panel_video_mode_aod_off_cmd_switch");
+	return 0;
+}
+
 int oplus_panel_cmd_switch(struct dsi_panel *panel, enum dsi_cmd_set_type *type)
 {
 	enum dsi_cmd_set_type type_store = *type;

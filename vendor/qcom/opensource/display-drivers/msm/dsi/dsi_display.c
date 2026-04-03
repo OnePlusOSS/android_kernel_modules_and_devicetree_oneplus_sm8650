@@ -350,8 +350,10 @@ error:
 #endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 
 #ifdef OPLUS_FEATURE_DISPLAY
-	if (!rc)
+	if (!rc && !oplus_ofp_get_aod_state()) {
+		//DSI_INFO("full_screen_aod:bl_temp=%d\n",(u32)bl_temp);
 		oplus_panel_backlight_notifier(panel, (u32)bl_temp);
+	}
 
 	if (oplus_bl_print_window > 0)
 		oplus_bl_print_window--;
@@ -876,9 +878,10 @@ static void dsi_display_set_cmd_tx_ctrl_flags(struct dsi_display *display,
 			flags |= DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
 #ifdef OPLUS_FEATURE_DISPLAY
 			//MIPI_DCS_SET_DISPLAY_BRIGHTNES
-			if ((display->panel->oplus_priv.vidmode_backlight_async_wait_enable)
-				&& (atomic_read(&display->panel->vidmode_backlight_async_wait))
-				&& (((unsigned char*)(msg->tx_buf))[0] == 0x51)) {
+			if ((((display->panel->oplus_priv.vidmode_backlight_async_wait_enable)
+				&& (atomic_read(&display->panel->vidmode_backlight_async_wait)))
+					||(display->panel->oplus_priv.aod_backlight_async))
+						&& (((unsigned char*)(msg->tx_buf))[0] == 0x51)) {
 				flags |= DSI_CTRL_CMD_ASYNC_WAIT;
 			}
 #endif /* OPLUS_FEATURE_DISPLAY */

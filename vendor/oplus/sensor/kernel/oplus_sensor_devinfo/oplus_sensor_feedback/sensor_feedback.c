@@ -94,6 +94,10 @@ struct sensor_fb_conf g_fb_conf[] = {
 	{GYRO_ORIGIN_DATA_TO_ZERO_ID, "device_gyro_to_zero", SENSOR_DEBUG_DEVICE_TYPE},
 	{GYRO_CALI_DATA_ID, "device_gyro_cali_data", SENSOR_DEBUG_DEVICE_TYPE},
 	{GYRO_DATA_BLOCK_ID, "device_gyro_data_block", SENSOR_DEBUG_DEVICE_TYPE},
+	{GYRO_OTC_K_ID, "device_gyro_otc_k", SENSOR_DEVICE_TYPE},
+	{GYRO_OTC_B_ID, "device_gyro_otc_b", SENSOR_DEVICE_TYPE},
+	{GYRO_OTC_BIAS_ID, "device_gyro_otc_bias", SENSOR_DEVICE_TYPE},
+	{GYRO_OTC_TEMP_ID, "device_gyro_otc_temp", SENSOR_DEVICE_TYPE},
 
 	{MAG_INIT_FAIL_ID, "device_mag_init_fail", SENSOR_DEVICE_TYPE},
 	{MAG_I2C_ERR_ID, "device_mag_i2c_err", SENSOR_DEVICE_TYPE},

@@ -8,12 +8,13 @@
 #include <linux/seq_file.h>
 #include <linux/async.h>
 #include <trace/events/filemap.h>
-
-#define TASK_COMM_LEN 16
-#define MAX_PROCESSES 5
+#include <soc/oplus/boot/oplus_project.h>
 #define PROC_NAME "io_file_record"
 #define TASK_COMM_LEN 16
+#define MAX_PROCESSES_ENTRY 32
 
+typedef int (*tracing_is_on_t)(void);
+static tracing_is_on_t tracing_is_on_dup = NULL;
 #define FOR_EACH_INTEREST(i) \
 	for (i = 0; i < sizeof(interests) / sizeof(struct tracepoints_table); \
 	i++)
@@ -29,8 +30,6 @@ do { \
 	tracing_mark_write(buf); \
 } while (0)
 
-static char *process_names[MAX_PROCESSES];
-static int process_count = 0;
 static spinlock_t node_lock;
 
 struct tracepoints_table {
@@ -40,52 +39,142 @@ struct tracepoints_table {
 	bool init;
 };
 
+bool fuzzy_match(const char *pattern, const char *str) {
+	if (pattern == NULL || str == NULL) {
+		return false;
+	}
+	int pattern_len = strlen(pattern);
+	int str_len = strlen(str);
+
+	if (str_len < pattern_len) {
+		return false;
+	}
+
+	return strncmp(str, pattern, pattern_len) == 0;
+}
+
 static noinline int tracing_mark_write(const char *buf)
 {
 	trace_printk(buf);
 	return 0;
 }
 
-static char *__dentry_name(struct dentry *dentry, char *name)
-{
-	char *p = dentry_path_raw(dentry, name, PATH_MAX);
-	char *root;
-	size_t len;
+struct process_entry {
+	const char *process_names;
+	unsigned long repeat_count;
+	unsigned long last_ino;
+};
 
-	root = dentry->d_sb->s_fs_info;
-	len = strlen(root);
-	if (IS_ERR(p)) {
-		__putname(name);
-		return NULL;
+static struct process_entry process_table[MAX_PROCESSES_ENTRY];
+static int current_index = 0;
+
+struct process_entry *find_process_entry(const char *name) {
+	int i;
+
+	for (i = 0; i < current_index; i++) {
+		if (process_table[i].process_names &&
+			fuzzy_match(process_table[i].process_names, name)) {
+				return &process_table[i];
+		}
 	}
-
-	/*
-	 * This function relies on the fact that dentry_path_raw() will place
-	 * the path name at the end of the provided buffer.
-	 */
-	WARN_ON(p + strlen(p) + 1 != name + PATH_MAX);
-
-	strlcpy(name, root, PATH_MAX);
-	if (len > p - name) {
-		__putname(name);
-		return NULL;
-	}
-
-	if (p > name + len)
-		strcpy(name + len, p);
-
-	return name;
+	return NULL;
 }
 
-static char *dentry_name(struct dentry *dentry)
-{
-	char *name = kmem_cache_alloc(names_cachep, GFP_ATOMIC);
+struct process_entry *add_process_entry(const char *name) {
+	struct process_entry *entry;
 
-	if (!name) {
+	entry = find_process_entry(name);
+	if (entry)
+		return entry;
+
+	if (current_index >= ARRAY_SIZE(process_table)) {
+		printk(KERN_ERR "Process table is full, cannot add %s\n", name);
 		return NULL;
 	}
 
-	return __dentry_name(dentry, name);
+	entry = &process_table[current_index];
+	entry->process_names =  kstrdup(name, GFP_KERNEL);
+	entry->repeat_count = 1;
+	entry->last_ino = 0;
+
+	current_index++;
+	return entry;
+}
+
+void del_process_entry(const char *name) {
+	int i, j;
+
+	for (i = 0; i < current_index; i++) {
+		if (process_table[i].process_names &&
+			strcmp(process_table[i].process_names, name) == 0) {
+			kfree(process_table[i].process_names);
+			for (j = i; j < current_index - 1; j++) {
+				process_table[j] = process_table[j + 1];
+			}
+
+			current_index--;
+
+			if (current_index < ARRAY_SIZE(process_table)) {
+				process_table[current_index].process_names = NULL;
+			}
+
+			return;
+		}
+	}
+}
+
+static void init_record_process_names(void) {
+	int i;
+	struct process_entry *entry;
+
+	const char *process_names[] = {
+		"droid.ugc.aweme",
+		".ugc.aweme.lite",
+		"nmeng.pinduoduo",
+		"com.tencent.mm",
+		".smile.gifmaker",
+		"kuaishou.nebula",
+		"id.AlipayGphone",
+		"m.taobao.taobao",
+		"encent.mobileqq",
+		"baidu.searchbox",
+		"utonavi.minimap",
+		"ngdong.app.mall",
+		"com.xingin.xhs",
+		"id.article.news",
+		"utonavi.minimap",
+		"ficationmanager",
+		"ndroid.systemui",
+		"om.oplus.camera",
+		"loros.gallery3d",
+		"oloros.launcher",
+		"m.heytap.market",
+		"ros.filemanager",
+		"assistantscreen",
+		"ndroid.settings",
+		"ndroid.launcher",
+		"[GT]ColdPool#",
+	};
+
+	for (i = 0; i < ARRAY_SIZE(process_names); i++) {
+		entry = add_process_entry(process_names[i]);
+		if (!entry)
+			printk(KERN_ERR "Failed to add process: %s\n", process_names[i]);
+	}
+}
+
+
+void clear_all_process_entries(void) {
+	int i;
+
+	for (i = 0; i < current_index; i++) {
+		if (process_table[i].process_names) {
+			kfree(process_table[i].process_names);
+			process_table[i].process_names = NULL;
+		}
+	}
+
+	current_index = 0;
 }
 
 static void put_dentry(void *data, async_cookie_t cookie)
@@ -94,66 +183,42 @@ static void put_dentry(void *data, async_cookie_t cookie)
 	dput(dentry);
 }
 
-static char *inode_name(struct inode *ino)
-{
-	struct dentry *dentry;
-	char *name;
-
-	dentry = d_find_alias(ino);
-	if (!dentry)
-		return NULL;
-
-	name = dentry_name(dentry);
-	async_schedule(put_dentry, dentry);
-
-	return name;
-}
-
-static bool match_group_leader(void)
-{
-	int i;
-	struct task_struct *leader = current->group_leader;
-	unsigned long flags;
-	bool result = false;
-
-	spin_lock_irqsave(&node_lock, flags);
-	if (!leader) {
-		spin_unlock_irqrestore(&node_lock, flags);
-		return false;
-	}
-
-	for (i = 0; i < process_count; i++) {
-		if (process_names[i] && strcmp(process_names[i], leader->comm) == 0) {
-			result = true;
-			break;
-		}
-	}
-	spin_unlock_irqrestore(&node_lock, flags);
-
-	return result;
-}
-
 static void file_map_track_handler(void *ignore, struct folio *folio)
 {
 	struct address_space *mapping = folio->mapping;
-	char *name;
-	dev_t s_dev;
+	struct dentry *dentry;
+	struct process_entry *entry;
+	unsigned long flags;
 
-	if (!match_group_leader())
+	if (!tracing_is_on_dup()) {
 		return;
+	}
+
+	spin_lock_irqsave(&node_lock, flags);
+	entry = find_process_entry(current->comm);
+	if (!entry) {
+		spin_unlock_irqrestore(&node_lock, flags);
+		return;
+	}
+	spin_unlock_irqrestore(&node_lock, flags);
+
+	if(!mapping->host->i_ino)
+		return;
+	if (mapping->host->i_ino == entry->last_ino) {
+		entry->repeat_count++;
+		return;
+	}
+	entry->last_ino = mapping->host->i_ino;
 
 	if (mapping->host->i_sb) {
-		name = inode_name(mapping->host);
-		if (name) {
-			tracing_mark("%d|file_record %s ofs=%lu\n", current->tgid, name,
-				folio->index << PAGE_SHIFT);
-			__putname(name);
-		} else {
-			s_dev = mapping->host->i_sb->s_dev;
-			tracing_mark("%d|file_record s_dev=%d ino=%lu ofs=%lu\n",
-				current->tgid, s_dev, mapping->host->i_ino,
-				 folio->index << PAGE_SHIFT);
-		}
+		dentry = d_find_alias(mapping->host);
+		if (!dentry)
+			return;
+
+		tracing_mark("%d|file_record %s order=%u repeat_count=%lu\n", current->tgid, dentry->d_name.name,
+				folio_order(folio), entry->repeat_count);
+		entry->repeat_count = 1;
+		async_schedule(put_dentry, dentry);
 	}
 }
 
@@ -221,9 +286,9 @@ static ssize_t file_record_proc_read(struct file *file, char __user *buf,
 	int i;
 	unsigned long flags;
 
-	for (i = 0; i < process_count; i++) {
-		if (process_names[i]) {
-			len += strlen(process_names[i]) + 1;
+	for (i = 0; i < current_index; i++) {
+		if (process_table[i].process_names) {
+			len += strlen(process_table[i].process_names) + 1;
 		}
 	}
 
@@ -232,16 +297,19 @@ static ssize_t file_record_proc_read(struct file *file, char __user *buf,
 		return -ENOMEM;
 	}
 
+	buffer[0] = '\0';
 	len = 0;
+
 	spin_lock_irqsave(&node_lock, flags);
-	for (i = 0; i < process_count; i++) {
-		if (process_names[i]) {
-			len += snprintf(buffer + len, strlen(process_names[i]) + 2,
-				"%s\n", process_names[i]);
+
+	for (i = 0; i < current_index; i++) {
+		if (process_table[i].process_names) {
+			len += sprintf(buffer + len, "%s\n", process_table[i].process_names);
 		}
 	}
 
 	spin_unlock_irqrestore(&node_lock, flags);
+
 	if (*ppos >= len) {
 		kfree(buffer);
 		return 0;
@@ -268,6 +336,11 @@ static ssize_t file_record_proc_write(struct file *file, const char __user *buf,
 	char *cmd;
 	char *name;
 	unsigned long flags;
+	int ret = 0;
+	struct process_entry *entry;
+
+	if (count <= 0)
+		return -EINVAL;
 
 	buffer = kmalloc(count + 1, GFP_KERNEL);
 	if (!buffer) {
@@ -282,58 +355,62 @@ static ssize_t file_record_proc_write(struct file *file, const char __user *buf,
 	buffer[count] = '\0';
 	orig = buffer;
 
-	if (count > 0 && buffer[count-1] == '\n')
+	if (buffer[count-1] == '\n')
 		buffer[count-1] = '\0';
 
 	cmd = strsep(&buffer, " ");
 	name = strsep(&buffer, " ");
-	spin_lock_irqsave(&node_lock, flags);
-	if (!strcmp(cmd, "-add") && name) {
-		if (process_count < MAX_PROCESSES) {
-			process_names[process_count] = kmalloc(TASK_COMM_LEN, GFP_ATOMIC);
-			if (!process_names[process_count]) {
-				spin_unlock_irqrestore(&node_lock, flags);
-				kfree(orig);
-				return -ENOMEM;
-			}
-			strncpy(process_names[process_count], name, TASK_COMM_LEN - 1);
-			process_names[process_count][TASK_COMM_LEN - 1] = '\0';
-			process_count++;
-		} else {
-			spin_unlock_irqrestore(&node_lock, flags);
-			kfree(orig);
-			return -ENOSPC;
-		}
-	} else if (!strcmp(cmd, "-del") && name) {
-		int i;
-		for (i = 0; i < process_count; i++) {
-			if (process_names[i] && strcmp(process_names[i], name) == 0) {
-				kfree(process_names[i]);
-				process_names[i] = NULL;
-				for (; i < process_count - 1; i++) {
-					process_names[i] = process_names[i + 1];
-				}
-				process_count--;
-				break;
-			}
-		}
-	} else if (!strncmp(cmd, "-clear", sizeof("-clear") - 1)) {
-		int i;
-		for (i = 0; i < process_count; i++) {
-			if (process_names[i]) {
-				kfree(process_names[i]);
-				process_names[i] = NULL;
-			}
-		}
-		process_count = 0;
-	} else {
-		spin_unlock_irqrestore(&node_lock, flags);
-		kfree(orig);
-		return -EINVAL;
+
+	if (!cmd || !name) {
+		ret = -EINVAL;
+		goto out;
 	}
+	spin_lock_irqsave(&node_lock, flags);
+
+	if (!strcmp(cmd, "-add")) {
+		if (current_index < MAX_PROCESSES_ENTRY) {
+			entry = add_process_entry(name);
+			if (!entry) {
+				printk(KERN_ERR "Failed to add process: %s\n", name);
+				goto unlock;
+			}
+		} else {
+			ret = -ENOSPC;
+			goto unlock;
+		}
+	} else if (!strcmp(cmd, "-del")) {
+		del_process_entry(name);
+	} else if (!strcmp(cmd, "-clear")) {
+		clear_all_process_entries();
+	} else {
+		ret = -EINVAL;
+		goto unlock;
+	}
+
+unlock:
 	spin_unlock_irqrestore(&node_lock, flags);
+out:
 	kfree(orig);
-	return count;
+	return ret ?: count;
+}
+
+static void trace_symbol_init(void)
+{
+	int ret;
+	struct kprobe tracing_is_on_kp = {
+		.symbol_name = "tracing_is_on"
+	};
+
+	ret = register_kprobe(&tracing_is_on_kp);
+	if (ret) {
+		pr_err("get tracing_is_on_kp addr from kprobe failed! ret=%d\n", ret);
+		return;
+	}
+	tracing_is_on_dup = (tracing_is_on_t)tracing_is_on_kp.addr;
+	pr_info("suceesfully get tracing_is_on addr:0x%px\n", tracing_is_on_dup);
+	unregister_kprobe(&tracing_is_on_kp);
+
+	return;
 }
 
 static const struct proc_ops file_record_proc_fops = {
@@ -357,6 +434,10 @@ static int __init oplus_file_record_init(void)
 {
 	spin_lock_init(&node_lock);
 
+	trace_symbol_init();
+
+	init_record_process_names();
+
 	if (install_tracepoints())
 		create_proc_node();
 
@@ -365,15 +446,11 @@ static int __init oplus_file_record_init(void)
 
 static void __exit oplus_file_record_exit(void)
 {
-	int i;
 	unsigned long flags;
 
 	spin_lock_irqsave(&node_lock, flags);
 
-	for (i = 0; i < process_count; i++) {
-		kfree(process_names[i]);
-		process_names[i] = NULL;
-	}
+	clear_all_process_entries();
 
 	spin_unlock_irqrestore(&node_lock, flags);
 	remove_proc_entry(PROC_NAME, NULL);

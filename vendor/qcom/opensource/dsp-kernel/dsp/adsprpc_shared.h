@@ -86,7 +86,6 @@
 #define CDSP1_DOMAIN_ID (4)
 
 #define NUM_CHANNELS	5	/* adsp, mdsp, slpi, cdsp, cdsp1*/
-#define NUM_SESSIONS	14	/* max 11 compute, 3 cpz */
 
 /* Default maximum sessions allowed per process */
 #define DEFAULT_MAX_SESS_PER_PROC 4
@@ -937,6 +936,8 @@ struct fastrpc_file {
 	bool multi_session_support;
 	/* Flag to indicate session info is set */
 	bool set_session_info;
+	struct file *filp;
+	char name[TASK_COMM_LEN];
 };
 
 int fastrpc_internal_invoke(struct fastrpc_file *fl, uint32_t mode,

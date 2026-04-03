@@ -19,6 +19,8 @@ static struct task_struct *prime_task = NULL;
 static struct oplus_task_struct *prime_ots = NULL;
 static pid_t prime_tgid = 0;
 static unsigned int pipeline_task_nr = 0;
+static int lowend_ux_pipeline_pids[MAX_PIPELINE_TASK_NUM] = {-1, -1, -1, -1, -1, -1};
+static unsigned int lowend_ux_pipeline_task_nr = 0;
 static DEFINE_RAW_SPINLOCK(pipeline_lock);
 
 #if IS_ENABLED(CONFIG_SCHED_WALT)
@@ -96,6 +98,19 @@ int oplus_get_task_pipeline_cpu(struct task_struct *task)
 	return -1;
 }
 EXPORT_SYMBOL_GPL(oplus_get_task_pipeline_cpu);
+
+bool oplus_lowend_platform_pipeline_task_ux(struct task_struct *task)
+{
+	if (lowend_ux_pipeline_task_nr > 0 && task) {
+		unsigned int nr = lowend_ux_pipeline_task_nr;
+		for (int i = 0; i < nr && i < MAX_PIPELINE_TASK_NUM; i++) {
+			if (task->pid == lowend_ux_pipeline_pids[i])
+				return true;
+		}
+	}
+
+	return false;
+}
 
 #if IS_ENABLED(CONFIG_SCHED_WALT)
 static inline unsigned long allowed_low_latency_util(int pipeline_cpu)
@@ -758,6 +773,49 @@ static inline void check_prime_cpu_num(void)
 
 #define UI_TASK_BASE 200
 #define TOP_TSAK_BASE 300
+#define LOWEND_UX_TASK_BASE 400
+
+static bool check_cpu_valid(int cpu)
+{
+	return (cpu == -1) ||
+		(cpu > 0 && cpu < nr_cpu_ids) ||
+		(cpu == -2) ||
+		(cpu > UI_TASK_BASE && cpu < UI_TASK_BASE + nr_cpu_ids) ||
+		(cpu == -3) ||
+		(cpu > TOP_TSAK_BASE && cpu < TOP_TSAK_BASE + nr_cpu_ids) ||
+		(cpu == -4) ||
+		(cpu > LOWEND_UX_TASK_BASE && cpu < LOWEND_UX_TASK_BASE + nr_cpu_ids);
+}
+
+static int pipeline_task_set_ux_state(int cpu, struct task_struct *task)
+{
+	if (cpu == -4 || cpu > LOWEND_UX_TASK_BASE) {
+		if (cpu > LOWEND_UX_TASK_BASE)
+			cpu -= LOWEND_UX_TASK_BASE;
+		oplus_set_ux_state_lock(task, PIPELINE_TASK_UX_STATE, -1, true);
+		lowend_ux_pipeline_pids[lowend_ux_pipeline_task_nr] = task->pid;
+		lowend_ux_pipeline_task_nr++;
+		return cpu;
+	}
+
+	if (cpu == -3 || cpu > TOP_TSAK_BASE) {
+		if (cpu > TOP_TSAK_BASE)
+			cpu -= TOP_TSAK_BASE;
+		oplus_set_ux_state_lock(task, PIPELINE_TOP_TASK_UX_STATE, -1, true);
+		return cpu;
+	}
+
+	if (cpu == -2 || cpu > UI_TASK_BASE) {
+		if (cpu > UI_TASK_BASE)
+			cpu -= UI_TASK_BASE;
+		oplus_set_ux_state_lock(task, PIPELINE_UI_TASK_UX_STATE, -1, true);
+		return cpu;
+	}
+
+	/* (cpu == -1) || (cpu > 0) */
+	oplus_set_ux_state_lock(task, PIPELINE_TASK_UX_STATE, -1, true);
+	return cpu;
+}
 
 static ssize_t pipeline_pids_proc_write(struct file *file,
 			const char __user *buf, size_t count, loff_t *ppos)
@@ -783,9 +841,7 @@ static ssize_t pipeline_pids_proc_write(struct file *file,
 		return -EINVAL;
 
 	for (i = 0; i < MAX_PIPELINE_TASK_NUM; i++) {
-		if (!(((cpus[i] == -1) || ((cpus[i] > 0) && (cpus[i] < nr_cpu_ids))) ||
-			((cpus[i] == -2) || ((cpus[i] > UI_TASK_BASE) && (cpus[i] < UI_TASK_BASE + nr_cpu_ids))) ||
-			((cpus[i] == -3) || ((cpus[i] > TOP_TSAK_BASE) && (cpus[i] < TOP_TSAK_BASE + nr_cpu_ids)))))
+		if (!check_cpu_valid(cpus[i]))
 			return -EINVAL;
 	}
 
@@ -829,6 +885,12 @@ static ssize_t pipeline_pids_proc_write(struct file *file,
 
 		systrace_pids_cpus_printk();
 	}
+
+	for (i = 0; i < MAX_PIPELINE_TASK_NUM; i++) {
+		lowend_ux_pipeline_pids[i] = -1;
+	}
+	lowend_ux_pipeline_task_nr = 0;
+
 	raw_spin_unlock_irqrestore(&pipeline_lock, flags);
 
 	if (!cpumask_empty(&cpus_for_pipeline)) {
@@ -852,17 +914,7 @@ static ssize_t pipeline_pids_proc_write(struct file *file,
 					pipeline_task[i] = task;
 					pipeline_ots[i] = ots;
 
-					if ((cpus[i] == -3) || (cpus[i] > TOP_TSAK_BASE)) {
-						if (cpus[i] > TOP_TSAK_BASE)
-							cpus[i] -= TOP_TSAK_BASE;
-						oplus_set_ux_state_lock(task, PIPELINE_TOP_TASK_UX_STATE, -1, true);
-					} else if ((cpus[i] == -2) || (cpus[i] > UI_TASK_BASE)) {
-						if (cpus[i] > UI_TASK_BASE)
-							cpus[i] -= UI_TASK_BASE;
-						oplus_set_ux_state_lock(task, PIPELINE_UI_TASK_UX_STATE, -1, true);
-					} else { /* (cpus[i] == -1) || (cpus[i] > 0) */
-						oplus_set_ux_state_lock(task, PIPELINE_TASK_UX_STATE, -1, true);
-					}
+					cpus[i] = pipeline_task_set_ux_state(cpus[i], task);
 
 					if (cpus[i] > 0)
 						atomic_set(&ots->pipeline_cpu, cpus[i]);

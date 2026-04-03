@@ -62,11 +62,11 @@ static int g_vooc_current_table[] = {
 	2000, 2000
 };
 
-#define CHECK_MAX_TIME_MS		2000
 #define HW_DETECT_CHECK_TIME_MS		50
 #define HW_DETECT_CHECK_COUNT		3
-#define DISCONNECT_TIME_THR_MS		1500
+#define DISCONNECT_TIME_THR_MS		3000
 #define NOT_ABNORMAL_DIS_COUNT_THR	3
+#define CHECK_MAX_TIME_MS		((DISCONNECT_TIME_THR_MS) + 500)
 
 static bool is_vooc_curr_votable_available(struct vooc_disconnect_detection *vdd)
 {

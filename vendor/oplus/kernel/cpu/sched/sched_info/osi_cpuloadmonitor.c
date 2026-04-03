@@ -769,7 +769,7 @@ static void osi_notify_cpuset(bool is_inital)
 			cpumask_lbg = cpumask_bits(grp_mask)[0];
 		if (!strcmp(child_css->cgroup->kn->name, "h-background"))
 			cpumask_hbg = cpumask_bits(grp_mask)[0];
-		if (is_inital && !strcmp(child_css->cgroup->kn->name, "background")) {
+		if (!strcmp(child_css->cgroup->kn->name, "background")) {
 			cpumask_xor(&hfg_mask, cpu_possible_mask, grp_mask);
 			cpumask_hfg = cpumask_bits(&hfg_mask)[0];
 			cpumask_bg = cpumask_bits(grp_mask)[0];

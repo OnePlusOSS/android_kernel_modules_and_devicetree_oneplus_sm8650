@@ -53,7 +53,7 @@ static inline int __hbp_spi_alloc_mem(struct spi_transfer **spi_xfer,
 		if (!cache->tx_buf) {
 			cache->tx_count = 0;
 			ret = -ENOMEM;
-			hbp_err("Failed to malloc tx memory\n");
+			hbp_err("Failed to malloc tx memory, tx_size %lu.\n", tx_size);
 			goto err_exit;
 		}
 		cache->tx_count = tx_size;
@@ -69,7 +69,7 @@ static inline int __hbp_spi_alloc_mem(struct spi_transfer **spi_xfer,
 		if (!cache->rx_buf) {
 			cache->rx_count = 0;
 			ret = -ENOMEM;
-			hbp_err("Failed to malloc rx memory\n");
+			hbp_err("Failed to malloc rx memory, rx_size %lu.\n", rx_size);
 			goto err_exit;
 		}
 		cache->rx_count = rx_size;
@@ -280,6 +280,10 @@ static int __hbp_spi_sync(struct spi_device *spi, u8 *tx, u8 *rx, u32 len, struc
 				  &rx_buf,
 				  len,
 				  &param->cache);
+	if (ret < 0) {
+		hbp_err("Failed to alloc memory.\n");
+		goto alloc_fail;
+	}
 
 	if (tx) {
 		memcpy(tx_buf, tx, len);
@@ -300,7 +304,7 @@ static int __hbp_spi_sync(struct spi_device *spi, u8 *tx, u8 *rx, u32 len, struc
 	}
 
 	memcpy(rx, rx_buf, len);
-
+alloc_fail:
 	return ret;
 }
 
@@ -308,8 +312,9 @@ static int __hbp_spi_sync(struct spi_device *spi, u8 *tx, u8 *rx, u32 len, struc
 #define spi_master			spi_controller
 #endif
 
-static inline bool hbp_spi_bus_ready(struct spi_device *spi_dev)
+static inline bool hbp_spi_bus_ready(struct spi_bus *bus)
 {
+	struct spi_device *spi_dev = bus->spi_dev;
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0))
 	struct spi_master *master = spi_dev->controller;
 #else
@@ -321,6 +326,15 @@ static inline bool hbp_spi_bus_ready(struct spi_device *spi_dev)
 
 	if (!master) {
 		return true;
+	}
+
+	if (!bus->bus_ready) {
+		wait_event_interruptible_timeout(bus->spi_wait,
+						 bus->bus_ready,
+						 msecs_to_jiffies(bus->irq_need_dev_resume_time));
+		if (bus->bus_ready) {
+			return false;
+		}
 	}
 
 	ctrl_dev = master->dev.parent;
@@ -352,7 +366,7 @@ static int hbp_spi_sync(void *ops, uint8_t *tx, uint8_t *rx, size_t len)
 		return -ENODEV;
 	}
 
-	if (hbp_spi_bus_ready(bus->spi_dev)) {
+	if (hbp_spi_bus_ready(bus)) {
 		return -EBUSY;
 	}
 
@@ -374,7 +388,7 @@ static int hbp_spi_write_block(void *ops, uint8_t *wbuf, size_t len)
 		return -ENODEV;
 	}
 
-	if (hbp_spi_bus_ready(bus->spi_dev)) {
+	if (hbp_spi_bus_ready(bus)) {
 		return -EBUSY;
 	}
 
@@ -396,7 +410,7 @@ static int hbp_spi_read_block(void *ops, uint8_t *rbuf, size_t len)
 		return -ENODEV;
 	}
 
-	if (hbp_spi_bus_ready(bus->spi_dev)) {
+	if (hbp_spi_bus_ready(bus)) {
 		return -EBUSY;
 	}
 
@@ -544,6 +558,8 @@ static int hbp_spi_probe(struct spi_device *spi_dev)
 	}
 
 	bus->spi_dev = spi_dev;
+	bus->bus_ready = true;
+	init_waitqueue_head(&bus->spi_wait);
 
 	mutex_init(&bus->mtx);
 	bus->spi_ops.read_block = hbp_spi_read_block;
@@ -560,6 +576,12 @@ static int hbp_spi_probe(struct spi_device *spi_dev)
 		bus->spi_dev->cs_setup.unit = cs_setup[1];
 		hbp_info("cs_setup %d %d\n", cs_setup[0], cs_setup[1]);
 	}
+	ret = of_property_read_u32(np, "irq_need_dev_resume_time", &(bus->irq_need_dev_resume_time));
+	if (ret) {
+		hbp_info("irq_need_dev_resume_time is not specified\n");
+		bus->irq_need_dev_resume_time = 50;
+	}
+	hbp_info("irq_need_dev_resume_time is %d ms\n", bus->irq_need_dev_resume_time);
 
 #ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
 #else

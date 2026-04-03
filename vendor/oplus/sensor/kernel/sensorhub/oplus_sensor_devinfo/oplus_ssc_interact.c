@@ -204,6 +204,11 @@ static ssize_t sf_device_write(struct file *file, const char __user * buf,
 	char tmp[256] = {0};
 	struct ssc_interactive *ssc_cxt = g_ssc_cxt;
 
+
+	if (count >= sizeof(tmp)) {
+		DEVINFO_LOG("sf_device_write: Input error count: %lu\n", count);
+		return -EINVAL;
+	}
 	if (copy_from_user(tmp, buf, count)) {
 		DEVINFO_LOG("sf_device_write: Failed to copy data from user\n");
 		return -EFAULT;
