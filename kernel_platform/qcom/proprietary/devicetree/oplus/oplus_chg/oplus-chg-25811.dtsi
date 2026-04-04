@@ -1,0 +1,36 @@
+#include <dt-bindings/iio/qcom,spmi-adc5-gen3-pmxr2230.h>
+#include <dt-bindings/iio/qcom,spmi-adc5-gen3-pmiv0104.h>
+#include <dt-bindings/iio/qcom,spmi-adc5-gen3-pmk8550.h>
+#include "oplus-chg-8650.h.dtsi"
+
+&soc {
+	oplus_virtual_dpdm_switch: oplus,virtual_dpdm_switch {
+		compatible = "oplus,virtual_dpdm_switch";
+
+		oplus,ic_type = <OPLUS_CHG_IC_MISC>;
+		oplus,ic_index = <0>;
+
+		oplus,use_audio_switch;
+	};
+};
+
+#include "oplus-chg-prado-common.dtsi"
+#include "oplus-chg-prado-sili.dtsi"
+#include "ufcs/oplus-chg-prado-ufcs.dtsi"
+#include "oplus-chg-prado-cn-in-curve.dtsi"
+
+&oplus_cpa {
+	oplus,protocol_list = <CHG_PROTOCOL_UFCS  80
+				CHG_PROTOCOL_VOOC 80
+				CHG_PROTOCOL_PPS  55
+				CHG_PROTOCOL_PD   18
+				CHG_PROTOCOL_QC   18>;
+	oplus,default_protocol_list = <CHG_PROTOCOL_UFCS
+				CHG_PROTOCOL_VOOC
+				CHG_PROTOCOL_PPS
+				CHG_PROTOCOL_PD>;
+};
+
+&oplus_virtual_gauge {
+	oplus,batt_capacity_mah = <9000>;
+};

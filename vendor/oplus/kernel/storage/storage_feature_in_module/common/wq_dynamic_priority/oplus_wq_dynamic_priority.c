@@ -99,13 +99,8 @@ static int handler_worker_attach_to_pool_pre(struct kprobe *p, struct pt_regs *r
 
     if ((worker && worker->task) && (pool && pool->attrs)) {
         if (pool->attrs->nice == VIRTUAL_KWORKER_NICE) {
-        #ifdef CONFIG_OPLUS_SYSTEM_KERNEL_QCOM
             oplus_set_ux_state_lock(worker->task, SA_TYPE_LIGHT, -1, true);
             printk(KERN_INFO "worker_attach_to_pool:comm:%s set UX and set nice to %d\n", worker->task->comm, MIN_NICE);
-        #else
-            sched_set_fifo_low(worker->task);
-            printk(KERN_INFO "worker_attach_to_pool:comm:%s set RT and set nice to %d\n", worker->task->comm, MIN_NICE);
-        #endif /* CONFIG_OPLUS_SYSTEM_KERNEL_QCOM */
             set_user_nice(worker->task, MIN_NICE);
         }
     }

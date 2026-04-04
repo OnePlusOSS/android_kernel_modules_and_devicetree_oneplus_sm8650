@@ -40,6 +40,7 @@ enum err_topic_item {
 	ERR_ITEM_STATE_KEEP_ABNORMAL,
 	ERR_ITEM_USBIN_ABNORMAL,
 	ERR_ITEM_SEC_IC_MEM_INFO,
+	ERR_ITEM_SHUTDOWN_VOL,
 };
 
 enum oplus_chg_track_mcu_voocphy_break_code {

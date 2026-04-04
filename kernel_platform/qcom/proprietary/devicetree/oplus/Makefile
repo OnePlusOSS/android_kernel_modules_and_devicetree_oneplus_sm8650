@@ -22,7 +22,8 @@ OPLUS_PINEAPPLE_BOARDS += waffle-22825-pineapple-overlay.dtbo\
                           giulia-23867-pineapple-overlay.dtbo\
                           lexus-24881-cliffs-overlay.dtbo\
                           lexus-24882-cliffs-overlay.dtbo\
-                          lexus-24882-EU-cliffs-overlay.dtbo
+                          lexus-24882-EU-cliffs-overlay.dtbo\
+                          prado-25811-volcano-overlay.dtbo
 dtb-y += $(OPLUS_PINEAPPLE_BOARDS) $(PINEAPPLE_BASE_DTB) $(PINEAPPLE_APQ_BASE_DTB)
 
 always-y	:= $(dtb-y)

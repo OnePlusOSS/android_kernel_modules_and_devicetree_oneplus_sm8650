@@ -37,6 +37,7 @@
 #define DW9827C_ID_DATA 0x1C
 #define DW9827C_PID_LENGTH 44
 
+#define DW9800_SLAVE_ADDR 0x18
 
 
 int32_t oplus_cam_actuator_power_up(struct cam_actuator_ctrl_t *a_ctrl);

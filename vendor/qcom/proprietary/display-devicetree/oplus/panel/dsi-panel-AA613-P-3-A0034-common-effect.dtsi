@@ -1,0 +1,163 @@
+/***************************************************************
+** Copyright (C), 2022, OPLUS Mobile Comm Corp., Ltd
+**
+** Description : Display effect common config
+** Version : 1.0
+** Date : 2025/08/20
+******************************************************************/
+				qcom,mdss-dsi-loading-effect-1-command = [
+					/* Laoding On 100% */
+					39 00 00 40 00 00 04 FF 5A A5 76
+					//dimming off
+					15 00 00 40 00 00 02 81 00
+					15 00 00 40 00 00 02 80 A9 //PL ON
+					39 00 00 40 00 00 03 85 08 10 //OPR mode
+					//Define APL
+					15 00 00 40 00 00 02 9D 01 //Min_APL_0%
+					39 00 00 40 00 00 10 8F BB F4 01 F4 93 FF 93 93 93 93 FF 93 93 93 93
+					39 00 00 40 00 00 04 FF 5A A5 00
+					15 00 00 40 00 00 02 B4 00
+					39 00 00 00 00 00 04 FF 5A A5 00
+				];
+				qcom,mdss-dsi-loading-effect-2-command = [
+					/* Laoding On 110% */
+					39 00 00 40 00 00 04 FF 5A A5 76
+					//dimming off
+					15 00 00 40 00 00 02 81 00
+					15 00 00 40 00 00 02 80 A9 //PL ON
+					39 00 00 40 00 00 03 85 08 10 //OPR mode
+					//Define APL
+					15 00 00 40 00 00 02 9D 01 //Min_APL_0%
+					39 00 00 40 00 00 10 8F FF 15 22 19 BB FF BB BB BB BB FF BB BB BB BB
+					39 00 00 40 00 00 04 FF 5A A5 00
+					15 00 00 40 00 00 02 B4 00
+					39 00 00 00 00 00 04 FF 5A A5 00
+				];
+				qcom,mdss-dsi-loading-effect-3-command = [
+				];
+				qcom,mdss-dsi-loading-effect-4-command = [
+				];
+				qcom,mdss-dsi-loading-effect-off-command = [
+					/* Laoding On 130% */
+					39 00 00 40 00 00 04 FF 5A A5 76
+					//dimming off
+					15 00 00 40 00 00 02 81 00
+					15 00 00 40 00 00 02 80 A9 //PL ON
+					39 00 00 40 00 00 03 85 08 10 //OPR mode
+					//Define APL
+					15 00 00 40 00 00 02 9D 01 //Min_APL_0%
+					39 00 00 40 00 00 10 90 FF 52 63 5B FF FF FF FF FF FF FF FF FF FF FF
+					39 00 00 40 00 00 04 FF 5A A5 00
+					15 00 00 40 00 00 02 B4 10 //1.33
+					39 00 00 00 00 00 04 FF 5A A5 00
+				];
+				qcom,mdss-dsi-uir-on-loading-effect-1-command = [
+					/* Loading On 100%~200%*/
+					39 00 00 40 00 00 04 FF 5A A5 76
+					//Peak luminance on
+					15 00 00 40 00 00 02 80 A9
+					//dimming on
+					15 00 00 40 00 00 02 81 11
+					15 00 00 40 00 00 02 88 0B
+					39 00 00 40 00 00 04 A8 00 12 0E
+					//APL Mode
+					39 00 00 40 00 00 03 85 08 00
+					//Min_APL_20%
+					15 00 00 40 00 00 02 9D 1A
+					39 00 00 40 00 00 04 FF 5A A5 00
+					//2.0x
+					15 00 00 00 00 00 02 B4 20
+				];
+				qcom,mdss-dsi-uir-on-loading-effect-2-command = [
+					/* Loading On 110%~200%*/
+					39 00 00 40 00 00 04 FF 5A A5 76
+					//Peak luminance on
+					15 00 00 40 00 00 02 80 A9
+					//dimming on
+					15 00 00 40 00 00 02 81 11
+					15 00 00 40 00 00 02 88 0B
+					39 00 00 40 00 00 04 A8 00 12 0E
+					//APL Mode
+					39 00 00 40 00 00 03 85 08 00
+					//Min_APL_20%
+					15 00 00 40 00 00 02 9D 1A
+					39 00 00 40 00 00 04 FF 5A A5 00
+					//2.0x
+					15 00 00 00 00 00 02 B4 20
+				];
+				qcom,mdss-dsi-uir-on-loading-effect-3-command = [
+					/* Loading On 130%~200%*/
+					39 00 00 40 00 00 04 FF 5A A5 76
+					//Peak luminance on
+					15 00 00 40 00 00 02 80 A9
+					//dimming on
+					15 00 00 40 00 00 02 81 11
+					15 00 00 40 00 00 02 88 0B
+					39 00 00 40 00 00 04 A8 00 12 0E
+					//APL Mode
+					39 00 00 40 00 00 03 85 08 00
+					//Min_APL_20%
+					15 00 00 40 00 00 02 9D 1A
+					39 00 00 40 00 00 04 FF 5A A5 00
+					//2.0x
+					15 00 00 00 00 00 02 B4 20
+				];
+				qcom,mdss-dsi-uir-off-loading-effect-1-command = [
+					/* Loading On 100%*/
+					39 00 00 40 00 00 04 FF 5A A5 76
+					15 00 00 40 00 00 02 80 A9 //PL ON
+					//dimming on
+					15 00 00 40 00 00 02 81 11
+					15 00 00 40 00 00 02 88 0B
+					39 00 00 40 00 00 04 A8 00 12 0E
+					39 00 00 40 00 00 03 85 08 10 //OPR mode
+					//Define APL
+					15 00 00 40 00 00 02 9D 01 //Min_APL_0%
+					39 00 00 40 00 00 10 8F BB F4 01 F4 93 FF 93 93 93 93 FF 93 93 93 93
+					39 00 00 40 00 00 04 FF 5A A5 00
+					15 00 00 00 00 00 02 B4 00
+				];
+				qcom,mdss-dsi-uir-off-loading-effect-2-command = [
+					/* Laoding On 110% */
+					39 00 00 40 00 00 04 FF 5A A5 76
+					//Peak luminance on
+					15 00 00 40 00 00 02 80 A9
+					//dimming on
+					15 00 00 40 00 00 02 81 11
+					15 00 00 40 00 00 02 88 0B
+					39 00 00 40 00 00 04 A8 00 12 0E
+					39 00 00 40 00 00 03 85 08 10 //OPR mode
+					//Define APL
+					15 00 00 40 00 00 02 9D 01 //Min_APL_0%
+					39 00 00 40 00 00 10 8F FF 15 22 19 BB FF BB BB BB BB FF BB BB BB BB
+					39 00 00 40 00 00 04 FF 5A A5 00
+					15 00 00 00 00 00 02 B4 00
+				];
+				qcom,mdss-dsi-uir-off-loading-effect-3-command = [
+					/* Laoding On 130% */
+					39 00 00 40 00 00 04 FF 5A A5 76
+					//Peak luminance on
+					15 00 00 40 00 00 02 80 A9
+					//dimming on
+					15 00 00 40 00 00 02 81 11
+					15 00 00 40 00 00 02 88 0B
+					39 00 00 40 00 00 04 A8 00 12 0E
+					39 00 00 40 00 00 03 85 08 10 //OPR mode
+					//Define APL
+					15 00 00 40 00 00 02 9D 01 //Min_APL_0%
+					39 00 00 40 00 00 10 90 FF 52 63 5B FF FF FF FF FF FF FF FF FF FF FF
+					39 00 00 40 00 00 04 FF 5A A5 00
+					15 00 00 00 00 00 02 B4 10 //1.33
+				];
+
+				qcom,mdss-dsi-loading-effect-1-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-loading-effect-2-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-loading-effect-3-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-loading-effect-4-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-loading-effect-off-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-uir-on-loading-effect-1-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-uir-on-loading-effect-2-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-uir-on-loading-effect-3-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-uir-off-loading-effect-1-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-uir-off-loading-effect-2-command-state = "dsi_hs_mode";
+				qcom,mdss-dsi-uir-off-loading-effect-3-command-state = "dsi_hs_mode";

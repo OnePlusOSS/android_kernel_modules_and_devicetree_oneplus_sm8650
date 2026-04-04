@@ -1,0 +1,12 @@
+/* Not support ufcs. */
+&oplus_cpa {
+	compatible = "oplus,cpa";
+	/* format: <protocol_type power_w> */
+	oplus,protocol_list = <CHG_PROTOCOL_VOOC 80
+				CHG_PROTOCOL_PPS  55
+				CHG_PROTOCOL_PD   18
+				CHG_PROTOCOL_QC   18>;
+	oplus,default_protocol_list = <CHG_PROTOCOL_VOOC
+				CHG_PROTOCOL_PPS
+				CHG_PROTOCOL_PD>;
+};

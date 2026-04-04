@@ -7,6 +7,7 @@
 #define _HBP_EXCEPTION_
 
 typedef enum {
+	/*0-99 for kernel*/
 	EXCEP_HARDWARE = 0,
 	EXCEP_GESTURE,
 	EXCEP_GESTURE_READ,
@@ -24,7 +25,17 @@ typedef enum {
 	EXCEP_GRIP,
 	EXCEP_IRQ,
 	EXCEP_BUS_READY,
+	/*100 for native touchpanel*/
+	EXCEP_TOUCH_MONITOR = 100,
+	EXCEP_TOUCH_STATE_MACHINE,
+	EXCEP_INIT_STATE,
+	EXCEP_ALGO_FRAME = 0xA0,
+	EXCEP_ERROR = 255,
 } hbp_excep_type;
+
+#define SIG_SCREEN_ON_NO_ACK                     "sig_screen_on_no_ack"
+#define SIG_SCREEN_OFF_NO_ACK                    "sig_screen_off_no_ack"
+
 
 #define MAX_BUS_ERROR_COUNT                 15
 #define MAX_BUS_UPDATE_COUNT                2

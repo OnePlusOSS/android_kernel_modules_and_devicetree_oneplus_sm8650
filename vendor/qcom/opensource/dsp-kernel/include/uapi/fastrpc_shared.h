@@ -13,6 +13,8 @@
 #define MAP_RESERVED_NUM (14)
 #define UNMAP_RESERVED_NUM (10)
 
+#define NUM_SESSIONS	14	/* max 11 compute, 3 cpz */
+
 #define FASTRPC_IOCTL_INVOKE	_IOWR('R', 1, struct fastrpc_ioctl_invoke)
 #define FASTRPC_IOCTL_MMAP	_IOWR('R', 2, struct fastrpc_ioctl_mmap)
 #define FASTRPC_IOCTL_MUNMAP	_IOWR('R', 3, struct fastrpc_ioctl_munmap)
@@ -44,6 +46,25 @@
 #define FASTRPC_IOCTL_DSPSIGNAL_WAIT _IOWR('R', 26, struct fastrpc_ioctl_dspsignal_wait)
 #define FASTRPC_IOCTL_DSPSIGNAL_CANCEL_WAIT \
 		_IOWR('R', 27, struct fastrpc_ioctl_dspsignal_cancel_wait)
+#define FASTRPC_IOCTL_GET_SESSIONS _IOWR('R', 28, struct fastrpc_sessions)
+
+struct fastrpc_session_info {
+	unsigned long refcount;
+	int tgid;
+	int tgid_frpc;
+	int sessionid;
+	char name[16];
+	int pd_type;
+	int file_close;
+	int pending_ctx_count;
+	int interrupted_ctx_count;
+};
+
+struct fastrpc_sessions {
+	struct fastrpc_session_info sessions[NUM_SESSIONS];
+	int session_count; // Number of active sessions
+	int cid;
+};
 
 struct fastrpc_mem_map {
 	int fd;			/* ion fd */

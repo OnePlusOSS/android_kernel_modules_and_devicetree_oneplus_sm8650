@@ -1,0 +1,348 @@
+&mdss_mdp {
+	dsi_panel_AA613_P_3_A0034_dsc_vid: qcom,mdss_dsi_panel_AA613_P_3_A0034_dsc_vid {
+		qcom,mdss-dsi-panel-name = "AA613 P 3 A0034 dsc video mode panel";
+		qcom,mdss-dsi-panel-type = "dsi_video_mode";
+		oplus,mdss-dsi-vendor-name = "A0034";
+		oplus,mdss-dsi-manufacture = "P_3";
+		qcom,mdss-dsi-virtual-channel-id = <0>;
+		qcom,mdss-dsi-stream = <0>;
+		qcom,mdss-dsi-bpp = <30>;
+		qcom,mdss-dsi-color-order = "rgb_swap_rgb";
+		qcom,mdss-dsi-underflow-color = <0xff>;
+		qcom,mdss-dsi-border-color = <0>;
+		qcom,dsi-ctrl-num = <0>;
+		qcom,dsi-phy-num = <0>;
+		qcom,mdss-dsi-traffic-mode = "non_burst_sync_pulse";
+		qcom,mdss-dsi-lane-map = "lane_map_0123";
+		qcom,mdss-dsi-bllp-eof-power-mode;
+		qcom,mdss-dsi-bllp-power-mode;
+		qcom,mdss-dsi-lane-0-state;
+		qcom,mdss-dsi-lane-1-state;
+		qcom,mdss-dsi-lane-2-state;
+		qcom,mdss-dsi-lane-3-state;
+		qcom,mdss-dsi-dma-trigger = "trigger_sw";
+		qcom,mdss-dsi-mdp-trigger = "none";
+		qcom,mdss-dsi-reset-sequence = <1 10>, <0 10>, <1 25>;
+		qcom,mdss-pan-physical-width-dimension = <72>;
+		qcom,mdss-pan-physical-height-dimension = <157>;
+		qcom,mdss-dsi-init-delay-us = <1000>;
+		qcom,mdss-dsi-panel-jitter = <0x4 0x1>;
+		/* disable cesta */
+		qcom,mdss-disable-cesta-hw-sleep;
+		//qcom,mdss-bl-high2bit;
+		//qcom,mdss-disable-cesta-hw-sleep;
+		//qcom,mdss-dsi-panel-peak-brightness = <5400000>;
+		/* HDR Setting */
+		//update for [MPC15]PerformanceClassTest#testDisplayHdr pass
+		qcom,mdss-dsi-panel-hdr-enabled;
+		qcom,mdss-dsi-panel-hdr-color-primaries = <15635 16450 34000 16000 13250 34500 7500 3000>;
+		qcom,mdss-dsi-panel-peak-brightness = <20000000>;
+		qcom,mdss-dsi-panel-average-brightness = <2000000>;
+		qcom,mdss-dsi-panel-blackness-level = <4000>;
+		/*color*/
+		oplus,color_vivid_status;
+		//oplus,color_srgb_status;
+		//oplus,color_softiris_status;
+		//oplus,color_oplus_calibrate_status;
+		//oplus,color_dual_brightness_status;
+		//oplus,color_2nit_status;
+		//oplus,color_loading_status;
+		//oplus,color_nature_profession_status;
+		//oplus,mdss-dsi-panel-type = <0>;
+		//qcom,dynamic-mode-switch-enabled;
+		qcom,dynamic-mode-switch-type = "dynamic-resolution-switch-immediate";
+		qcom,mdss-dsi-display-timings {
+			timing@0 {
+				#include "dsi-panel-AA613-P-3-A0034-common-effect.dtsi"
+				cell-index = <0>;
+				qcom,mdss-dsc-version = <0x12>;
+				qcom,mdss-dsi-timing-default;
+				qcom,mdss-dsi-panel-framerate = <120>;
+				qcom,mdss-dsi-panel-clockrate = <1368576000>;
+				qcom,mdss-dsi-panel-width = <1272>;
+				qcom,mdss-dsi-panel-height = <2772>;
+
+				qcom,mdss-dsi-h-front-porch = <156>;
+				qcom,mdss-dsi-h-back-porch = <16>;
+				qcom,mdss-dsi-h-pulse-width = <16>;
+				qcom,mdss-dsi-v-front-porch = <80>;
+				qcom,mdss-dsi-v-back-porch = <26>;
+				qcom,mdss-dsi-v-pulse-width = <2>;
+				qcom,mdss-dsi-h-sync-pulse = <0>;
+				qcom,mdss-dsi-h-left-border = <0>;
+				qcom,mdss-dsi-h-right-border = <0>;
+				qcom,mdss-dsi-v-top-border = <0>;
+				qcom,mdss-dsi-v-bottom-border = <0>;
+
+				//oplus,ofp-need-to-sync-data-in-aod-unlocking;
+				//oplus,ofp-aod-off-insert-black-frame = <1>;
+				//oplus,ofp-aod-off-black-frame-total-time = <42>;
+				//oplus,ofp-need-to-separate-backlight;
+				//oplus,ofp-backlight-on-period = <1>;
+
+				/* panel C1 PVT */
+				qcom,mdss-dsi-on-command = [
+					39 00 00 40 00 00 04 FF 5A A5 07
+					15 00 00 40 00 00 02 A0 24
+					39 00 00 40 00 00 04 FF 5A A5 08
+					15 00 00 40 00 00 02 C8 62
+					39 00 00 40 00 00 04 FF 5A A5 00
+					15 00 00 40 00 00 02 B9 01
+					15 00 00 40 00 00 02 D0 00
+					15 00 00 40 00 00 02 D1 00
+					15 00 00 40 00 00 02 71 01
+
+					39 00 00 40 00 00 04 FF 5A A5 20
+					15 00 00 40 00 00 02 C7 06
+					39 00 00 40 00 00 04 FF 5A A5 00
+					39 00 00 40 00 00 05 94 00 D0 00 00
+					39 00 00 40 00 00 04 FF 5A A5 1F
+					39 00 00 40 00 00 03 82 00 20
+					15 00 00 40 00 00 02 87 01
+					15 00 00 40 00 00 02 88 24
+					39 00 00 40 00 00 05 89 41 00 C0 01
+					39 00 00 40 00 00 03 8A F0 00
+					39 00 00 40 00 00 04 8C 80 00 24
+					15 00 00 40 00 00 02 8E 10
+					39 00 00 40 00 00 05 96 15 35 55 01
+					39 00 00 40 00 00 06 97 11 33 22 01 09
+					39 00 00 40 00 00 19 83 00 0B 0A 0C 02 FF FF FF 0C 02 FF FF 00 FF FF FF 00 0B FF FF 00 FF FF FF
+					39 00 00 40 00 00 19 8F 03 2A 8C 19 07 00 00 00 19 07 00 00 00 00 00 00 02 2A 00 00 02 00 00 00
+					39 00 00 40 00 00 09 85 00 0B 0A FF FF FF FF FF
+					39 00 00 40 00 00 09 91 03 2A 1C 00 00 00 00 00
+					39 00 00 40 00 00 04 FF 5A A5 29
+					39 00 00 40 00 00 0E 82 80 80 44 10 10 10 10 10 10 10 10 10 10
+					39 00 00 40 00 00 0E 83 80 80 44 10 10 10 10 10 10 10 10 10 10
+					39 00 00 40 00 00 0E 84 80 80 44 10 10 10 10 10 10 10 10 10 10
+					39 00 00 40 00 00 0E 85 80 80 44 10 10 10 10 10 10 10 10 10 10
+					39 00 00 40 00 00 05 92 80 80 80 80
+					39 00 00 00 00 00 11 9F 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80 80
+
+					39 00 00 40 00 00 04 FF 5A A5 00
+					15 00 00 40 00 00 02 35 00
+					15 00 00 40 00 00 02 53 24
+					39 00 00 40 00 00 03 51 00 00
+					39 00 00 40 00 00 04 FF 5A A5 07
+					15 00 00 40 00 00 02 8A 01
+					15 00 00 40 00 00 02 8B A0
+					39 00 00 40 00 00 62 80 00 00 00 12 00 00 ab 30 80 0a d4 04 f8 00 16 02 7c 02 7c 02 00 02 59 00 20 02 2e 00 08 00 0d 04 f4 03 ed 18 00 10 f0 07 10 20 00 06 0f 0f 33 0e 1c 2a 38 46 54 62 69 70 77 79 7b 7d 7e 02 02 22 00 2a 40 2a be 3a fc 3a fa 3a f8 3b 38 3b 78 3b b6 4b b6 4b f4 4b f4 6c 34 84 74 00 00 00 00 00 00
+					39 00 00 40 00 00 62 81 00 00 00 12 00 00 ab 30 80 0a d4 04 f8 00 16 02 7c 02 7c 02 00 02 59 00 20 02 2e 00 08 00 0d 04 f4 03 ed 18 00 10 f0 07 10 20 00 06 0f 0f 33 0e 1c 2a 38 46 54 62 69 70 77 79 7b 7d 7e 02 02 22 00 2a 40 2a be 3a fc 3a fa 3a f8 3b 38 3b 78 3b b6 4b b6 4b f4 4b f4 6c 34 84 74 00 00 00 00 00 00
+					39 00 00 00 00 00 04 FF 5A A5 00
+					//close uir dimming protect
+					39 00 00 40 00 00 04 FF 5A A5 76
+					15 00 00 40 00 00 02 A1 00
+					39 00 00 00 00 00 04 FF 5A A5 00
+					15 00 00 00 78 00 02 11 00
+					15 00 00 00 00 00 02 29 00
+				];
+
+
+				qcom,mdss-dsi-off-command=[
+					15 00 00 00 14 00 02 28 00
+					15 00 00 00 78 00 02 10 00
+				];
+				qcom,mdss-dsi-esd-switch-page-command = [
+					39 00 00 00 00 00 04 FF 5A A5 00
+				];
+				qcom,mdss-dsi-vid-60hz-switch-command = [
+					39 00 00 50 00 00 04 FF 5A A5 00
+					15 00 00 10 00 00 02 D0 20
+				];
+				qcom,mdss-dsi-vid-90hz-switch-command = [
+					39 00 00 60 00 00 04 FF 5A A5 00
+					15 00 00 10 00 00 02 D0 10
+				];
+				qcom,mdss-dsi-vid-120hz-switch-command = [
+					39 00 00 60 00 00 04 FF 5A A5 00
+					15 00 00 10 00 00 02 D0 00
+				];
+				qcom,mdss-dsi-vid-144hz-switch-command = [
+					39 00 00 60 00 00 04 FF 5A A5 00
+					15 00 00 10 00 00 02 D0 40
+				];
+				qcom,dsi-panel-date-switch-command = [
+					/*read panel info switch page 1D*/
+					39 00 00 00 00 00 04 FF 5A A5 00
+				];
+				qcom,mdss-dsi-default-switch-page-command = [
+					39 00 00 00 00 00 04 FF 5A A5 00
+				];
+				qcom,mdss-dsi-lp1-command = [
+					39 00 00 60 00 00 04 FF 5A A5 00
+					05 00 00 60 00 00 01 39
+					15 00 00 60 00 00 02 D1 00
+					39 00 00 60 00 00 04 FF 5A A5 07
+					15 00 00 60 00 00 02 D4 93
+					39 00 00 60 00 00 04 FF 5A A5 00
+					39 00 00 20 00 00 05 51 00 00 0D BB
+				];
+				qcom,mdss-dsi-nolp-command = [
+					39 00 00 60 00 00 04 FF 5A A5 00
+					05 00 00 60 00 00 01 38
+					39 00 00 60 00 00 04 FF 5A A5 07
+					15 00 00 20 00 00 02 D4 90
+				];
+
+				qcom,mdss-dsi-aod-high-mode-command = [
+					/* AOD High Mode 50nit */
+					39 00 00 60 00 00 04 FF 5A A5 00
+					39 00 00 20 00 00 05 51 00 00 0D BB
+				];
+				qcom,mdss-dsi-aod-low-mode-command = [
+					/* AOD Low Mode 10nit */
+					39 00 00 60 00 00 04 FF 5A A5 00
+					39 00 00 20 00 00 05 51 00 00 0B 14
+				];
+
+				qcom,mdss-dsi-lhbm-pressed-icon-on-command = [
+					39 00 00 40 00 00 04 FF 5A A5 00
+					15 00 00 00 00 00 02 BA 03
+				];
+				qcom,mdss-dsi-lhbm-pressed-icon-off-command = [
+					39 00 00 40 00 00 04 FF 5A A5 00
+					15 00 00 00 00 00 02 BA 00
+				];
+
+				qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-off-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-vid-120hz-switch-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-vid-90hz-switch-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-vid-60hz-switch-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-vid-144hz-switch-command-state = "dsi_lp_mode";
+				qcom,dsi-panel-date-switch-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-default-switch-page-command-state = "dsi_lp_mode";
+				qcom,mdss-dsi-esd-switch-page-command-state = "dsi_lp_mode";
+
+				qcom,lm-split = <636 636>;
+				qcom,compression-mode = "dsc";
+				qcom,mdss-dsc-encoders = <2>;
+				qcom,mdss-dsc-slice-height = <22>;
+				qcom,mdss-dsc-slice-width = <636>;
+				qcom,mdss-dsc-slice-per-pkt = <2>;
+				qcom,mdss-dsc-bit-per-component = <10>;
+				qcom,mdss-dsc-bit-per-pixel = <8>;
+				qcom,mdss-dsc-block-prediction-enable;
+			};
+		};
+	};
+};
+
+&soc {
+	dsi_panel_AA613_P_3_A0034_dsc_vid {
+		qcom,dsi-display-active;
+	};
+};
+
+&dsi_panel_AA613_P_3_A0034_dsc_vid {
+	qcom,panel-supply-entries = <&dsi_panel_pwr_supply_prado>;
+	qcom,platform-te-gpio = <&tlmm 129 0>;
+	qcom,platform-reset-gpio = <&tlmm 12 0>;
+	qcom,platform-panel-vout-gpio = <&tlmm 38 0>;
+	qcom,platform-panel-vddr-vout-gpio2 = <&tlmm 58 0>;
+
+	//enable mipi strength
+	//oplus,enhance_mipi_strength;
+
+	/* BRIGHTNESS CONFIG */
+	qcom,mdss-dsi-bl-pmic-control-type = "bl_ctrl_dcs";
+	qcom,bl-update-flag = "delay_until_first_frame";
+	qcom,mdss-dsi-bl-inverted-dbv;
+	qcom,mdss-dsi-bl-min-level = <1>;
+	qcom,mdss-dsi-bl-max-level = <4094>;
+	qcom,mdss-brightness-max-level = <4094>;
+	oplus,dsi-bl-normal-max-level = <3515>;
+	oplus,dsi-brightness-normal-max-level = <3515>;
+	oplus,dsi-dc-backlight-threshold = <1088>;
+	oplus,dsi-brightness-default-level = <1638>;
+
+	/* ofp config */
+	oplus,ofp-fp-type = <0xA10>;
+
+	/* aod brightness config*/
+	oplus,video-mode-aod-brightness-change-enable;
+	oplus,video-mode-aod-brightness-value-count= [04];
+	oplus,video-mode-aod-high-brightness-value = [00 00 0D BB];
+	oplus,video-mode-aod-low-brightness-value = [00 00 0B 14];
+
+	/* aod disable esd */
+	oplus,doze_disable_esdcheck;
+
+	/* esd config */
+	qcom,esd-check-enabled;
+	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
+	qcom,mdss-dsi-panel-status-command = [
+		06 00 00 00 00 00 01 0A
+	];
+	qcom,mdss-dsi-panel-status-command-state = "dsi_lp_mode";
+	qcom,mdss-dsi-panel-status-value = <
+		0x9C
+	>;
+	qcom,mdss-dsi-panel-status-read-length = <1>;
+	oplus,mdss-dsi-panel-status-match-modes = <0x00000000>;
+
+	/* fps-switch */
+	qcom,mdss-dsi-pan-enable-dynamic-fps;
+	qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_both_hv_porch";
+	qcom,dsi-supported-dfps-list = <144    120    90    60    30>;
+	qcom,dsi-dfps-hfp-list       = <64     156    156   156   1196>;
+	qcom,dsi-dfps-hbp-list       = <16     16     16    16    560>;
+	qcom,dsi-dfps-hpw-list       = <16     16     16    16    16>;
+	qcom,dsi-dfps-vfp-list       = <80     80     1040  2960  80>;
+	qcom,dsi-dfps-vbp-list       = <26     26     26    26    26>;
+	qcom,dsi-dfps-vpw-list       = <2      2      2     2     2>;
+
+	/* ignore some fps swicth factory test */
+	oplus,factory-ignore-mode = <1>;
+	/* vid dsi cmd package and send in encode_kickoff*/
+	oplus,enable_dsi_cmd_package;
+
+	/* OPLUS FEATURES CONFIG */
+	oplus,dsi-serial-number-enabled;
+	oplus,dsi-serial-number-switch-page;
+	oplus,dsi-serial-number-index= <0>;
+	oplus,dsi-serial-number-reg= <0xF0>;
+	oplus,dsi-serial-number-read-count= <7>;
+	qcom,ulps-enabled;
+	qcom,dsi-select-clocks = "pll_byte_clk0", "pll_dsi_clk0";
+
+	//oplus,vreg_ctrl_flag;
+
+	//qcom,dsi-dyn-clk-enable;
+
+	/* MIPI ERR check config */
+	/*  BIT(0): enable/disable check
+	** BIT(1): enable/disable page switch
+	*/
+	oplus,mipi-err-check-config = <0x01>; // 0b0000'0001
+	oplus,mipi-err-check-reg = [
+		05
+	];
+	oplus,mipi-err-check-value = [
+		00
+	];
+	oplus,mipi-err-check-count = [
+		01
+	];
+	/* 32-bit binary flag
+	** Bit value identified how to match the return value of each register.
+	** The value 0(default) means equal, and the value 1 means not equal.
+	*/
+	oplus,mipi-err-check-match-modes = <0x00000000>;
+
+	qcom,mdss-dsi-display-timings {
+		timing@0 {
+			qcom,mdss-dsi-panel-phy-timings = [00 2C 0C 0C 1D 1B 0C 0C 0B 02 04 00 24 11];
+			qcom,display-topology = <1 1 1>;
+			qcom,default-topology-index = <0>;
+		};
+	};
+};
+
+&dsi_panel_AA613_P_3_A0034_dsc_vid {
+	qcom,panel_voltage_vddi_name = "vddio";
+	qcom,panel_voltage_vddi = <1 1750000 1850000 1950000>;
+	qcom,panel_voltage_vddr_name = "vci";
+	qcom,panel_voltage_vddr = <1 3000000 3200000 3300000>;
+};
+
+

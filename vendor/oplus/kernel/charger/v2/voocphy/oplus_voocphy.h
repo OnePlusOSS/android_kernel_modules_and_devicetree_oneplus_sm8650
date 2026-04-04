@@ -592,7 +592,7 @@ enum oplus_fastchg_copycat_type {
 	FAST_COPYCAT_OVER_VBAT_CURRENT,
 	FAST_COPYCAT_VOOC20_REPEAT_FASTCHG_ORNOT,
 	FAST_COPYCAT_VOOC20_REPEAT_IS_VBUS_OK,
-	FAST_COPYCAT_SVOOC_IS_VBUS_OK_EXCEED_MAXCNT,
+	FAST_COPYCAT_IS_VBUS_OK_EXCEED_MAXCNT,
 	FAST_COPYCAT_SVOOC_MISS_ASK_CUR_LEVEL,
 	FAST_COPYCAT_VOOC20_NON_EXPECT_CMD,
 	FAST_COPYCAT_TYPE_MAX,
@@ -810,6 +810,7 @@ struct oplus_voocphy_manager {
 	struct delayed_work clear_boost_work;
 	struct delayed_work voocphy_send_ongoing_notify;
 	struct delayed_work recovery_system_work;
+	struct delayed_work pcc_work;
 	struct work_struct first_ask_batvol_work;
 	atomic_t  voocphy_freq_state;
 	bool recovery_system_done;
@@ -946,6 +947,7 @@ struct oplus_voocphy_manager {
 	bool slave_ic_abnormal;
 	struct delayed_work clear_ic_abnormal_status_work;
 	struct oplus_chg_strategy *svooc_pcc_strategy;
+	bool svooc_pcc_strategy_v2;
 
 	bool cancel_primary_switch; /* add for cancel usb switch */
 
@@ -989,8 +991,8 @@ struct oplus_voocphy_operations {
 	int (*get_voocphy_enable)(struct oplus_voocphy_manager *chip, u8 *data);
 	void (*dump_voocphy_reg)(struct oplus_voocphy_manager *chip);
 	int (*get_chip_id)(struct oplus_voocphy_manager *chip);
-	int (*set_chg_pmid2out)(bool enable, int reason);
-	bool (*get_chg_pmid2out)(void);
+	int (*set_chg_pmid2out)(struct oplus_voocphy_manager *chip, bool enable, int reason);
+	bool (*get_chg_pmid2out)(struct oplus_voocphy_manager *chip);
 	int (*reset_voocphy_ovp)(struct oplus_voocphy_manager *chip);
 	bool (*check_cp_int_happened)(struct oplus_voocphy_manager *chip, bool *dump_reg, bool *send_info);
 	void (*dual_chan_buck_set_ucp)(struct oplus_voocphy_manager *chip, int ucp_value);

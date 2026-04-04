@@ -264,6 +264,10 @@
 		oplus_spec,ffc-temp-thr = <120 200 350 400>;
 		oplus_spec,wired-ffc-step-max = <2>;
 		oplus_spec,wired-ffc-fv-mv = <4590 4590>;
+		oplus_spec,bdd-vbatdiff-mv = <50>;
+		oplus_spec,bdd-enter-current-ma = <100>;
+		oplus_spec,bdd-enter-voltage-mv = <200>;
+		oplus_spec,bdd-vbatdiff-timeout-min = <10080>;
 		oplus_spec,wired-ffc-fv-cutoff-mv = <4545 4515 4500
 						     4515 4505 4490>;
 
@@ -280,6 +284,7 @@
 							10 20>;
 		oplus_spec,wired-aging-ffc-cycle-thr = <500 1000>;
 
+		oplus_spec,support_gauge_r_track;
 		oplus_spec,vbat_uv_thr_mv = <3000>;
 		oplus_spec,vbat_charging_uv_thr_mv = <2900>;
 

@@ -1312,10 +1312,15 @@ static int sy6974b_shipmode_enable(struct oplus_chg_ic_dev *ic_dev, bool en)
 
 static int sy6974b_get_otg_enbale(struct oplus_chg_ic_dev *ic_dev, bool *enable)
 {
-	struct sy6974b_chip *chip = oplus_chg_ic_get_drvdata(ic_dev);
+	struct sy6974b_chip *chip;
 	if (ic_dev == NULL) {
 		chg_err("oplus_chg_ic_dev is NULL");
 		return -ENODEV;
+	}
+
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+	if (chip == NULL) {
+		return -EINVAL;
 	}
 
 	*enable = chip->otg_enable;

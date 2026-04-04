@@ -548,8 +548,8 @@ static struct oplus_chg_strategy *puc_strategy_alloc_by_param_head(const char *n
 					le32_to_cpu(puc->soc_curves[i].temp_curves[j].data[k].target_vbat);
 				puc->soc_curves[i].temp_curves[j].data[k].target_ibus =
 					le32_to_cpu(puc->soc_curves[i].temp_curves[j].data[k].target_ibus);
-				puc->soc_curves[i].temp_curves[j].data[k].exit =
-					le32_to_cpu(puc->soc_curves[i].temp_curves[j].data[k].exit);
+				puc->soc_curves[i].temp_curves[j].data[k].flags =
+					le32_to_cpu(puc->soc_curves[i].temp_curves[j].data[k].flags);
 				puc->soc_curves[i].temp_curves[j].data[k].target_time =
 					le32_to_cpu(puc->soc_curves[i].temp_curves[j].data[k].target_time);
 			}

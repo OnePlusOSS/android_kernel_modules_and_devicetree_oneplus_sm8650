@@ -141,7 +141,7 @@ static void wake_all_swapd(void);
 #ifdef CONFIG_OPLUS_JANK
 extern u32 get_cpu_load(u32 win_cnt, struct cpumask *mask);
 #endif
-
+extern bool is_fg(int uid);
 static inline bool current_is_hybrid_swapd(void)
 {
 	return current->pid == swapd_pid;
@@ -1502,6 +1502,8 @@ static unsigned long swapd_shrink_anon(pg_data_t *pgdat,
 
 			hybs = MEMCGRP_ITEM_DATA(memcg);
 			if (!hybs->can_reclaimed)
+				continue;
+			if (is_fg((int)atomic64_read(&hybs->app_uid)))
 				continue;
 
 			memcg_to_reclaim = reclaim_size_per_cycle * hybs->can_reclaimed / total_can_reclaimed;

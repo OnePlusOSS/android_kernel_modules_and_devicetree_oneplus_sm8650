@@ -2416,7 +2416,6 @@ static int fts_enable_game_mode(struct chip_data_ft3683g *ts_data, bool enable)
 	struct chip_data_ft3683g *chip_data = (struct chip_data_ft3683g *)ts_data;
 	struct touchpanel_data *ts = spi_get_drvdata(chip_data->ft_spi);
 	int ret = 0;
-	u8 regvalue = 0;
 	int game_mode = FTS_NOT_GAME_MODE;
 	int report_rate = FTS_120HZ_REPORT_RATE;
 	TPD_INFO("MODE_GAME, write 0x8B%d", enable);
@@ -2429,11 +2428,9 @@ static int fts_enable_game_mode(struct chip_data_ft3683g *ts_data, bool enable)
 	if (enable) {
 		if (ts_data->extreme_game_report_rate) {
 				TPD_INFO("%s:ts->noise_level:%d rate_ctrl_level:%d", __func__, ts->noise_level, ts->rate_ctrl_level);
-				fts_read_reg(FTS_REG_CHARGER_MODE_EN, &regvalue);
-				if(regvalue<= 1) {
-				regvalue  = (regvalue) | (0x0C);
-				ret = fts_write_reg(FTS_REG_CHARGER_MODE_EN, regvalue);
-				}
+				SET_REG(FTS_REG_GAME_MODE_EN_BIT, 0x03);
+				TPD_INFO("MODE_GAME, write 0x8B=0x%x, 0x88=%d", ts_data->ctrl_reg_state, report_rate);
+				ret = fts_write_reg(FTS_REG_CTRL, ts_data->ctrl_reg_state);
 			switch (ts->noise_level) {
 			case INTELLIGENT_GAME_MODE:
 				ts_data->extreme_game_flag = false;
@@ -2487,11 +2484,9 @@ static int fts_enable_game_mode(struct chip_data_ft3683g *ts_data, bool enable)
 	} else {
 		if (ts_data->extreme_game_report_rate) {
 			ts_data->extreme_game_flag = false;
-			fts_read_reg(FTS_REG_CHARGER_MODE_EN, &regvalue);
-			if(regvalue> 1) {
-			regvalue  = (regvalue) & (0xF3);
-			ret = fts_write_reg(FTS_REG_CHARGER_MODE_EN, regvalue);
-			}
+			SET_REG(FTS_REG_GAME_MODE_EN_BIT, enable);
+			TPD_INFO("MODE_GAME, write 0x8B =0x%x, 0x88=%d", ts_data->ctrl_reg_state, report_rate);
+			ret = fts_write_reg(FTS_REG_CTRL, ts_data->ctrl_reg_state);
 			fts_rate_white_list_ctrl(ts_data, ts->rate_ctrl_level);
 			return ret;
 		} else {

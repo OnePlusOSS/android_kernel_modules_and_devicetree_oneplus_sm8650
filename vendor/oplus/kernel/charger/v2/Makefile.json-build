@@ -19,6 +19,7 @@ chg_ic_cfg += $(chg_ic_cfg_path)/pps.json
 chg_ic_cfg += $(chg_ic_cfg_path)/switch.json
 chg_ic_cfg += $(chg_ic_cfg_path)/gauge2.json
 chg_ic_cfg += $(chg_ic_cfg_path)/sec.json
+chg_ic_cfg += $(chg_ic_cfg_path)/dischg_boost.json
 
 chg_ic_cfg_c = $(chg_v2_src)/oplus_chg_ic_cfg_str.h
 chg_ic_cfg_debug = $(chg_v2_src)/oplus_chg_ic_auto_debug.h

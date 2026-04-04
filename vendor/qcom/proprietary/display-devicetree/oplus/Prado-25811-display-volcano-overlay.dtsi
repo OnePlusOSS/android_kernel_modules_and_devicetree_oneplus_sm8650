@@ -1,0 +1,79 @@
+#include "panel/dsi-panel-AA613-P-3-A0034-dsc-vid.dtsi"
+#include "panel/dsi-panel-AA613-P-7-A0034-dsc-vid.dtsi"
+
+&soc {
+	oplus_display_dev: oplus,dsi-display-dev {
+		oplus,dsi-panel-primary = <
+			&dsi_vtdr6130_amoled_video
+			&dsi_panel_AA613_P_3_A0034_dsc_vid
+			&dsi_panel_AA613_P_7_A0034_dsc_vid
+		>;
+		oplus,dsi-panel-secondary = <
+		>;
+		oplus,dsi-panel-extended = <>;
+	};
+
+
+	dsi_panel_pwr_supply_prado: dsi_panel_pwr_supply_prado {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		qcom,panel-supply-entry@0 {
+			reg = <0>;
+			qcom,supply-name = "vddio";
+			qcom,supply-min-voltage = <1800000>;
+			qcom,supply-max-voltage = <1800000>;
+			qcom,supply-enable-load = <200000>;
+			qcom,supply-disable-load = <8000>;
+			qcom,supply-post-on-sleep = <10>;
+			qcom,supply-post-off-sleep = <10>;
+		};
+
+		qcom,panel-supply-entry@1 {
+			reg = <1>;
+			qcom,supply-name = "vci";
+			qcom,supply-min-voltage = <3000000>;
+			qcom,supply-max-voltage = <3000000>;
+			qcom,supply-enable-load = <10000>;
+			qcom,supply-disable-load = <300>;
+			qcom,supply-pre-on-sleep = <1>;
+			qcom,supply-post-on-sleep = <15>;
+			qcom,supply-pre-off-sleep = <1>;
+			qcom,supply-post-off-sleep = <2>;
+		};
+	};
+};
+
+&sde_dsi {
+	pinctrl-names = "panel_active", "panel_suspend";
+	pinctrl-0 = <&oplus_sde_dsi_active &sde_te_active>;
+	pinctrl-1 = <&oplus_sde_dsi_suspend &sde_te_suspend>;
+};
+
+&pmx_sde {
+	oplus_sde_dsi_active: oplus_sde_dsi_active {
+		mux {
+			pins = "gpio12";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio12";
+			drive-strength = <8>;   /* 8 mA */
+			bias-disable = <0>;   /* no pull */
+		};
+	};
+
+	oplus_sde_dsi_suspend: oplus_sde_dsi_suspend {
+		mux {
+			pins = "gpio12";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio12";
+			drive-strength = <2>;   /* 2 mA */
+			bias-pull-down;         /* PULL DOWN */
+		};
+	};
+};

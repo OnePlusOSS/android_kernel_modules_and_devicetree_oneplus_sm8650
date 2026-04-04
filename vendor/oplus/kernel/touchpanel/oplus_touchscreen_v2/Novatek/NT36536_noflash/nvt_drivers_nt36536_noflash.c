@@ -442,6 +442,137 @@ nvt_read_register_exit:
 	return ret;
 }
 
+static void nvt_print_hex_data(const char *label, const uint8_t *data, uint32_t lines)
+{
+	char str[128];
+	uint32_t i, j;
+
+	TPD_INFO("%s:\n", label);
+	for (i = 0; i < lines; i++) {
+		int offset = 0;
+		for (j = 0; j < 16; j++) {
+			offset += snprintf(str + offset, 128 - offset, "%02x ", data[1 + i * 16 + j]);
+		}
+		TPD_INFO("%s\n", str);
+	}
+}
+
+static void nvt_read_pc_count_info(struct chip_data_nt36536 *chip_info, uint8_t *buf)
+{
+	uint32_t addr;
+	int i;
+
+	TPD_INFO("=== PC Count Information ===\n");
+	TPD_INFO("Unlocking PC count...\n");
+
+	/* Unlock PC count register */
+	if (nvt_write_addr(chip_info->s_client, ADDR_UNLOCK_CP_COUNT, 0x03) != 0) {
+		TPD_INFO("Failed to unlock PC count\n");
+		return;
+	}
+
+	/* Read PC count values */
+	for (i = 0; i < 2; i++) {
+		addr = ADDR_READ_PC_COUNT;
+		nvt_set_page(chip_info, addr);
+		buf[0] = (uint8_t)(addr & 0x7F);
+		if (CTP_SPI_READ(chip_info->s_client, buf, 5) == 0) {
+			TPD_INFO("PC count[%d]: %02x %02x %02x %02x\n",
+				i, buf[1], buf[2], buf[3], buf[4]);
+		} else {
+			TPD_INFO("Failed to read PC count[%d]\n", i);
+		}
+	}
+}
+
+static void nvt_print_data_matrix(struct chip_data_nt36536 *chip_info,
+				  const char *label, uint32_t addr,
+				  uint8_t *buf, uint16_t buf_len)
+{
+	short *data_16 = (short *)&buf[1];
+	char str[400];
+	uint16_t i, j;
+	int ret;
+	int tx_num = chip_info->hw_res->tx_num;
+	int rx_num = chip_info->hw_res->rx_num;
+
+	nvt_set_page(chip_info, addr);
+	buf[0] = (uint8_t)(addr & 0x7F);
+	if (CTP_SPI_READ(chip_info->s_client, buf, buf_len) != 0) {
+		TPD_INFO("Failed to read data at addr 0x%x\n", addr);
+		return;
+	}
+
+	TPD_INFO("%s:\n", label);
+	for (i = 0; i < rx_num; i++) {
+		ret = 0;
+		for (j = 0; j < tx_num; j++) {
+			ret += snprintf(str + ret, 400 - ret, ",%5d", *data_16);
+			data_16++;
+		}
+		TPD_INFO("[%02d]%s\n", i, str);
+	}
+	/* ICM PC count register */
+	nvt_read_pc_count_info(chip_info, buf);
+}
+
+static void nvt_tp_data_debug_info_print(void *chip_data)
+{
+	struct chip_data_nt36536 *chip_info = (struct chip_data_nt36536 *)chip_data;
+	uint8_t *buf = NULL;
+	uint32_t addr;
+	uint16_t tx_num, rx_num, buf_len;
+
+	if (!chip_info || !chip_info->hw_res) {
+		TPD_INFO("Invalid chip data\n");
+		return;
+	}
+
+	tx_num = chip_info->hw_res->tx_num;
+	rx_num = chip_info->hw_res->rx_num;
+	buf_len = tx_num * rx_num * 2 + 1;
+
+	buf = kzalloc(buf_len + 64, GFP_KERNEL);
+	if (!buf) {
+		TPD_INFO("nova:%s: kmalloc error, size=%u\n", __func__, buf_len + 64);
+		return;
+	}
+
+	/* ICM PC count register */
+	nvt_read_pc_count_info(chip_info, buf);
+
+	/* MP debug message */
+	addr = ADDR_MP_DEBUG_MESSAGE;
+	nvt_set_page(chip_info, addr);
+	buf[0] = (uint8_t)(addr & 0x7F);
+	if (CTP_SPI_READ(chip_info->s_client, buf, 33) == 0) {
+		nvt_print_hex_data("MP_debug_message", buf, 2);
+	}
+
+	/* Event buffer */
+	addr = chip_info->trim_id_table.mmap->EVENT_BUF_ADDR;
+	nvt_set_page(chip_info, addr);
+	buf[0] = (uint8_t)(addr & 0x7F);
+	if (CTP_SPI_READ(chip_info->s_client, buf, 129) == 0) {
+		nvt_print_hex_data("EVENTBUFFER", buf, 8);
+	}
+
+	/* Data matrices - BeforeDiff, AfterDiff, Raw, BaseLine */
+	TPD_INFO("=== Data Matrices ===\n");
+	nvt_print_data_matrix(chip_info, "BeforeDiff",
+		chip_info->trim_id_table.mmap->DIFF_PIPE0_ADDR, buf, buf_len);
+	nvt_print_data_matrix(chip_info, "AfterDiff",
+		chip_info->trim_id_table.mmap->DIFF_PIPE1_ADDR, buf, buf_len);
+	nvt_print_data_matrix(chip_info, "Raw",
+		chip_info->trim_id_table.mmap->RAW_PIPE0_ADDR, buf, buf_len);
+	nvt_print_data_matrix(chip_info, "BaseLine",
+		chip_info->trim_id_table.mmap->BASELINE_ADDR, buf, buf_len);
+
+	/* Restore page to event buffer */
+	nvt_set_page(chip_info, chip_info->trim_id_table.mmap->EVENT_BUF_ADDR);
+	kfree(buf);
+}
+
 static void nvt_printk_fw_history(void *chip_data, uint32_t NVT_MMAP_HISTORY_ADDR)
 {
 	uint8_t i = 0;
@@ -479,7 +610,7 @@ void nvt_clear_aci_error_flag(struct chip_data_nt36536 *chip_info)
 static uint8_t nvt_wdt_fw_recovery(struct chip_data_nt36536 *chip_info,
 				   uint8_t *point_data)
 {
-	uint32_t recovery_cnt_max = 3;
+	uint32_t recovery_cnt_max = 2;
 	uint8_t recovery_enable = false;
 	uint8_t i = 0;
 
@@ -3556,6 +3687,18 @@ static int nvt_set_pen_jitter_para(void *chip_data, int level)
 	return ret;
 }
 
+static int nvt_set_package_type(void *chip_data, int value)
+{
+	int8_t ret = -1;
+	struct chip_data_nt36536 *chip_info = (struct chip_data_nt36536 *)chip_data;
+
+	TPD_DEBUG("%s:value = %d, chip_info->is_sleep_writed = %d\n", __func__,
+			value, chip_info->is_sleep_writed);
+	ret = nvt_extend_cmd2_store(chip_info, EVENTBUFFER_EXT_CMD, EVENTBUFFER_EXT_SET_PACKAGE_TYPE, value);
+
+	return ret;
+}
+
 static int nvt_notify_keyboard_open(void *chip_data)
 {
 	int8_t ret = -1;
@@ -5987,6 +6130,7 @@ static struct oplus_touchpanel_operations nvt_ops = {
 	.set_gesture_state        = nvt_set_gesture_state,
 	.notify_pencil_type       = nvt_notify_pencil_type,
 	.pen_sensitive_lv_set     = nvt_set_pen_jitter_para,
+	.set_package_type         = nvt_set_package_type,
 	.notify_keyboard_open     = nvt_notify_keyboard_open,
 	.aiunit_game_info         = nvt_aiunit_game_info,
 	.inject_wdt_reset         = nvt_inject_wdt_reset,
@@ -6586,6 +6730,7 @@ static struct debug_info_proc_operations debug_info_proc_ops = {
 	/*.limit_read        = nvt_limit_read_std,*/
 	.baseline_read       = nvt_baseline_read,
 	.delta_read          = nvt_delta_read,
+	.tp_data_debug_info_print = nvt_tp_data_debug_info_print,
 	.pen_delta_read      = nvt_pen_delta_read,
 	.pen_baseline_read   = nvt_pen_baseline_read,
 	.main_register_read  = nvt_main_register_read,

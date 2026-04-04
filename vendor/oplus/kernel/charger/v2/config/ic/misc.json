@@ -1078,8 +1078,64 @@
                     }
                 }
             }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_GET_SOURCE_PDO",
+            "desc": {
+                "zh": "获取 source pdo 信息"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["u32 *", "int *"],
+            "parameter_desc": [
+                {
+                    "range": "0-*",
+                    "type": "out",
+                    "desc": {
+                        "zh": "用于存放pdo的buf"
+                    }
+                },
+                {
+                    "range": "0-*",
+                    "type": "out",
+                    "desc": {
+                        "zh": "存放pdo的buf的长度"
+                    }
+                }
+            ],
+            "vict": {
+                "read": false,
+                "write": false,
+                "overwrite": false
+            }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_BUCK_GET_VBAT_PWR",
+            "desc": {
+                "zh": "获取电池输出到系统的电压"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["int *"],
+            "parameter_desc": [
+                {
+                    "range": "0-*",
+                    "type": "out",
+                    "desc": {
+                        "zh": "vbat pwr电压"
+                    }
+                }
+            ],
+            "vict": {
+                "read": {
+                    "cmd": "vict -f {id} -G vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                },
+                "write": false,
+                "overwrite": false
+            }
         }
     ],
 
-    "version": "V1.3:32:cc182ac293a6254de31adc42edb0ebbdbba104990b6a118c31bf635521dcaa65"
+    "version": "V6.0:34:69ffcc7da6e94f61fc9a3443afcbe19db8322f044dc153fdd680d76c6085f4ca"
 }

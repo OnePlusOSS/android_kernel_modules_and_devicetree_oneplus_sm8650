@@ -1067,7 +1067,20 @@ int oplus_gauge_bqfs_data_check(void)
 
 void oplus_gauge_get_device_name(u8 *name, int len)
 {
-	if (g_gauge_chip && g_gauge_chip->device_name && name)
+	if (!g_gauge_chip || !name)
+		return;
+	else if (!g_gauge_chip->device_name) {
+		if (!g_gauge_chip->gauge_ops || !g_gauge_chip->gauge_ops->get_device_name)
+			return;
+		g_gauge_chip->device_name = kmalloc(len, GFP_KERNEL);
+		if (!g_gauge_chip->device_name)
+			return;
+		else
+			memset(g_gauge_chip->device_name, 0, len);
+
+		g_gauge_chip->gauge_ops->get_device_name(g_gauge_chip->device_name, len);
+		strncpy(name, g_gauge_chip->device_name, len);
+	} else
 		strncpy(name, g_gauge_chip->device_name, len);
 }
 

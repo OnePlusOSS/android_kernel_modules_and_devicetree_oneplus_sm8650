@@ -473,7 +473,7 @@ int ext_amp_force_mute_set(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_va
 			speaker_device = get_speaker_dev(pa_index);
 			if (speaker_device == NULL) {
 				pr_err("%s, %d, pa_index = %d, No more speaker_device\n", __func__, __LINE__, pa_index);
-				break;
+				continue;
 			} else if (speaker_device->speaker_mute_set == NULL) {
 				pr_debug("%s, %d, pa_index = %d, speaker_device->speaker_mute_set == NULL\n", __func__, __LINE__, pa_index);
 			} else {
@@ -570,13 +570,15 @@ int oplus_spkr_pa_event(struct snd_soc_dapm_widget *w, struct snd_kcontrol *kcon
 				oplus_speaker_amp_set(R_SPK, WORK_STATUS_ON);
 			}
 		} else {
-			oplus_speaker_amp_set(L_SPK, WORK_STATUS_ON);
+			oplus_speaker_amp_set(contrl_status->chipset, WORK_STATUS_ON);
 		}
 		break;
 	case SND_SOC_DAPM_PRE_PMD :
-		oplus_speaker_amp_set(L_SPK, WORK_STATUS_OFF);
 		if (contrl_status->chipset == ALL_SPK) {
 			oplus_speaker_amp_set(R_SPK, WORK_STATUS_OFF);
+			oplus_speaker_amp_set(L_SPK, WORK_STATUS_OFF);
+		} else {
+			oplus_speaker_amp_set(contrl_status->chipset, WORK_STATUS_OFF);
 		}
 		break;
 	default :

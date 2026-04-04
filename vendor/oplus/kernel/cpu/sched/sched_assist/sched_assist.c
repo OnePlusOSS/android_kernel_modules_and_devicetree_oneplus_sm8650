@@ -72,6 +72,10 @@ static void set_ux_to_task(struct task_struct *new) {
 
 static void android_rvh_wake_up_new_task_handler(void *unused, struct task_struct *new) {
 	set_ux_to_task(new);
+
+#if IS_ENABLED(CONFIG_OPLUS_SCHED_GROUP_OPT)
+	oplus_sg_wake_up_new_task(new);
+#endif
 	/*
 	 * Due to function vendor hook limitation,
 	 * used ext handler pointer to invoke to other module
@@ -92,6 +96,7 @@ static int register_scheduler_vendor_hooks(void)
 	int ret;
 
 	/* register vender hook in kernel/sched/fair.c */
+	REGISTER_TRACE_RVH(android_rvh_place_entity, android_rvh_place_entity_handler);
 	REGISTER_TRACE_RVH(android_rvh_check_preempt_tick, android_rvh_check_preempt_tick_handler);
 	REGISTER_TRACE_RVH(android_rvh_can_migrate_task, android_rvh_can_migrate_task_handler);
 #ifndef CONFIG_OPLUS_SYSTEM_KERNEL_QCOM
@@ -99,10 +104,9 @@ static int register_scheduler_vendor_hooks(void)
 #endif
 	/* REGISTER_TRACE_RVH(android_rvh_select_task_rq_fair, android_rvh_select_task_rq_fair_handler); */
 	/* REGISTER_TRACE_RVH(android_rvh_find_energy_efficient_cpu, android_rvh_find_energy_efficient_cpu_handler); */
-#ifdef CONFIG_LOCKING_PROTECT
+
 	REGISTER_TRACE_RVH(android_rvh_enqueue_entity, android_rvh_enqueue_entity_handler);
 	REGISTER_TRACE_RVH(android_rvh_dequeue_entity, android_rvh_dequeue_entity_handler);
-#endif
 
 #ifndef CONFIG_OPLUS_SYSTEM_KERNEL_QCOM
 	REGISTER_TRACE_RVH(android_rvh_check_preempt_wakeup, android_rvh_check_preempt_wakeup_handler);
@@ -131,11 +135,10 @@ static int register_scheduler_vendor_hooks(void)
 	REGISTER_TRACE_RVH(android_rvh_dequeue_task, android_rvh_dequeue_task_handler);
 #endif
 	REGISTER_TRACE_RVH(android_rvh_set_cpus_allowed_by_task, android_rvh_set_cpus_allowed_by_task_handler);
-#if IS_ENABLED(CONFIG_OPLUS_SCHED_GROUP_OPT)
-	REGISTER_TRACE_RVH(android_rvh_cpu_cgroup_online, android_rvh_cpu_cgroup_online_handler);
-#endif
 	REGISTER_TRACE_RVH(android_rvh_set_cpus_allowed_comm, android_rvh_set_cpus_allowed_comm_handler);
-
+#if IS_ENABLED(CONFIG_OPLUS_SCHED_GROUP_OPT)
+	REGISTER_TRACE_VH(android_vh_reweight_entity, android_vh_reweight_entity_handler);
+#endif
 	/* register vender hook in fs/exec.c */
 	REGISTER_TRACE_VH(task_rename, task_rename_handler);
 
@@ -168,10 +171,6 @@ static int register_scheduler_vendor_hooks(void)
 #endif
 	return 0;
 }
-
-#define OPLUS_OEM_DATA_SIZE_TEST(ostruct, kstruct)		\
-	BUILD_BUG_ON(sizeof(ostruct) > (sizeof(u64) *		\
-		ARRAY_SIZE(((kstruct *)0)->android_oem_data1)))
 
 typedef int (*profile_event_register_t)(enum profile_type type,
 		struct notifier_block *n);
@@ -213,9 +212,6 @@ static int __init oplus_sched_assist_init(void)
 {
 	int ret;
 
-	/* compile time checks for vendor data size */
-	OPLUS_OEM_DATA_SIZE_TEST(struct oplus_rq, struct rq);
-
 	ret = sa_oemdata_init();
 	if (ret != 0)
 		return ret;
@@ -224,10 +220,6 @@ static int __init oplus_sched_assist_init(void)
 	update_ux_sched_cputopo();
 #ifdef CONFIG_OPLUS_FEATURE_TICK_GRAN
 	resched_timer_init();
-#endif
-
-#if IS_ENABLED(CONFIG_OPLUS_SCHED_GROUP_OPT)
-	oplus_sg_map_init();
 #endif
 
 	ret = register_scheduler_vendor_hooks();

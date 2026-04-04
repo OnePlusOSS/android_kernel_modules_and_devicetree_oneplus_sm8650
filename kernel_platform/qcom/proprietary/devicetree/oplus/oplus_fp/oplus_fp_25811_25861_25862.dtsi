@@ -1,0 +1,62 @@
+&soc {
+	// #ifdef OPLUS_FEATURE_UFF_FINGERPRINT
+	fingerprint_dev {
+		status = "ok";
+		compatible = "oplus,fp_spi";
+		interrupt-parent = <&tlmm>;
+		interrupts = <75 0>;
+		power-mode = <1> ; /*0: power mode not set, 1: ldo power, 2: gpio power, 3: auto power */
+		ldo-supply = <&L15B>;
+		ldo-config = <3000000 3000000 150000>;
+		uff,gpio_irq = <&tlmm 75 0x1>;
+		uff,gpio_reset = <&tlmm 76 0x0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&fp_irq_gpio_default>,<&fp_reset_gpio_default>;
+		notify_tpinfo_flag = <1>;
+		power-num = <1>;
+		power_source_1 {
+			power-mode = <1>;
+			power-name = "ldo";
+			power-config = "ldo-config";
+			delay-time = <0>;
+		};
+	};
+	//#endif /*OPLUS_FEATURE_UFF_FINGERPRINT*/
+};
+
+&pm7550_l15 {
+	// overwrite PMIC L15B
+	qcom,init-voltage = <3000000>;
+};
+
+&tlmm {
+	// #ifdef OPLUS_FEATURE_UFF_FINGERPRINT
+	fingerprint_dev{
+		fp_irq_gpio_default: fp_irq_gpio_default {
+			mux {
+				pins = "gpio75";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio75";
+				drive-strength = <2>;
+				bias-disable;
+				input-enable;
+			};
+		};
+
+		fp_reset_gpio_default: fp_reset_gpio_default {
+			mux {
+				pins = "gpio76";
+				function = "gpio";
+			};
+			config {
+				pins = "gpio76";
+				drive-strength = <2>;
+				bias-disable;
+				output-low;
+			};
+		};
+	};
+	//#endif /*OPLUS_FEATURE_UFF_FINGERPRINT*/
+};

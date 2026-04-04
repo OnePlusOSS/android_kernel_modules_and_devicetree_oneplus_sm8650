@@ -49,6 +49,9 @@
 #define MIN_FULL_SOC 9500
 #define INIT_MIN_SOC 1000
 
+#define SOC_CENTI_DELTA_IGNORE	25	/* 0.25% */
+#define MAX_SMOOTH_LEAD_CENTI	600	/* 6% */
+
 #define UPDATE_MAP_DEBOUNCE_MS 10000
 
 #define BASE64_ENCODE_LEN(raw_len) (DIV_ROUND_UP((raw_len) * 4, 3) + 1)
@@ -113,6 +116,12 @@ struct bs_strategy {
 	time64_t last_send_time;
 
 	struct rtc_time tm;
+
+	int last_chg_smooth_soc;
+	int last_chg_soc_centi;
+	int last_chg_ref_centi;
+	bool last_chg_valid;
+	int chg_dis_delta_acc_centi;
 };
 
 enum map_type {
@@ -586,9 +595,76 @@ static int smooth_soc_to_soc_centi(struct bs_strategy *bs, int start_index, int 
 	return 0;
 }
 
+static void bs_save_dischg_ref(struct bs_strategy *bs)
+{
+	if (bs->smooth_soc >= MIN_SOC && bs->smooth_soc <= MAX_SOC) {
+		bs->last_chg_smooth_soc = bs->smooth_soc;
+		bs->last_chg_soc_centi = bs->soc_centi;
+		bs->last_chg_ref_centi = bs->smooth_map[bs->smooth_soc];
+		bs->last_chg_valid = true;
+	} else {
+		bs->last_chg_valid = false;
+	}
+}
+
+static bool bs_calc_chg_lower_bound(struct bs_strategy *bs, struct reserve_cfg *cfg,
+	int delta_dis, int *lower_bound)
+{
+	int last_acc = bs->chg_dis_delta_acc_centi;
+
+	bs->chg_dis_delta_acc_centi += delta_dis;
+
+	if (bs->chg_dis_delta_acc_centi < cfg->dischg_reserve)
+		*lower_bound = bs->last_chg_ref_centi - delta_dis;
+	else if (last_acc < cfg->dischg_reserve)
+		*lower_bound = bs->last_chg_ref_centi - (cfg->dischg_reserve - last_acc);
+	else
+		*lower_bound = bs->last_chg_ref_centi;
+
+	if (*lower_bound < 0)
+		return false;
+
+	chg_info("last=%d delta=%d acc=%d dischg=%d lb=%d\n",
+		bs->last_chg_ref_centi, delta_dis, bs->chg_dis_delta_acc_centi,
+		cfg->dischg_reserve, *lower_bound);
+
+	return true;
+}
+
+static bool bs_get_chg_lower_bound(struct bs_strategy *bs, int *lower_bound)
+{
+	int delta_dis;
+	struct reserve_cfg *cfg = NULL;
+
+	if (!bs->last_chg_valid || bs->last_chg_smooth_soc != bs->smooth_soc) {
+		bs->chg_dis_delta_acc_centi = 0;
+		return false;
+	}
+
+	cfg = find_reserve_cfg_by_soc(bs, bs->smooth_soc);
+	if (!cfg) {
+		chg_err("no config for smooth_soc %d\n", bs->smooth_soc);
+		return false;
+	}
+
+	delta_dis = bs->last_chg_soc_centi - bs->soc_centi;
+	if (delta_dis < -SOC_CENTI_DELTA_IGNORE)
+		return false;
+
+	if (delta_dis <= SOC_CENTI_DELTA_IGNORE ||
+	    (bs->smooth_soc * PERCENT_SCALE - bs->soc_centi > MAX_SMOOTH_LEAD_CENTI)) {
+		*lower_bound = bs->last_chg_ref_centi;
+		return true;
+	}
+
+	return bs_calc_chg_lower_bound(bs, cfg, delta_dis, lower_bound);
+}
+
 static void handle_chg_map_split_eq_max(struct bs_strategy *bs, struct reserve_cfg *cfg)
 {
 	struct bs_track track;
+	int lower_bound = 0;
+	bool has_lower = false;
 
 	track.type = (uint8_t)MAP_TYPE_CHG_SPLIT_EQ_MAX;
 	track.chg_split_eq_max.smooth_soc = (uint8_t)bs->smooth_soc;
@@ -596,10 +672,19 @@ static void handle_chg_map_split_eq_max(struct bs_strategy *bs, struct reserve_c
 	track.chg_split_eq_max.soc_centi = (uint16_t)bs->soc_centi;
 	track.chg_split_eq_max.chg_reserve = (uint16_t)cfg->chg_reserve;
 
-	if (bs->smooth_soc < MAX_SOC - 1 && bs->smooth_soc != MIN_SOC) {
-		/* [0,smooth_soc] -> [0,soc_centi] */
-		smooth_soc_to_soc_centi(bs, 0, bs->smooth_soc, 0, bs->smooth_soc_centi, 0, bs->soc_centi);
+	has_lower = bs_get_chg_lower_bound(bs, &lower_bound);
 
+	if (bs->smooth_soc < MAX_SOC - 1 && bs->smooth_soc != MIN_SOC) {
+		if (has_lower) {
+			track.chg_split_eq_max.smooth_soc_centi = (uint16_t)(bs->smooth_soc * PERCENT_SCALE);
+			track.chg_split_eq_max.soc_centi = (uint16_t)lower_bound;
+			/* [0,smooth_soc] -> [0,lower_bound] */
+			smooth_soc_to_soc_centi(bs, 0, bs->smooth_soc, 0, bs->smooth_soc * PERCENT_SCALE, 0, lower_bound);
+			bs->smooth_map[bs->smooth_soc] = lower_bound;
+		} else {
+			/* [0,smooth_soc] -> [0,soc_centi] */
+			smooth_soc_to_soc_centi(bs, 0, bs->smooth_soc, 0, bs->smooth_soc_centi, 0, bs->soc_centi);
+		}
 		if (bs->smooth_map[bs->smooth_soc] <= FULL_SCALE - cfg->chg_reserve)
 			/* [smooth_soc+1,100] -> [map[smooth_soc],FULL_SCALE-chg_reserve] */
 			smooth_soc_to_soc_centi(bs, bs->smooth_soc + 1, MAX_SOC, bs->smooth_soc * PERCENT_SCALE,
@@ -818,6 +903,8 @@ static void bs_update_dischg_map(struct bs_strategy *bs)
 	bs->chg_full = false;
 
 	bs_track_push_to_fifo(bs, &track);
+
+	bs_save_dischg_ref(bs);
 }
 
 static void bs_update_smmoth_soc(struct bs_strategy *bs)
@@ -1293,6 +1380,11 @@ static struct oplus_chg_strategy *bs_strategy_alloc_by_node(struct device_node *
 		bs->smooth_map[i] = i * PERCENT_SCALE;
 	bs->last_map_update_jiffies = jiffies;
 	bs->map_update_pending = false;
+	bs->last_chg_smooth_soc = -EINVAL;
+	bs->last_chg_soc_centi = -EINVAL;
+	bs->last_chg_ref_centi = 0;
+	bs->last_chg_valid = false;
+	bs->chg_dis_delta_acc_centi = 0;
 	return &bs->strategy;
 free_battery_log:
 	kfree(bs->battery_log_cache);

@@ -62,6 +62,7 @@ static int ilitek_read_limit_fw(struct seq_file *s,
 
 	ilitek_testdata->fw = fw;
 	ilitek_testdata->test_item = test_head->test_item;
+	ilitek_testdata->raw_cap_restriction = ts->com_test_data.raw_cap_restriction;
 
 	return 0;
 }
@@ -154,6 +155,8 @@ int ilitek_auto_test(struct seq_file *s,  struct touchpanel_data *ts)
 	int error_count = 0;
 	int ret = 0;
 
+	ilitek_testdata.raw_cap_restriction = ts->com_test_data.raw_cap_restriction;
+
 	ret = ilitek_read_limit_fw(s, NULL, ts, &ilitek_testdata);
 
 	if (ret) {
@@ -188,6 +191,8 @@ int ilitek_black_screen_test(struct black_gesture_test *p,
 	};
 	int ret = 0;
 	int error_count = 0;
+
+	ilitek_testdata.raw_cap_restriction = ts->com_test_data.raw_cap_restriction;
 
 	ret = ilitek_read_limit_fw(NULL, p, ts, &ilitek_testdata);
 

@@ -86,14 +86,11 @@ static char fid[CAUSENAME_SIZE]={""};
 
 static struct nla_policy kernel_fb_genl_policy[FB_GUARD_CMD_ATTR_MAX + 1] = {
 	[FB_GUARD_CMD_ATTR_MSG] = { .type = NLA_NUL_STRING },
-	[FB_GUARD_CMD_ATTR_OPT] = { .type = NLA_U32 },
 };
 
 static volatile unsigned int kevent_pid;
 
 #define OPLUS_KEVENT_MAX_UP_PALOAD_LEN			2048
-#define OPLUS_KEVENT_TEST_TAG				"test_event"
-#define OPLUS_KEVENT_TEST_ID				"test_check"
 
 static int fb_keventupload_sendpid_cmd(struct sk_buff *skb,
 	struct genl_info *info)
@@ -115,64 +112,6 @@ static int fb_keventupload_sendpid_cmd(struct sk_buff *skb,
 	return 0;
 }
 
-static int fb_keventupload_test_upload(struct sk_buff *skb,
-	struct genl_info *info)
-{
-	int ret = 0;
-	struct nlattr *na = NULL;
-	struct msg_test_upload *p_test_upload = NULL;
-	struct kernel_packet_info *p_dcs_event = NULL;
-	size_t data_len = 0;
-
-	pr_info(" fb_keventupload_test_upload \n");
-
-	if (info->attrs[FB_GUARD_CMD_ATTR_OPT]) {
-		na = info->attrs[FB_GUARD_CMD_ATTR_OPT];
-		/*PRINT_FORMAT(nla_data(na),  nla_len(na));*/
-		pr_info(" nla_len(na) is %d  \n", nla_len(na));
-		p_test_upload = (struct msg_test_upload *)nla_data(na);
-		kevent_pid = p_test_upload->pro_pid;
-		pr_info(" p_test_upload->pro_pid is %u, p_test_upload->val is %u, \n",
-			p_test_upload->pro_pid, p_test_upload->val);
-
-
-		if ((p_test_upload->val) > OPLUS_KEVENT_MAX_UP_PALOAD_LEN) {
-			pr_err("[ERROR]:p_test_upload->val too long %u\n", p_test_upload->val);
-			return -1;
-		}
-
-		data_len = p_test_upload->val + sizeof(struct kernel_packet_info);
-		pr_info(" data_len is %zu\n", data_len);
-		p_dcs_event = (struct kernel_packet_info *)kmalloc(data_len, GFP_ATOMIC);
-
-		if (NULL == p_dcs_event) {
-			pr_err("[ERROR]:kmalloc for p_dcs_event err\n");
-			return -1;
-		}
-
-		pr_info(" p_dcs_event kmalloc ok .\n");
-
-		memset((unsigned char *)p_dcs_event, 0x00, data_len);
-		p_dcs_event->type = 1;
-		strncpy(p_dcs_event->log_tag, OPLUS_KEVENT_TEST_TAG,
-			sizeof(p_dcs_event->log_tag));
-		strncpy(p_dcs_event->event_id, OPLUS_KEVENT_TEST_ID,
-			sizeof(p_dcs_event->event_id));
-		p_dcs_event->payload_length = p_test_upload->val;
-		memset(p_dcs_event->payload, 0xFF, p_test_upload->val);
-
-		ret = fb_kevent_send_to_user(p_dcs_event);
-
-		if (ret) {
-			pr_err("[ERROR]:fb_kevent_send_to_user err, ret is %d \n", ret);
-		}
-
-		kfree(p_dcs_event);
-	}
-
-	return 0;
-}
-
 #ifdef CONFIG_OPLUS_KEVENT_UPLOAD
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)) && !IS_ENABLED(CONFIG_OPLUS_KERNEL_SECURE_GUARD)
 int kevent_send_to_user(struct kernel_packet_info *userinfo) {return 0;}
@@ -184,11 +123,6 @@ static const struct genl_ops oplus_fb_kevent_upload_ops[] = {
 	{
 		.cmd		= FB_GUARD_CMD_GENL_SENDPID,
 		.doit		= fb_keventupload_sendpid_cmd,
-		.policy		= kernel_fb_genl_policy,
-	},
-	{
-		.cmd		= FB_GUARD_CMD_GENL_TEST_UPLOAD,
-		.doit		= fb_keventupload_test_upload,
 		.policy		= kernel_fb_genl_policy,
 	},
 };
@@ -211,12 +145,6 @@ static const struct genl_ops oplus_fb_kevent_upload_ops[] = {
 		.doit		= fb_keventupload_sendpid_cmd,
 		/*.policy		= taskstats_cmd_get_policy,*/
 		/*.flags		= GENL_ADMIN_PERM,*/
-	},
-	{
-		.cmd		= FB_GUARD_CMD_GENL_TEST_UPLOAD,
-		.doit		= fb_keventupload_test_upload,
-		/*.dumpit		= taskstats2_foreach,*/
-		/*.policy		= taskstats_cmd_get_policy,*/
 	},
 };
 

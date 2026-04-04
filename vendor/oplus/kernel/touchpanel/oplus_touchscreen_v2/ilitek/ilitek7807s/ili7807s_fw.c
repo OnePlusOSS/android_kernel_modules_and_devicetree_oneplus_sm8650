@@ -1209,6 +1209,7 @@ out:
 	ili_ic_get_fw_ver();
 	ili_ic_get_tp_info();
 	ili_ic_get_panel_info();
+	ili_ic_get_support_driver_ver();
 #ifdef CONFIG_OPLUS_TP_APK
 
 	if (ilits->debug_mode_sta && ilits->actual_tp_mode != P5_X_FW_GESTURE_MODE) {

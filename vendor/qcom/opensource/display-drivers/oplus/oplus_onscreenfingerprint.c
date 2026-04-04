@@ -234,6 +234,9 @@ int oplus_ofp_init(void *dsi_panel)
 	OFP_INFO("fp_type_compatible_mode:%d\n", p_oplus_ofp_params->fp_type_compatible_mode);
 	oplus_ofp_fp_type_compatible_mode_config();
 
+	p_oplus_ofp_params->fp_local_hbm_calibration = utils->read_bool(utils->data, "oplus,ofp-fp-local-hbm-calibration");
+	OFP_INFO("fp_local_hbm_calibration:%d\n", p_oplus_ofp_params->fp_local_hbm_calibration);
+
 	if (oplus_ofp_is_supported()) {
 		/* indicates whether gamut needs to be bypassed in aod/fod scenarios or not */
 		p_oplus_ofp_params->need_to_bypass_gamut = utils->read_bool(utils->data, "oplus,ofp-need-to-bypass-gamut");
@@ -966,6 +969,12 @@ static int oplus_ofp_panel_cmd_set_nolock(void *dsi_panel, enum dsi_cmd_set_type
 		/* send demura after hbm off */
 		if (p_oplus_ofp_params->demura_reset_after_hbm_off) {
 			send_demura_after_hbm_off_flag = true;
+		}
+
+		if (p_oplus_ofp_params->aod_unlocking) {
+			p_oplus_ofp_params->aod_unlocking = false;
+			OFP_INFO("oplus_ofp_aod_unlocking:%d\n", p_oplus_ofp_params->aod_unlocking);
+			OPLUS_OFP_TRACE_INT("oplus_ofp_aod_unlocking", p_oplus_ofp_params->aod_unlocking);
 		}
 
 		/* recovery backlight level */
@@ -3719,7 +3728,17 @@ int oplus_ofp_aod_off_handle(void *dsi_display)
 			|| !display->panel->panel_initialized) {
 		OFP_INFO("Dont set backlight when panel already power off");
 	} else {
-		dsi_panel_set_backlight(display->panel, display->panel->bl_config.bl_level);
+		if (oplus_ofp_video_mode_30hz_aod_is_enabled()) {
+			rc = oplus_ofp_panel_cmd_set_nolock(display->panel, DSI_CMD_DEFAULT_SWITCH_PAGE);
+			if (rc) {
+				OFP_ERR("[%s] failed to send DSI_CMD_DEFAULT_SWITCH_PAGE, rc=%d\n", display->name, rc);
+			}
+			display->panel->oplus_priv.aod_backlight_async = true;
+			dsi_panel_set_backlight(display->panel, display->panel->bl_config.bl_level);
+			display->panel->oplus_priv.aod_backlight_async = false;
+		} else {
+			dsi_panel_set_backlight(display->panel, display->panel->bl_config.bl_level);
+		}
 	}
 	mutex_unlock(&display->panel->panel_lock);
 
@@ -3822,10 +3841,9 @@ int oplus_ofp_power_mode_handle(void *dsi_display, int power_mode)
 			oplus_adfr_aod_fod_mux_vsync_switch(display->panel, true);
 #endif /* OPLUS_FEATURE_DISPLAY_ADFR */
 
-			if ((!oplus_ofp_video_mode_30hz_aod_is_enabled()
-						|| (oplus_ofp_video_mode_30hz_aod_is_enabled() && (refresh_rate == 30)))
-								&& !((p_oplus_ofp_params->longrui_aod_config & OPLUS_OFP_FULL_SCREEN_AOD_CONFIG)
-											&& (p_oplus_ofp_params->longrui_aod_mode & OPLUS_OFP_FULL_SCREEN_AOD_MODE))) {
+			if ((!oplus_ofp_video_mode_30hz_aod_is_enabled())
+						&& !((p_oplus_ofp_params->longrui_aod_config & OPLUS_OFP_FULL_SCREEN_AOD_CONFIG)
+									&& (p_oplus_ofp_params->longrui_aod_mode & OPLUS_OFP_FULL_SCREEN_AOD_MODE))) {
 				/* aod on */
 				need_aod_state = (bool)p_oplus_ofp_params->aod_state;
 				if (p_oplus_ofp_params->need_to_sync_data_in_aod_on) {
@@ -4572,10 +4590,12 @@ int oplus_ofp_aod_off_backlight_recovery(void *sde_encoder_virt)
 		if (last_aod_layer_status && !new_aod_layer_status) {
 		OFP_INFO("recovery backlight level = %d after aod layer disappear\n", display->panel->bl_config.bl_level);
 		mutex_lock(&display->panel->panel_lock);
+		display->panel->oplus_priv.aod_backlight_async = true;
 		rc = dsi_panel_set_backlight(display->panel, display->panel->bl_config.bl_level);
 		if (rc) {
 			OFP_ERR("unable to set backlight\n");
 		}
+		display->panel->oplus_priv.aod_backlight_async = false;
 		mutex_unlock(&display->panel->panel_lock);
 	}
 	last_aod_layer_status = new_aod_layer_status;
@@ -4869,7 +4889,7 @@ ssize_t oplus_ofp_set_hbm_attr(struct kobject *obj,
 	OFP_INFO("oplus_ofp_hbm_mode:%u\n", p_oplus_ofp_params->hbm_mode);
 	OPLUS_OFP_TRACE_INT("oplus_ofp_hbm_mode", p_oplus_ofp_params->hbm_mode);
 
-	if (oplus_ofp_local_hbm_is_enabled()) {
+	if (oplus_ofp_local_hbm_is_enabled() && !(p_oplus_ofp_params->fp_local_hbm_calibration)) {
 		if (p_oplus_ofp_params->hbm_mode) {
 			if(p_oplus_ofp_params->need_to_update_lhbm_pressed_icon_gamma_nt37707) {
 				/* update gamma and grayscale for NT37707 */

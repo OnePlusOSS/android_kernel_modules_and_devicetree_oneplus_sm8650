@@ -72,7 +72,7 @@
 #include "../ilitek_common.h"
 #include <soc/oplus/system/oplus_project.h>
 
-#define DRIVER_VERSION                  "3.0.4.0.250514"
+#define DRIVER_VERSION                  "3.0.4.0.250818"
 
 /* Options */
 #define TR_BUF_SIZE                 (2*K)  /* Buffer size of touch report */
@@ -147,6 +147,7 @@ extern bool ili_debug_en;
 #define OFF                 0
 #define NONE               -1
 #define DO_SPI_RECOVER     -2
+#define DIFF_LEN            512
 
 #define TDDI_DEV_ID             "ILITEK_TDDI"
 
@@ -171,8 +172,10 @@ extern bool ili_debug_en;
 #define CORE_VER_1430               0x01040300
 #define CORE_VER_1460               0x01040600
 #define CORE_VER_1470               0x01040700
+#define CORE_VER_1600               0x01060000
 #define CORE_VER_1700               0x01070000
-
+#define CORE_VER_2100               0x02010000
+#define DRIVER_VER_2080             0x02000800
 #define MAX_HEX_FILE_SIZE           (256*K)
 #define ILI_FILE_HEADER             256
 #define DLM_START_ADDRESS           0x20610
@@ -298,6 +301,7 @@ extern bool ili_debug_en;
 #define P5_X_GET_PROTOCOL_VERSION           0x22
 #define P5_X_GET_CORE_VERSION               0x23
 #define P5_X_GET_CORE_VERSION_NEW           0x24
+#define P5_X_GET_DRIVER_VERSION             0x28
 #define P5_X_MODE_CONTROL                   0xF0
 #define P5_X_SET_CDC_INIT                   0xF1
 #define P5_X_GET_CDC_DATA                   0xF2
@@ -346,6 +350,8 @@ extern bool ili_debug_en;
 #define ILI9881N_AA                 0x98811700
 #define ILI9881O_AA                 0x98811800
 #define ILI9882_CHIP                0x9882
+#define ILI77600_CHIP               0x776000
+#define TDDI_SECOND_PID_ADDR        0x40098
 #define TDDI_PID_ADDR                   0x4009C
 #define TDDI_OTP_ID_ADDR                0x400A0
 #define TDDI_ANA_ID_ADDR                0x400A4
@@ -353,6 +359,55 @@ extern bool ili_debug_en;
 #define TDDI_PC_LATCH_ADDR              0x51010
 #define TDDI_CHIP_RESET_ADDR                0x40050
 #define RAWDATA_NO_BK_SHIFT             8192
+#define LIT_ILI7807_VBK                 42
+#define LIT_OTHER_IC_VBK                39
+#define ILI_VADC_RANGE                  36
+#define ILI_CHIP_START                  0
+#define ILI_CHIP_END                    9
+#define ILI_CHIP_MIN                    0x0A
+#define ILI_CHIP_MAX                    0x23
+#define ILI_CHIP_ID_BASE1               48
+#define ILI_CHIP_ID_BASE2               65
+#define ILI_FW_INFO_DRIVER_VERSION1     64
+#define ILI_FW_INFO_DRIVER_VERSION2     65
+#define ILI_FW_INFO_DRIVER_VERSION3     66
+#define ILI_FW_INFO_DRIVER_VERSION4     67
+#define ILI_V2080_WATER_FLAG            6
+#define ILI_V2080_THR_L8                4
+#define ILI_V2080_THR_H8                5
+
+enum ILI_DEBUG_BYTE {
+	ILI_THR_TD_L8 = 3,
+	ILI_THR_TD_H8 = 4,
+	ILI_THR_L8 = 5,
+	ILI_THR_H8 = 6,
+	ILI_THR_BASELIE_BTYE = 8,
+	ILI_MAX_DIFF_L8 = 9,
+	ILI_MAX_DIFF_H8 = 10,
+	ILI_MODE_BYTE = 13,
+	ILI_WATER_FLAG_BYTE = 14
+};
+
+enum CHIP_ID {
+	CHIP_ID_BYTE = 0,
+	CHIP_PID_BYTE = 1,
+	CHIP_SECOND_PID_BYTE = 2,
+	CHIP_OTP_BYTE = 3,
+	CHIP_ANA_BYTE = 4
+};
+
+enum DRIVER_VERSION_POS {
+	DRIVER_VERSION_POS1 = 13,
+	DRIVER_VERSION_POS2 = 14,
+	DRIVER_VERSION_POS3 = 15,
+	DRIVER_VERSION_POS4 = 16,
+	DRIVER_VERSION_POS_LEN = 17
+};
+
+#define ILI_CHIP_ID_LEN                 5
+#define ILI_CHIP_ID                     0x78787878
+#define ILI_MODE_SWITCH_MODE_PARA       2
+#define ILI_DUMP_DATE_LEN               512
 
 enum TP_SPI_CLK_LIST {
 	TP_SPI_CLK_1M = 1000000,
@@ -608,6 +663,8 @@ struct open_test_para {
 	int gain;
 	int cbk_step;
 	int cint;
+	int invbk;
+	int vadc_range;
 	int accuracy;
 };
 
@@ -631,12 +688,13 @@ struct shor_test_para {
 
 struct core_mp_test_data {
 	u32 chip_pid;
-	u16 chip_id;
+	u32 chip_id;
 	u8 chip_type;
 	u8 chip_ver;
 	u32 fw_ver;
 	u32 protocol_ver;
 	u32 core_ver;
+	u8 *product_id;
 	u32 ini_date;
 	u32 ini_ver;
 	int no_bk_shift;
@@ -691,6 +749,9 @@ struct core_mp_test_data {
 	bool ctrl_lcm;
 	bool lost_benchmark;
 	bool lost_parameter;
+
+	/*raw cap test max min test*/
+	int raw_cap_restriction;
 
 	struct open_test_para open_para;
 	struct shor_test_para short_para;
@@ -815,6 +876,11 @@ struct ilitek_ts_data {
 	u8 glove_mode;
 	u8 water_flag;
 	s16 thr;
+	bool switch_for_report;
+	u8 normal_mode;
+	s16 max_diff;
+	s16 thr_td;
+	u32 print_count;
 	atomic_t irq_stat;
 	atomic_t tp_reset;
 	atomic_t ice_stat;
@@ -939,9 +1005,11 @@ struct ilitek_ic_func_ctrl {
 struct ilitek_ic_info {
 	u8 type;
 	u8 ver;
-	u16 id;
+	u32 id;
+	u32 second_pid;
 	u32 pid;
 	u32 pid_addr;
+	u32 second_pid_addr;
 	u32 pc_counter_addr;
 	u32 pc_latch_addr;
 	u32 reset_addr;
@@ -952,12 +1020,14 @@ struct ilitek_ic_info {
 	u32 fw_ver;
 	u32 core_ver;
 	u32 fw_mp_ver;
+	u32 support_driver_ver;
 	u32 max_count;
 	u32 reset_key;
 	u16 wtd_key;
 	int no_bk_shift;
 	bool dma_reset;
 	int (*dma_crc)(u32 start_addr, u32 block_size);
+	u8 product_id[8];
 };
 
 /* Prototypes for tddi firmware/flash functions */
@@ -994,6 +1064,7 @@ extern int ili_ic_get_tp_info(void);
 extern int ili_ic_get_core_ver(void);
 extern int ili_ic_get_protocl_ver(void);
 extern int ili_ic_get_fw_ver(void);
+extern int ili_ic_get_support_driver_ver(void);
 extern int ili_ic_get_info(void);
 extern int ili_ic_dummy_check(void);
 extern int ili_ice_mode_bit_mask_write(u32 addr, u32 mask, u32 value);

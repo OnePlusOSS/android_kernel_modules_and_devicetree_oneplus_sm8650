@@ -84,7 +84,7 @@ static ssize_t proc_perf_schedinfo_read(struct file *file, char __user *buf,
 	memset(cpu_schedinfo, 0, sizeof(u64) * NR_CPUS);
 	for_each_possible_cpu(cpu) {
 		struct rq *rq = cpu_rq(cpu);
-		struct oplus_rq *orq = (struct oplus_rq *)rq->android_oem_data1;
+		struct oplus_rq *orq = get_oplus_rq(rq);
 		struct cfs_rq *cfs_rq = &rq->cfs;
 		struct rt_rq *rt_rq = &rq->rt;
 		unsigned int cfs_running = cfs_rq->h_nr_running;

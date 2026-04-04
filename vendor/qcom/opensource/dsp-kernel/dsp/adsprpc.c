@@ -1763,6 +1763,20 @@ static int overlap_ptr_cmp(const void *a, const void *b)
 	return st == 0 ? ed : st;
 }
 
+/**
+ * context_build_overlap - Detect and handle buffer overlaps in RPC args
+ * @ctx: The invoke context containing buffer information
+ *
+ * This function detects overlapping memory regions in the RPC arguments and
+ * adjusts the memory mapping accordingly. It handles ION and non-ION buffers
+ * separately to prevent incorrect overlap detection between different buf types.
+ * For each buffer type:
+ * - If a buffer overlaps with a previous buffer of the same type, it adjusts
+ *   the mapping to avoid the overlap
+ * - If no overlap is detected, it uses the full buffer range
+ *
+ * Return: 0 on success, error code on failure
+ */
 static int context_build_overlap(struct smq_invoke_ctx *ctx)
 {
 	int i, err = 0;
@@ -1770,7 +1784,9 @@ static int context_build_overlap(struct smq_invoke_ctx *ctx)
 	int inbufs = REMOTE_SCALARS_INBUFS(ctx->sc);
 	int outbufs = REMOTE_SCALARS_OUTBUFS(ctx->sc);
 	int nbufs = inbufs + outbufs;
-	struct overlap max;
+	struct overlap max_nonion;
+	struct overlap max_ion;
+	struct overlap *max;
 
 	for (i = 0; i < nbufs; ++i) {
 		ctx->overs[i].start = (uintptr_t)lpra[i].buf.pv;
@@ -1790,21 +1806,29 @@ static int context_build_overlap(struct smq_invoke_ctx *ctx)
 		ctx->overps[i] = &ctx->overs[i];
 	}
 	sort(ctx->overps, nbufs, sizeof(*ctx->overps), overlap_ptr_cmp, NULL);
-	max.start = 0;
-	max.end = 0;
+	max_nonion.start = 0;
+	max_nonion.end = 0;
+	max_ion.start = 0;
+	max_ion.end = 0;
+	max_nonion.raix = -1;
+	max_ion.raix = -1;
 	for (i = 0; i < nbufs; ++i) {
-		if (ctx->overps[i]->start < max.end) {
-			ctx->overps[i]->mstart = max.end;
+		int raix = ctx->overps[i]->raix;
+		/* Separate ION and non-ION buffers; fd <= 0 indicates non-ION */
+		max = (ctx->fds && ctx->fds[raix] > 0) ? &max_ion : &max_nonion;
+		if (ctx->overps[i]->start < max->end) {
+			ctx->overps[i]->mstart = max->end;
 			ctx->overps[i]->mend = ctx->overps[i]->end;
-			ctx->overps[i]->offset = max.end -
+			ctx->overps[i]->offset = max->end -
 				ctx->overps[i]->start;
-			if (ctx->overps[i]->end > max.end) {
-				max.end = ctx->overps[i]->end;
+			if (ctx->overps[i]->end > max->end) {
+				max->end = ctx->overps[i]->end;
+				max->raix = raix;
 			} else {
-				if ((max.raix < inbufs &&
+				if ((max->raix < inbufs &&
 					ctx->overps[i]->raix + 1 > inbufs) ||
 					(ctx->overps[i]->raix < inbufs &&
-					max.raix + 1 > inbufs))
+					max->raix + 1 > inbufs))
 					ctx->overps[i]->do_cmo = 1;
 				ctx->overps[i]->mend = 0;
 				ctx->overps[i]->mstart = 0;
@@ -1813,7 +1837,7 @@ static int context_build_overlap(struct smq_invoke_ctx *ctx)
 			ctx->overps[i]->mend = ctx->overps[i]->end;
 			ctx->overps[i]->mstart = ctx->overps[i]->start;
 			ctx->overps[i]->offset = 0;
-			max = *ctx->overps[i];
+			*max = *ctx->overps[i];
 		}
 	}
 bail:
@@ -2676,6 +2700,21 @@ static int get_args(uint32_t kernel, struct smq_invoke_ctx *ctx)
 			}
 			pages[idx].addr = map->phys + offset;
 			pages[idx].size = num << PAGE_SHIFT;
+			/*
+			 * Check for page range overflow and validate page
+			 * range is not greater than map buffer range.
+			 * This prevents potential buffer overflow
+			 * and memory corruption that could be exploited.
+			 */
+			if (pages[idx].addr > (ULLONG_MAX - pages[idx].size) ||
+			   (pages[idx].addr + pages[idx].size) >
+					(map->phys + map->size)) {
+				err = -EFAULT;
+				ADSPRPC_ERR(
+					"Invalid buffer addr 0x%llx len 0x%zx IPA 0x%llx size 0x%llx fd %d\n",
+					buf, len, map->phys, map->size, map->fd);
+				goto bail;
+			}
 		}
 		rpra[i].buf.pv = buf;
 	}
@@ -4107,6 +4146,7 @@ static int fastrpc_init_create_dynamic_process(struct fastrpc_file *fl,
 		return err;
 	}
 	fl->dsp_process_state = PROCESS_CREATE_IS_INPROGRESS;
+	memcpy(fl->name, current->comm, TASK_COMM_LEN - 1);
 
 	if (init->memlen) {
 		if(init->memlen > INIT_MEMLEN_MAX_DYNAMIC || init->memlen < INIT_MEMLEN_MIN_DYNAMIC) {
@@ -6548,6 +6588,7 @@ static int fastrpc_device_open(struct inode *inode, struct file *filp)
 	init_completion(&fl->dma_invoke);
 	fl->file_close = FASTRPC_PROCESS_DEFAULT_STATE;
 	filp->private_data = fl;
+	fl->filp = filp;
 	fl->sharedbuf_info.buf_fd = -1;
 	mutex_init(&fl->internal_map_mutex);
 	mutex_init(&fl->map_mutex);
@@ -7472,6 +7513,69 @@ bail:
 	return err;
 }
 
+int count_hlist_entries(struct hlist_head *head) {
+	struct smq_invoke_ctx *ictx;
+	struct hlist_node *n;
+	int count = 0;
+
+	hlist_for_each_entry_safe(ictx, n, head, hn) {
+		count++;
+	}
+
+	return count;
+}
+
+void get_session_info(struct fastrpc_apps *me, struct fastrpc_sessions *sessions, int cid) {
+	unsigned long irq_flags = 0;
+	struct fastrpc_file *fl;
+	struct hlist_node *n;
+	int i = 0;
+	struct fastrpc_session_info *session;
+
+	pr_info("ABHI_DBG: %s called cid %d", __func__, cid);
+	spin_lock_irqsave(&me->hlock, irq_flags);
+	hlist_for_each_entry_safe(fl, n, &me->drivers, hn) {
+		if (fl->cid != cid)
+			continue;
+		if (i >= sessions->session_count)
+			break;
+		session = &sessions->sessions[i];
+		session->refcount = atomic_long_read(&fl->filp->f_count);
+		session->tgid = fl->tgid;
+		session->tgid_frpc = fl->tgid_frpc;
+		session->sessionid = fl->sessionid;
+		memcpy(session->name, fl->name, TASK_COMM_LEN);
+		session->pd_type = fl->pd_type;
+		session->file_close = fl->file_close;
+		session->pending_ctx_count = count_hlist_entries(&fl->clst.pending);
+		session->interrupted_ctx_count = count_hlist_entries(&fl->clst.interrupted);
+		i++;
+		pr_info("ABHI_DBG: %s called i %d name %s", __func__, i, fl->name);
+	}
+	sessions->session_count = i;
+	spin_unlock_irqrestore(&me->hlock, irq_flags);
+}
+
+static int fastrpc_get_sessions(struct fastrpc_file *fl, void __user *argp) {
+	struct fastrpc_sessions sessions = {0};
+	int err = 0;
+
+	pr_info("ABHI_DBG: %s called", __func__);
+	if (copy_from_user(&sessions, argp, sizeof(sessions)))
+ 		return -EFAULT;
+	VERIFY(err, VALID_FASTRPC_CID(sessions.cid));
+	if (err) {
+		err = -ECHRNG;
+		return err;
+	}
+	get_session_info(&gfa, &sessions, sessions.cid);
+
+	if (copy_to_user(argp, &sessions, sizeof(sessions)))
+		return -EFAULT;
+
+	return 0;
+}
+
 static long fastrpc_device_ioctl(struct file *file, unsigned int ioctl_num,
 				 unsigned long ioctl_param)
 {
@@ -7655,6 +7759,9 @@ static long fastrpc_device_ioctl(struct file *file, unsigned int ioctl_num,
 		VERIFY(err, 0 == (err = fastrpc_dspsignal_cancel_wait(fl, &p.canc)));
 		if (err)
 			goto bail;
+		break;
+	case FASTRPC_IOCTL_GET_SESSIONS:
+		fastrpc_get_sessions(fl, (void __user *)param);
 		break;
 	default:
 		err = -ENOTTY;

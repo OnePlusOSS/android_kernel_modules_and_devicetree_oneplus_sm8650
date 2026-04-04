@@ -1976,6 +1976,28 @@ retry:
 			UNLOCK_BUFFER(tcm_hcd->in);
 			retval = 0;
 			goto exit;
+		case STATUS_PREVIOUS_COMMAND_PENDING:
+			TPD_INFO("Incorrect header code (0x%02x) payload length(%d)\n",
+				tcm_hcd->status_report_code, tcm_hcd->payload_length);
+			UNLOCK_BUFFER(tcm_hcd->in);
+			if (tcm_hcd->payload_length) {
+				int i = 0;
+				retval = syna_tcm_continued_read(tcm_hcd);
+				if (retval < 0) {
+					TPD_INFO("Failed to do continued read\n");
+					retval = -EIO;
+					goto exit;
+				}
+				LOCK_BUFFER(tcm_hcd->in);
+				TPD_INFO("syna data begin\n");
+				for (i = 0; i < tcm_hcd->payload_length; i++) {
+					TPD_INFO("syna data[%d]:%x, ", i, tcm_hcd->in.buf[4 + i]);
+				}
+				TPD_INFO("syna data end\n");
+				UNLOCK_BUFFER(tcm_hcd->in);
+			}
+			retval = -EIO;
+			goto exit;
 		default:
 			if (tcm_hcd->health_monitor_support) {
 				tp_healthinfo_report(tcm_hcd->monitor_data, HEALTH_REPORT, "read_msg_err_header");
@@ -2977,8 +2999,6 @@ static u32 syna_trigger_reason(void *chip_data, int gesture_enable, int is_suspe
 	tcm_hcd->trigger_reason = 0;
 
 	if (tcm_hcd->zeroflash_init_done == 0) {
-		TPD_INFO("hdl not ready, disable irq\n");
-		disable_irq_nosync(tcm_hcd->s_client->irq);
 		return retval;
 	}
 
@@ -3682,7 +3702,7 @@ void syna_fw_version_update(void *chip_data)
 	struct touchpanel_data *ts = spi_get_drvdata(tcm_hcd->s_client);
 	char *fw_ver = NULL;
 
-        tcm_hcd->app_info.customer_config_id[9] = '\0';
+        tcm_hcd->app_info.customer_config_id[15] = '\0';
 
 	if (strlen(tcm_hcd->app_info.customer_config_id) == 0) {
 		return;
@@ -3758,7 +3778,7 @@ static fw_update_state copy_fw_to_buffer(struct syna_tcm_hcd *tcm_hcd, const str
 		TPD_INFO("failed to get oplus tp firmware.\n");
 		return FW_UPDATE_ERROR;
 	}
-	return FW_UPDATE_ERROR;
+	return FW_UPDATE_SUCCESS;
 
 exit:
 	if(tp_fw) {
@@ -4615,10 +4635,15 @@ static int syna_testing_Doze_noise(struct seq_file *s, void *chip_data,
 	 return error_count;
 }
 
+static int raw_cap_data_restriction(int val, int raw_cap_restriction)
+{
+	return val * raw_cap_restriction / 100;
+}
+
 static int syna_testing_dynamic_range(struct seq_file *s, void *chip_data,
 					struct auto_testdata *syna_testdata, struct test_item_info *p_test_item_info)
 {
-	 int16_t data16 = 0;
+	 int16_t data16 = 0, r_u_data16 = 0;
 	 int i = 0, ret = 0, index = 0, byte_cnt = 2;
 	 int error_count = 0;
 	 struct syna_tcm_hcd *tcm_info = (struct syna_tcm_hcd *)chip_data;
@@ -4675,12 +4700,14 @@ static int syna_testing_dynamic_range(struct seq_file *s, void *chip_data,
 		   store_to_file(syna_testdata->fp, syna_testdata->length,
 					 syna_testdata->pos, "%04d, ", data16);
 
-		   if ((data16 < p_mutual_n[index]) || (data16 > p_mutual_p[index])) {
-			   TPD_INFO("rawcap test failed at node[%d]=%d [%d %d].\n", index, data16,
+		   r_u_data16 = raw_cap_data_restriction(data16, syna_testdata->raw_cap_restriction);
+
+		   if ((r_u_data16 < p_mutual_n[index]) || (r_u_data16 > p_mutual_p[index])) {
+			   TPD_INFO("rawcap test failed at node[%d]=%d restriction[%d] [%d %d].\n", index, data16, r_u_data16,
 					p_mutual_n[index], p_mutual_p[index]);
 
 			   if (!error_count) {
-				   seq_printf(s, "rawcap test failed at node[%d]=%d [%d %d].\n", index, data16,
+				   seq_printf(s, "rawcap test failed at node[%d]=%d restriction[%d] [%d %d].\n", index, data16, r_u_data16,
 						  p_mutual_n[index], p_mutual_p[index]);
 			   }
 			   error_count++;
@@ -5434,11 +5461,12 @@ void tp_wait_hdl_finished(void)
 
 	do {
 		if (retry_cnt) {
-			msleep(100);
+			msleep(10);
 		}
 		retry_cnt++;
-		TPD_INFO("Wait hdl finished retry %d times...  \n", retry_cnt);
-	} while (!g_tcm_hcd->hdl_finished_flag && retry_cnt < 20);
+		if ((retry_cnt % 10) == 0)
+			TPD_INFO("Wait hdl finished retry %d times...  \n", retry_cnt);
+	} while (!g_tcm_hcd->hdl_finished_flag && retry_cnt < 200);
 }
 
 /*
@@ -5616,6 +5644,7 @@ static void syna_tcm_parse_dts(struct syna_tcm_hcd *tcm_hcd, struct spi_device *
 
 	tcm_hcd->irq_trigger_hdl_support = of_property_read_bool(np, "synaptics,irq_trigger_hdl_support");
 	tcm_hcd->pt17_pt18_test_support = of_property_read_bool(np, "pt17_pt18_test_support");
+	tcm_hcd->hw_rt_retry_support = of_property_read_bool(np, "hw_rt_retry_support");
 }
 
 static int syna_tcm_spi_probe(struct spi_device *spi)
@@ -5644,6 +5673,7 @@ static int syna_tcm_spi_probe(struct spi_device *spi)
 	}
 
 	g_tcm_hcd = tcm_hcd;
+	tcm_hcd->ts = ts;
 	tcm_hcd->s_client = spi;
 	tcm_hcd->hw_res = &ts->hw_res;
 	tcm_hcd->rd_chunk_size = RD_CHUNK_SIZE;

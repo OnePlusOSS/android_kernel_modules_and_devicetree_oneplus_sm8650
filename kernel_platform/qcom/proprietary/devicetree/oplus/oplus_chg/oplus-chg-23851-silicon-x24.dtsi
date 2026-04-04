@@ -1,5 +1,8 @@
 &oplus_mms_gauge {
 	silicon_x24 {
+		oplus,fcl_support;
+		oplus,fcl_index = <0>;
+		oplus,vb_offset = <30>;
 		deep_spec,support;
 		deep_spec,uv_thr = <3000>;
 		deep_spec,count_thr = <50>;

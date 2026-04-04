@@ -47,6 +47,9 @@
 
 #define NVT_MMAP_DEBUG_FINGER_DOWN_DIFFDATA   (0x26A78) /*debug finger diff (finger down)  */
 #define NVT_MMAP_DEBUG_STATUS_CHANGE_DIFFDATA (0x26CB8) /*debug finger diff (status change)*/
+#define ADDR_MP_DEBUG_MESSAGE		(0x130A50)
+#define ADDR_UNLOCK_CP_COUNT		(0x1FB316)
+#define ADDR_READ_PC_COUNT		(0x1FB304)
 
 #define W_DETECT                        13
 #define UP_VEE_DETECT                   14
@@ -108,6 +111,7 @@
 #define EVENTBUFFER_EXT_PEN_JITTER_LEVEL          0x25
 #define EVENTBUFFER_EXT_NOTIFY_KEYBOARD_OPEN      0x26       /*notify keyboard open event during screenOn*/
 #define EVENTBUFFER_EXT_REALTIME_DIFF_RECORD      0x28
+#define EVENTBUFFER_EXT_SET_PACKAGE_TYPE          0x29
 #define PEN_CTL_FEEDBACK                          0xffff
 
 #define NVT_TOUCH_FW_DEBUG_INFO (1)

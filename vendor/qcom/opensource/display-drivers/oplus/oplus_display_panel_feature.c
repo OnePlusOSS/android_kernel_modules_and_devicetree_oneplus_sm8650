@@ -233,6 +233,11 @@ int oplus_panel_features_config(struct dsi_panel *panel)
 	LCD_INFO("oplus,doze_disable_esdcheck: %s\n",
 			panel->oplus_priv.doze_disable_esdcheck ? "true" : "false");
 
+	panel->oplus_priv.ramless_aod_mode_cmd_switch_support = utils->read_bool(utils->data,
+			"oplus,ramless_aod_mode_cmd_switch_support");
+	LCD_INFO("oplus,ramless_aod_mode_cmd_switch_support: %s\n",
+			panel->oplus_priv.ramless_aod_mode_cmd_switch_support ? "true" : "false");
+
 	return 0;
 }
 
@@ -643,17 +648,19 @@ void oplus_panel_update_backlight(struct dsi_panel *panel,
 
 	if(panel->pwm_params.pack_backlight == false) {
 		mutex_lock(&panel->panel_tx_lock);
-#if defined(CONFIG_PXLW_IRIS)
-		if (iris_is_chip_supported() && iris_is_pt_mode(panel))
-			rc = iris_update_backlight(inverted_dbv_bl_lvl);
-		else
-#endif
-		rc = mipi_dsi_dcs_set_display_brightness(dsi, inverted_dbv_bl_lvl);
 
 		if (panel->oplus_priv.dsi_cmd_need_to_package) {
 			dsi_cmd_set_type_status = 0;
 			panel->oplus_priv.dsi_cmd_need_to_package = false;
 		}
+
+#if defined(CONFIG_PXLW_IRIS)
+		if (iris_is_chip_supported() && iris_is_pt_mode(panel))
+			rc = iris_update_backlight(inverted_dbv_bl_lvl);
+		else
+#endif
+			rc = mipi_dsi_dcs_set_display_brightness(dsi, inverted_dbv_bl_lvl);
+
 		mutex_unlock(&panel->panel_tx_lock);
 		if (rc < 0)
 			LCD_ERR("failed to update dcs backlight:%d\n", bl_lvl);

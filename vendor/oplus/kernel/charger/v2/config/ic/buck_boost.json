@@ -1500,8 +1500,40 @@
                     }
                 }
             }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_BUCK_GET_POWER_ROLE",
+            "desc": {
+                "zh": "获得power_role"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["int *"],
+            "parameter_desc": [
+                {
+                    "range": "*",
+                    "type": "out",
+                    "desc": {
+                        "zh": "0: 正充, 1: 反充, -1:未知"
+                    }
+                }
+            ],
+            "vict": {
+                "read": {
+                    "cmd": "vict -f {id} -G vic-*",
+                    "desc": {
+                        "zh": "获取power role"
+                    }
+                },
+                "write": false,
+                "overwrite": {
+                    "cmd": "vict -f {id} -O {val} vic-*",
+                    "desc": {
+                        "zh": "power role 可选值为0，1，-1"
+                    }
+                }
+            }
         }
     ],
 
-    "version": "V2.5:54:65b0f3055cf731a41cf1e8e29eba9c6fce00a10290a072f1794ec774866c9495"
+    "version": "V4.1:55:58c47b13402cf6495f3953ebc4c2235c9f46df0b6b2408607c2224e3a87d404e"
 }

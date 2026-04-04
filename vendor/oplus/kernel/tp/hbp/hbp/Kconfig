@@ -6,4 +6,5 @@ config TOUCHSCREEN_HBP_CORE
       If unsure, say N.
 
 source "drivers/input/touchscreen/tp_hbp/chips/focal/ft3683g/Kconfig"
+source "drivers/input/touchscreen/tp_hbp/chips/focal/ft3685g/Kconfig"
 source "drivers/input/touchscreen/tp_hbp/chips/synaptics/s3910/Kconfig"

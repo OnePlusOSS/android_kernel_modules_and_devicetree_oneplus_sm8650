@@ -28,7 +28,6 @@
 enum {
 	FB_GUARD_CMD_ATTR_UNSPEC = 0,
 	FB_GUARD_CMD_ATTR_MSG,
-	FB_GUARD_CMD_ATTR_OPT,
 	__FB_GUARD_CMD_ATTR_MAX,
 };
 
@@ -38,7 +37,6 @@ enum {
 	FB_GUARD_CMD_GENL_UNSPEC = 0,
 	FB_GUARD_CMD_GENL_SENDPID,
 	FB_GUARD_CMD_GENL_UPLOAD,
-	FB_GUARD_CMD_GENL_TEST_UPLOAD,
 };
 
 
@@ -52,11 +50,6 @@ struct msg_from_kernel {
 	struct nlmsghdr n_hd;
 	struct genlmsghdr g_hd;
 	char buf[OPLUS_FB_GUARD_MSG_FROM_KERNEL_BUF_LEN];
-};
-
-struct msg_test_upload {
-	unsigned int pro_pid;
-	unsigned int val;
 };
 
 int oplus_fb_guard_test_netlink(int cmd, unsigned int val);

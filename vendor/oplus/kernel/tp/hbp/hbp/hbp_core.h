@@ -55,6 +55,10 @@
 #define SMART_GESTURE_THRESHOLD 0x0A
 #define SMART_GESTURE_LOW_VALUE 0x05
 
+#define FP_GRIP_ENABLE           1
+#define FP_GRIP_DISABLE_TIMEOUT  2
+#define FP_GRIP_DISABLE          0
+
 /* bit operation */
 #define SET_BIT(data, flag) ((data) |= (flag))
 #define CLR_BIT(data, flag) ((data) &= ~(flag))
@@ -204,6 +208,8 @@ enum gesture_type {
 	PenDetect,
 	SGesture,
 	FingerprintEarlyDown,
+	FP_GESTURE_HOLD,
+	FP_GESTURE_RELEASE,
 };
 
 struct point_info {
@@ -319,9 +325,12 @@ struct hbp_device {
 	union touch_time top_irq_frame_tv;
 
 	bool pen_support;
-	bool create_with_power_on_support;
 	char clk_name[16];
 	struct clk *pen_ck;
+	/* edge grip for fingerprint */
+	bool fp_grip_support;
+	bool fp_grip_hold;
+	int fp_grip_enable;
 };
 
 struct device_state {
@@ -382,6 +391,7 @@ extern int hbp_unregister_devices(void *priv);
 extern bool match_from_cmdline(struct device *dev, struct chip_info *info);
 extern void hbp_set_irq_wake(struct hbp_device *hbp_dev, bool wake);
 extern void hbp_dev_power_type_ctrl(void *priv, enum power_type type, bool en);
+extern void hbp_dev_set_irq_status(void *priv, bool en);
 extern void hbp_dev_healthinfo_report(void *priv, char *report);
 /*
 #if 1

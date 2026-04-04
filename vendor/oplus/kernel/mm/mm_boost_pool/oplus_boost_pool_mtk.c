@@ -789,7 +789,7 @@ struct boost_pool *boost_pool_create(const char *name, bool smmu_v3_enable)
 		goto destroy_proc_cpu;
 	}
 
-	nr_pages = SZ_32M >> PAGE_SHIFT;
+	nr_pages = 0;
 	boost_pool->min = nr_pages;
 	boost_pool->low = nr_pages;
 	boost_pool->alloc = nr_pages;

@@ -26,13 +26,6 @@ enum {
 	SET_LEVEL_MAX,
 };
 
-enum {
-	OPT_STR_TYPE = 0,
-	OPT_STR_PID,
-	OPT_STR_VAL,
-	OPT_STR_MAX = 3,
-};
-
 #define QOS_TASK_PID_FLAG_BITS 1
 #define QOS_TASK_PID_FLAG_MASK    ((1ul << QOS_TASK_PID_FLAG_BITS) - 1)
 #define QOS_TASK_PID_MASK (~QOS_TASK_PID_FLAG_MASK)

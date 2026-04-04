@@ -45,6 +45,9 @@ struct syna_tcm {
     bool probe_done;
     bool is_attn_redirecting;
     bool char_dev_irq_disabled;
+
+    /* err cnt */
+    int report_code_err_cnt;
 };
 
 enum fingerprint_err_type {

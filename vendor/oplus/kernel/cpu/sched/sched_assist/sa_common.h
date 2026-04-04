@@ -19,6 +19,7 @@
 #include <linux/vmalloc.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
+#include <linux/sched/rt.h>
 
 #include "sa_oemdata.h"
 #include "sa_common_struct.h"
@@ -220,6 +221,8 @@ enum IM_FLAG_TYPE {
 
 enum ots_state {
 	OTS_STATE_SET_AFFINITY,
+	OTS_STATE_DDL_ACTIVE,
+	OTS_STATE_DDL_ACTIVE_PREEMPTED,
 	OTS_STATE_MAX,
 };
 
@@ -255,6 +258,13 @@ struct oplus_rq {
 	int nr_running;
 	u64 min_vruntime;
 	u64 load_weight;
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
+	struct rb_root_cached ddl_root;
+	spinlock_t ddl_lock;
+	unsigned int nr_ddl_preempted;
+#endif
+
 #ifdef CONFIG_LOCKING_PROTECT
 	struct list_head locking_thread_list;
 	spinlock_t *locking_list_lock;
@@ -275,6 +285,7 @@ extern int global_debug_enabled;
 extern int global_sched_assist_enabled;
 extern int global_sched_assist_scene;
 extern int global_sched_disable_camera_ux;
+extern int global_sched_group_enabled;
 
 struct rq;
 
@@ -369,6 +380,28 @@ extern struct kmem_cache *oplus_task_struct_cachep;
 
 #define ots_to_ts(ots)	(ots->task)
 #define OTS_IDX			0
+#define ORQ_IDX			0
+
+static inline bool test_task_is_fair(struct task_struct *task)
+{
+	DEBUG_BUG_ON(!task);
+
+	/* valid CFS priority is MAX_RT_PRIO..MAX_PRIO-1 */
+	if ((task->prio >= MAX_RT_PRIO) && (task->prio <= MAX_PRIO-1))
+		return true;
+	return false;
+}
+
+static inline bool test_task_is_rt(struct task_struct *task)
+{
+	DEBUG_BUG_ON(!task);
+
+	/* valid RT priority is 0..MAX_RT_PRIO-1 */
+	if (rt_prio(task->prio))
+		return true;
+
+	return false;
+}
 
 static inline struct oplus_task_struct *get_oplus_task_struct(struct task_struct *t)
 {
@@ -704,6 +737,7 @@ bool is_max_cluster(int cpu);
 bool is_mid_cluster(int cpu);
 bool im_mali(const char *comm);
 bool task_is_runnable(struct task_struct *task);
+struct oplus_rq *get_oplus_rq(struct rq *rq);
 
 #if IS_ENABLED(CONFIG_OPLUS_FEATURE_LOADBALANCE)
 int ux_mask_to_prio(int ux_mask);
@@ -782,6 +816,7 @@ void android_rvh_cpu_cgroup_online_handler(void *unused, struct cgroup_subsys_st
 void android_rvh_set_cpus_allowed_comm_handler(void *unused, struct task_struct *task, const struct cpumask *new_mask);
 void android_rvh_set_cpus_allowed_by_task_handler(void *unused, const struct cpumask *cpu_valid_mask, const struct cpumask *new_mask,
 				struct task_struct *p, unsigned int *dest_cpu);
+void android_vh_reweight_entity_handler(void *unused, struct sched_entity *se);
 #if IS_ENABLED(CONFIG_OPLUS_FEATURE_BAN_APP_SET_AFFINITY)
 void android_vh_sched_setaffinity_early_handler(void *unused, struct task_struct *task, const struct cpumask *new_mask, bool *skip);
 #endif

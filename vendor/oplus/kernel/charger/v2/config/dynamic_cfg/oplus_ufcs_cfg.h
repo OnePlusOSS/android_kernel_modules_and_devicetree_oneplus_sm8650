@@ -633,7 +633,7 @@ static void oplus_ufcs_update_new_low_curr_full_curves_config(
 static void oplus_ufcs_update_lcf_curves_strategy_config(
 	struct oplus_param_head *param_head, struct oplus_ufcs *chip)
 {
-	if (oplus_get_chg_spec_version() == OPLUS_CHG_SPEC_VER_V3P7)
+	if (oplus_get_chg_spec_version() >= OPLUS_CHG_SPEC_VER_V3P7)
 		oplus_ufcs_update_new_low_curr_full_curves_config(param_head, chip);
 	else
 		oplus_ufcs_update_low_curr_full_curves_config(param_head, chip);

@@ -613,7 +613,7 @@ exit:
  * @return
  *    on success, 0; otherwise, negative value on error.
  */
-/*
+
 static int syna_cdev_ioctl_enable_irq(struct syna_tcm *tcm,
 		const unsigned char *ubuf_ptr, unsigned int buf_size,
 		unsigned int data_size)
@@ -621,21 +621,11 @@ static int syna_cdev_ioctl_enable_irq(struct syna_tcm *tcm,
 	int retval = 0;
 	unsigned int data;
 
-	if (!tcm->is_connected) {
-		hbp_err("Not connected\n");
-		return -ENXIO;
-	}
-
 	if ((buf_size < sizeof(data)) || (buf_size > PAGE_SIZE)
                 || (data_size < sizeof(data)) || (data_size > PAGE_SIZE)) {
 		hbp_err("Invalid sync data size, buf_size:%d, data_size:%d\n",
 		    buf_size, data_size);
 		return -EINVAL;
-	}
-
-	if (!tcm->hw_if->ops_enable_irq) {
-		LOGW("Not support irq control\n");
-		return -EFAULT;
 	}
 
 	retval = copy_from_user(&data, ubuf_ptr, sizeof(data));
@@ -646,11 +636,7 @@ static int syna_cdev_ioctl_enable_irq(struct syna_tcm *tcm,
 
 	switch (data) {
 	case SYSFS_DISABLED_INTERRUPT:
-		retval = tcm->hw_if->ops_enable_irq(tcm->hw_if, false);
-		if (retval < 0) {
-			hbp_err("Fail to disable interrupt\n");
-			return retval;
-		}
+		hbp_dev_set_irq_status(tcm, false);
 
 		g_sysfs_io_polling_interval =
 			tcm->tcm_dev->msg_data.default_resp_reading;
@@ -659,11 +645,7 @@ static int syna_cdev_ioctl_enable_irq(struct syna_tcm *tcm,
 
 		break;
 	case SYSFS_ENABLED_INTERRUPT:
-		retval = tcm->hw_if->ops_enable_irq(tcm->hw_if, true);
-		if (retval < 0) {
-			hbp_err("Fail to enable interrupt\n");
-			return retval;
-		}
+		hbp_dev_set_irq_status(tcm, true);
 
 		g_sysfs_io_polling_interval = RESP_IN_ATTN;
 
@@ -672,11 +654,7 @@ static int syna_cdev_ioctl_enable_irq(struct syna_tcm *tcm,
 		break;
 	default:
 		// recover the interrupt and also assign the polling interval
-		retval = tcm->hw_if->ops_enable_irq(tcm->hw_if, true);
-		if (retval < 0) {
-			hbp_err("Fail to enable interrupt\n");
-			return retval;
-		}
+		hbp_dev_set_irq_status(tcm, true);
 
 		g_sysfs_io_polling_interval = data;
 		if (g_sysfs_io_polling_interval < RESP_IN_POLLING)
@@ -691,7 +669,7 @@ static int syna_cdev_ioctl_enable_irq(struct syna_tcm *tcm,
 
 	return 0;
 }
-*/
+
 /**
  * syna_cdev_ioctl_store_pid()
  *
@@ -1071,8 +1049,8 @@ static int syna_cdev_ioctl_dispatch(struct syna_tcm *tcm,
 				ubuf_ptr, ubuf_size, *data_size);
 		break;
 	case STD_ENABLE_IRQ_ID:
-		/*retval = syna_cdev_ioctl_enable_irq(tcm,
-				ubuf_ptr, ubuf_size, *data_size);*/
+		retval = syna_cdev_ioctl_enable_irq(tcm,
+				ubuf_ptr, ubuf_size, *data_size);
 		hbp_err("STD_ENABLE_IRQ_ID not support\n");
 		break;
 	case STD_RAW_WRITE_ID:

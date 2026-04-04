@@ -25,6 +25,18 @@ void syna_hw_reset(struct syna_tcm *tcm_hcd)
 	msleep(100);
 }
 
+void syna_hw_power_on(struct syna_tcm *tcm_hcd)
+{
+	hbp_dev_power_type_ctrl(tcm_hcd, POWER_BUS, true);
+	msleep(10);
+	hbp_dev_power_type_ctrl(tcm_hcd, POWER_AVDD, true);
+	msleep(10);
+	hbp_dev_power_type_ctrl(tcm_hcd, POWER_VDDI, true);
+	msleep(10);
+	hbp_dev_power_type_ctrl(tcm_hcd, POWER_RESET, true);
+	msleep(100);
+}
+
 static int syna_spi_sync(void *priv, char *tx, char *rx, int32_t len)
 {
 	struct syna_tcm *tcm_hcd = (struct syna_tcm *)priv;
@@ -168,6 +180,20 @@ static int syna_get_irq_reason(void *priv, enum irq_reason *reason)
 		*reason = IRQ_REASON_RESPONSE;
 	} else if (tcm_hcd->status_report_code == REPORT_DIFF) {
 		*reason = IRQ_REASON_GESTURE_DIFF;
+	}
+
+	if (tcm_hcd->status_report_code == STATUS_NOT_IMPLEMENTED) {
+		tcm_hcd->report_code_err_cnt = tcm_hcd->report_code_err_cnt + 1;
+	} else {
+		tcm_hcd->report_code_err_cnt = 0;
+	}
+
+	if (tcm_hcd->report_code_err_cnt == 3) {
+		hbp_err("get error data, need reset devices...\n");
+		syna_hw_reset(tcm_hcd);
+		tcm_hcd->report_code_err_cnt = 0;
+		hbp_exception_report(EXCEP_IRQ, "syna_tcm_get_event_data fail", sizeof("syna_tcm_get_event_data fail"));
+		return -1;
 	}
 
 	return 0;
@@ -522,7 +548,7 @@ static int syna_dev_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, tcm_hcd);
 	tcm_hcd->pdev = pdev;
 	tcm_hcd->tcm_dev = tcm_dev;
-
+	tcm_hcd->report_code_err_cnt = 0;
 
 	ret = hbp_register_devices(tcm_hcd,
 								&pdev->dev,
@@ -546,13 +572,17 @@ static int syna_dev_probe(struct platform_device *pdev)
 		goto err_exit;
 	}
 
+	syna_hw_power_on(tcm_hcd);
+
 	for (retry = 0; retry < 5; retry++) {
 		ret = syna_tcm_detect_device(tcm_hcd->tcm_dev);
 		if (ret >= 0) {
 			break;
 		}
-		hbp_err("Detect device fail, retry = %d.\n", retry);
-		syna_hw_reset(tcm_hcd);
+		if (ret == _EAGAIN) {
+			hbp_err("Detect device fail, retry = %d.\n", retry);
+			syna_hw_reset(tcm_hcd);
+		}
 	}
 
 	tcm_hcd->probe_done = true;

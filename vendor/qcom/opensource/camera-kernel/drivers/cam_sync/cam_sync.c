@@ -20,6 +20,17 @@
 #include "camera_main.h"
 #include "cam_req_mgr_workq.h"
 
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+#include <linux/kernel.h>
+#include <linux/string.h>
+#include <linux/sched.h>
+#include <linux/kthread.h>
+
+extern void oplus_set_ux_state_lock(struct task_struct *t, int ux_state, int inherit_type, bool need_lock_rq);
+#define SA_TYPE_LIGHT				(1 << 0)
+#define SA_TYPE_HEAVY				(1 << 1)
+#define SA_TYPE_ANIMATOR			(1 << 2)
+#endif
 struct sync_device *sync_dev;
 
 /*
@@ -188,15 +199,37 @@ int cam_sync_register_callback(sync_callback cb_func,
 			sync_cb->callback_func = cb_func;
 			sync_cb->cb_data = userdata;
 			sync_cb->sync_obj = sync_obj;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			if(!IS_ERR_OR_NULL(sync_dev->scheduler_worker)){
+				kthread_init_work(&sync_cb->cb_dispatch_work_kthread,
+					cam_sync_util_cb_dispatch_kthread_work);
+				oplus_set_ux_state_lock(sync_dev->scheduler_worker->task,
+					SA_TYPE_LIGHT, -1, true);
+			} else{
+				INIT_WORK(&sync_cb->cb_dispatch_work,
+					cam_sync_util_cb_dispatch);
+			}
+#else
 			INIT_WORK(&sync_cb->cb_dispatch_work,
-				cam_sync_util_cb_dispatch);
+					cam_sync_util_cb_dispatch);
+#endif
 			sync_cb->status = row->state;
 			CAM_DBG(CAM_SYNC, "Enqueue callback for sync object:%s[%d]",
 				row->name,
 				sync_cb->sync_obj);
 			sync_cb->workq_scheduled_ts = ktime_get();
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+			if(!IS_ERR_OR_NULL(sync_dev->scheduler_worker)){
+				kthread_queue_work(sync_dev->scheduler_worker,
+								&sync_cb->cb_dispatch_work_kthread);
+			} else{
+				queue_work(sync_dev->work_queue,
+					&sync_cb->cb_dispatch_work);
+			}
+#else
 			queue_work(sync_dev->work_queue,
-				&sync_cb->cb_dispatch_work);
+					&sync_cb->cb_dispatch_work);
+#endif
 			spin_unlock_bh(&sync_dev->row_spinlocks[sync_obj]);
 		}
 
@@ -206,7 +239,18 @@ int cam_sync_register_callback(sync_callback cb_func,
 	sync_cb->callback_func = cb_func;
 	sync_cb->cb_data = userdata;
 	sync_cb->sync_obj = sync_obj;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if(!IS_ERR_OR_NULL(sync_dev->scheduler_worker)){
+		kthread_init_work(&sync_cb->cb_dispatch_work_kthread,
+						cam_sync_util_cb_dispatch_kthread_work);
+		oplus_set_ux_state_lock(sync_dev->scheduler_worker->task,
+			SA_TYPE_LIGHT, -1, true);
+	} else{
+		INIT_WORK(&sync_cb->cb_dispatch_work, cam_sync_util_cb_dispatch);
+	}
+#else
 	INIT_WORK(&sync_cb->cb_dispatch_work, cam_sync_util_cb_dispatch);
+#endif
 	list_add_tail(&sync_cb->list, &row->callback_list);
 
 	if (test_bit(CAM_GENERIC_FENCE_TYPE_SYNC_OBJ, &cam_sync_monitor_mask))
@@ -2481,8 +2525,15 @@ static int cam_sync_close(struct file *filep)
 		 * Flush the work queue to wait for pending signal callbacks to
 		 * finish
 		 */
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		if(!IS_ERR_OR_NULL(sync_dev->scheduler_worker)){
+			kthread_flush_worker(sync_dev->scheduler_worker);
+		} else{
+			flush_workqueue(sync_dev->work_queue);
+		}
+#else
 		flush_workqueue(sync_dev->work_queue);
-
+#endif
 		/*
 		 * Now that all callbacks worker threads have finished,
 		 * destroy the sync objects
@@ -2831,7 +2882,31 @@ static int cam_sync_component_bind(struct device *dev,
 	 * always
 	 */
 	set_bit(0, sync_dev->bitmap);
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if (of_property_read_bool(dev->of_node, "enable-kthread-worker-ux")){
+		sync_dev->scheduler_worker =  kthread_create_worker(0, CAM_SYNC_WORKQUEUE_NAME);
+		if (IS_ERR_OR_NULL(sync_dev->scheduler_worker)) {
+			CAM_ERR(CAM_SYNC,
+				"Error: high priority scheduler_worker creation failed");
+			rc = -ENOMEM;
+			goto v4l2_fail;
+		}
+		CAM_INFO(CAM_SYNC, "high priority work queue creation use kthread work");
+	}
+	else{
+		sync_dev->scheduler_worker = NULL;
+		CAM_INFO(CAM_SYNC, "high priority work queue creation use workqueue");
+		sync_dev->work_queue = alloc_workqueue(CAM_SYNC_WORKQUEUE_NAME,
+			WQ_HIGHPRI | WQ_UNBOUND, 1);
 
+		if (!sync_dev->work_queue) {
+			CAM_ERR(CAM_SYNC,
+				"Error: high priority work queue creation failed");
+			rc = -ENOMEM;
+			goto v4l2_fail;
+		}
+	}
+#else
 	sync_dev->work_queue = alloc_workqueue(CAM_SYNC_WORKQUEUE_NAME,
 		WQ_HIGHPRI | WQ_UNBOUND, 1);
 
@@ -2841,7 +2916,7 @@ static int cam_sync_component_bind(struct device *dev,
 		rc = -ENOMEM;
 		goto v4l2_fail;
 	}
-
+#endif
 	/* Initialize dma fence driver */
 	rc = cam_dma_fence_driver_init();
 	if (rc) {
@@ -2876,7 +2951,15 @@ dma_driver_deinit:
 	cam_dma_fence_driver_deinit();
 #endif
 workq_destroy:
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	if(!IS_ERR_OR_NULL(sync_dev->scheduler_worker)){
+		kthread_destroy_worker(sync_dev->scheduler_worker);
+	} else{
+		destroy_workqueue(sync_dev->work_queue);
+	}
+#else
 	destroy_workqueue(sync_dev->work_queue);
+#endif
 v4l2_fail:
 	v4l2_device_unregister(sync_dev->vdev->v4l2_dev);
 register_fail:
