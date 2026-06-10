@@ -313,10 +313,21 @@ config OPLUS_MT6835_CHARGER
         help
           Say Y here to declare MTK6835 support
 
+config OPLUS_MT6769_CHARGER
+        bool "MTK6769 support"
+        help
+          Say Y here to declare MTK6769 support
+
 config OPLUS_SY6974B_CHARGER
 	bool "SY6974B support"
 	help
 	  Say Y here to declare SY6974B support
+
+config OPLUS_GAUGE_BQ28Z610_RA
+	bool "GAUGE BQ28Z610 RA support"
+	default n
+	help
+	  Say Y here to declare BQ28Z610 RA support
 
 config OPLUS_GAUGE_MPC7022
 	bool "GAUGE MPC7022 support"

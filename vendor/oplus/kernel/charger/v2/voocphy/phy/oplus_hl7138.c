@@ -908,7 +908,7 @@ static int hl7138_vooc_hw_setting(struct oplus_voocphy_manager *chip)
 	hl7138_write_byte(chip->client, HL7138_REG_0B, 0x88);	/* VBUS_OVP=12V */
 	hl7138_write_byte(chip->client, HL7138_REG_0C, 0x0F);	/* VIN_OVP:5.85v,,JL:04-0C; */
 
-	hl7138_write_byte(chip->client, HL7138_REG_0E, 0x1A);	/* IBUS_OCP:4.6A,(16+9)*0.1+0.1+2=4.6A; */
+	hl7138_write_byte(chip->client, HL7138_REG_0E, 0x2F);   /* IBUS_OCP:3.55A, 47*50+1000+200=3550mA */
 
 	hl7138_write_byte(chip->client, HL7138_REG_14, 0x02);	/* WD:1000ms,JL:09-14; */
 	hl7138_write_byte(chip->client, HL7138_REG_15, 0x80);	/* JL:bp mode; */

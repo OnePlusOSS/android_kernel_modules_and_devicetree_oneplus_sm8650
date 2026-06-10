@@ -376,6 +376,7 @@ static int upm7610_init_alert_mask(struct tcpc_device *tcpc)
 			| TCPC_V10_REG_ALERT_TX_FAILED
 			| TCPC_V10_REG_ALERT_RX_HARD_RST
 			| TCPC_V10_REG_ALERT_RX_STATUS
+			| TCPC_V10_REG_EXTENED_STATUS
 			| TCPC_V10_REG_RX_OVERFLOW
 			| TCPC_V10_REG_VBUS_SINK_DISCONNECT
 			| TCPC_V10_REG_ALERT_VENDOR_DEFINED;
@@ -1138,6 +1139,7 @@ static int upm7610_tcpcdev_init(struct upm7610_chip *chip, struct device *dev)
 		case TYPEC_RP_1_5:
 		case TYPEC_RP_3_0:
 			desc->rp_lvl = val;
+			break;
 		default:
 			break;
 		}

@@ -49,6 +49,11 @@
 #define SC2150A_PID			0x2150
 #define SC2150A_DID			0x0000
 #define SC2150A_1P2_DID 	0x0001
+#define HUSB311C_VID		0x2e99
+#define HUSB311C_PID		0x0311
+#define HUSB311C_DID		0x0000
+#define CPS_PID				0x8851
+#define CPS_VID				0x315C
 
 #define SC6601_PID 0x6600
 #define SC6601_DID 0x0000
@@ -77,6 +82,7 @@ extern void *tcpc_get_dev_data(struct tcpc_device *tcpc);
 extern void tcpci_lock_typec(struct tcpc_device *tcpc);
 extern void tcpci_unlock_typec(struct tcpc_device *tcpc);
 extern int tcpci_alert(struct tcpc_device *tcpc);
+extern int tcpci_alert_power_status_changed(struct tcpc_device *tcpc);
 
 extern void tcpci_vbus_level_init(
 		struct tcpc_device *tcpc, uint16_t power_status);

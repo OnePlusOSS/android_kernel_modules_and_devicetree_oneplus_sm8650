@@ -214,6 +214,7 @@ void oplus_mms_gauge_update_sili_ic_alg_cfg_work(struct work_struct *work);
 void oplus_mms_gauge_update_sili_spare_power_enable_work(struct work_struct *work);
 void oplus_mms_gauge_sili_spare_power_effect_check_work(struct work_struct *work);
 void oplus_mms_gauge_sili_term_volt_effect_check_work(struct work_struct *work);
+void oplus_mms_gauge_set_deep_term_volt_work(struct work_struct *work);
 void oplus_gauge_nvram_stress_test_work(struct work_struct *work);
 void oplus_gauge_term_volt_stress_test_work(struct work_struct *work);
 void oplus_gauge_read_stress_test_work(struct work_struct *work);

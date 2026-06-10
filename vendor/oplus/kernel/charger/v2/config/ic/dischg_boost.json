@@ -190,8 +190,81 @@
                     }
                 }
             }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_BOOST_SET_FAM_EN",
+            "desc": {
+                "zh": "设置FAM_EN"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["bool"],
+            "parameter_desc": [
+                {
+                    "range": "*",
+                    "type": "in",
+                    "desc": {
+                        "zh": "设置FAM_EN使能或关闭"
+                    }
+                }
+            ],
+            "vict": {
+                "read": false,
+                "write": false,
+                "overwrite": false
+            }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_BOOST_IS_SUSPEND",
+            "desc": {
+                "zh": "获取boost IC是否处于suspend状态"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["bool *"],
+            "parameter_desc": [
+                {
+                    "range": "0-1",
+                    "type": "out",
+                    "desc": {
+                        "zh": "0:未suspend, 1:suspend"
+                    }
+                }
+            ],
+            "vict": {
+                "read": false,
+                "write": false,
+                "overwrite": false
+            }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_BOOST_SET_SUSPEND_RESUME_CV",
+            "desc": {
+                "zh": "设置suspend和resume时的CV电压配置"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["int", "int"],
+            "parameter_desc": [
+                {
+                    "range": "*",
+                    "type": "in",
+                    "desc": {
+                        "zh": "suspend时的CV电压值, 单位mv"
+                    }
+                },
+                {
+                    "range": "*",
+                    "type": "in",
+                    "desc": {
+                        "zh": "resume时的CV电压值, 单位mv"
+                    }
+                }
+            ],
+            "vict": {
+                "read": false,
+                "write": false,
+                "overwrite": false
+            }
         }
     ],
 
-    "version": "V1.0:7:9192bf2a591406171285b1ee2b60ab396f93264496ed2574bd1324d5c7fd96f4"
+    "version": "V2.2:10:adb80d07ed3068a0aa6d8504842f3e054541a2e4d2a034e30a0222e994168032"
 }

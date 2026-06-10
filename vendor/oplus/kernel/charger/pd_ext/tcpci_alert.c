@@ -117,7 +117,7 @@ static int tcpci_vbus_level_changed(struct tcpc_device *tcpc)
 	return rv;
 }
 
-static int tcpci_alert_power_status_changed(struct tcpc_device *tcpc)
+int tcpci_alert_power_status_changed(struct tcpc_device *tcpc)
 {
 	int rv = 0;
 	uint16_t power_status = 0;
@@ -131,6 +131,7 @@ static int tcpci_alert_power_status_changed(struct tcpc_device *tcpc)
 
 	return rv;
 }
+EXPORT_SYMBOL(tcpci_alert_power_status_changed);
 
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
 static int tcpci_alert_tx_success(struct tcpc_device *tcpc)

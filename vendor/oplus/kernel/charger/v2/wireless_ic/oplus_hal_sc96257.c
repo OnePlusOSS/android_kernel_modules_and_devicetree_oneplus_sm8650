@@ -39,6 +39,7 @@
 #endif
 
 #define LDO_ON_MA	100
+#define SC96257_AC_OV_FLAG	1  /*This IC has an AC_OV issue when used with the 0x0001 in-vehicle unit*/
 
 enum {
 	TX_STATUS_OFF,
@@ -472,7 +473,20 @@ struct tx_cust_type {/*<offset>*/
 	u8 reserved01c8[7];
 	u8 i2c_check;
 	/*0x01D0*/
-	u8 rsv01d0[48];
+	u8 rsv01d0[12];
+	/*0x1DC*/
+	u8 mac_check[4];
+	u8 wlspen_id;
+	u8 rsv01e1[3];
+	/*0x1E4*/
+	u8 mac_addr_l[5];
+	u8 rsv01e9[3];
+	/*0x1EC*/
+	u8 mac_addr_h[5];
+	u8 rsv01f1[3];
+	/*0x1F4*/
+	u8 chg_status[2];
+	u8 rsv01f6[10];
 } __attribute__((packed));
 
 #pragma pack(1)
@@ -993,7 +1007,7 @@ static int sc96257_rx_set_cmd(struct oplus_sc96257 *chip, u32 rx_cmd)
 	int retry_count = 0;
 	u32 cmd_value = 0;
 
-	addr = (u16)ADDR(struct tx_cust_type, cmd);
+	addr = (u16)ADDR(struct rx_cust_type, cmd);
 retry:
 	rc = sc96257_read_block(chip, addr, &cmd_value, sizeof(chip->info.rx_info.cmd));
 	if (rc < 0) {
@@ -1028,7 +1042,7 @@ static int sc96257_tx_set_cmd(struct oplus_sc96257 *chip, u32 tx_cmd)
 
 	addr = (u16)ADDR(struct tx_cust_type, cmd);
 retry:
-	rc = sc96257_read_block(chip, addr, &cmd_value, sizeof(chip->info.rx_info.cmd));
+	rc = sc96257_read_block(chip, addr, &cmd_value, sizeof(chip->info.tx_info.cmd));
 	if (rc < 0) {
 		chg_err("read cmd err, rc=%d\n", rc);
 		return rc;
@@ -1446,6 +1460,10 @@ static int sc96257_get_running_mode(struct oplus_sc96257 *chip)
 		return 0;
 	}
 
+	if (!chip->rx_connected) {
+		chip->adapter_type = 0;
+		return 0;
+	}
 	if (chip->adapter_type != 0)
 		return chip->adapter_type;
 
@@ -1594,7 +1612,7 @@ static int sc96257_set_tx_enable(struct oplus_chg_ic_dev *dev, bool en)
 	return rc;
 }
 
-static int sc96257_set_tx_start(struct oplus_chg_ic_dev *dev, bool start)
+static int sc96257_set_tx_start(struct oplus_chg_ic_dev *dev, enum oplus_chg_wls_tx_start_type start)
 {
 	struct oplus_sc96257 *chip;
 	int rc;
@@ -1605,7 +1623,7 @@ static int sc96257_set_tx_start(struct oplus_chg_ic_dev *dev, bool start)
 	}
 	chip = oplus_chg_ic_get_drvdata(dev);
 
-	if (start) {
+	if (start != OPLUS_CHG_WLS_TX_STOP) {
 		sc96257_set_wake_pattern(chip);
 		msleep(10);
 		if (sc96257_fw_checksum(chip) == FW_CHECKSUM_FAIL) {
@@ -1615,7 +1633,10 @@ static int sc96257_set_tx_start(struct oplus_chg_ic_dev *dev, bool start)
 			sc96257_track_upload_wls_ic_err_info(chip, WLS_ERR_SCENE_TX, WLS_IC_ERR_VAC_ACDRV);
 			return -ENODEV;
 		}
-		rc = sc96257_tx_set_cmd(chip, AP_CMD_TX_ENABLE);
+		if (start == OPLUS_CHG_WLS_TX_START_WLSPEN)
+			rc = sc96257_tx_set_cmd(chip, AP_CMD_TX_ENABLE | AP_CMD_TX_ENABLE_WLSPEN);
+		else
+			rc = sc96257_tx_set_cmd(chip, AP_CMD_TX_ENABLE);
 	} else {
 		rc = sc96257_tx_set_cmd(chip, AP_CMD_TX_DISABLE);
 	}
@@ -1623,10 +1644,9 @@ static int sc96257_set_tx_start(struct oplus_chg_ic_dev *dev, bool start)
 		chg_err("set tx start err, rc=%d\n", rc);
 		return rc;
 	}
-	if (start) {
-		chg_info("set tx start ok\n");
+	if (start != OPLUS_CHG_WLS_TX_STOP)
 		chip->tx_status = TX_STATUS_ON;
-	}
+	chg_info("set tx start %d\n", start);
 
 	return rc;
 }
@@ -2409,6 +2429,36 @@ static int wdt_close(struct oplus_sc96257 *chip)
 	return rc;
 }
 
+static int sram_write_prepare(struct oplus_sc96257 *chip)
+{
+	int rc;
+
+	rc = wdt_close(chip);
+	usleep_range(1000, 1100);
+	rc |= wdt_close(chip);
+	if (rc < 0) {
+		chg_err("WDT close failed\n");
+		return -EINVAL;
+	}
+
+	/*reset mcu*/
+	rc = sys_reset_ctrl(chip, true);
+	rc |= sys_reset_ctrl(chip, false);
+	if (rc < 0) {
+		chg_err("sys_reset_ctrl failed\n");
+		return -EINVAL;
+	}
+	usleep_range(2000, 2100);
+
+	rc = mcu_idle_ctrl(chip, true);
+	if (rc < 0) {
+		chg_err("mcu_idle_ctrl failed\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int sram_write(struct oplus_sc96257 *chip)
 {
 	int i;
@@ -2424,18 +2474,10 @@ static int sram_write(struct oplus_sc96257 *chip)
 		return -EINVAL;
 	}
 
-	rc = wdt_close(chip);
-	usleep_range(1000, 1100);
-	rc |= wdt_close(chip);
+	rc = sram_write_prepare(chip);
 	if (rc < 0) {
-		chg_err("WDT close failed\n");
-		return -EINVAL;
-	}
-
-	rc = mcu_idle_ctrl(chip, true);
-	if (rc < 0) {
-		chg_err("mcu_idle_ctrl failed\n");
-		return -EINVAL;
+		chg_err("sram write prepare failed\n");
+		return rc;
 	}
 
 	for (i = 0; i < size; i += PGM_WORD) {
@@ -2887,6 +2929,10 @@ static void sc96257_event_process(struct oplus_sc96257 *chip)
 		if (irq_flag & WP_IRQ_TX_VAC_PRESENT)
 			/*trigger only in tx mode*/
 			chip->event_code = WLS_EVENT_VAC_PRESENT;
+		else if (irq_flag & WP_IRQ_TX_BLE_MAC_ADDR)
+			chip->event_code = WLS_EVENT_BLE_MAC_ADDR;
+		else if (irq_flag & WP_IRQ_TX_WLSPEN_CHG_STATUS)
+			chip->event_code = WLS_EVENT_WLSPEN_CHG_STATUS;
 		else
 			chip->event_code = WLS_EVENT_TRX_CHECK;
 		oplus_chg_ic_virq_trigger(chip->ic_dev, OPLUS_IC_VIRQ_EVENT_CHANGED);
@@ -3179,6 +3225,129 @@ static int sc96257_set_silent(struct oplus_chg_ic_dev *dev)
 		return rc;
 	}
 	chg_info("<~WPC~> set silent...\n");
+
+	return 0;
+}
+
+static int sc96257_get_ble_mac_addr(struct oplus_chg_ic_dev *dev, u64 *mac_addr)
+{
+	struct oplus_sc96257 *chip;
+	int rc;
+	u16 addr;
+	u8 mac_check[4] = { 0 };
+	u8 mac_addr_l[5] = { 0 };
+	u8 mac_addr_h[5] = { 0 };
+	u8 decode_addr[6] = { 0 };
+
+	if (dev == NULL || mac_addr == NULL) {
+		chg_err("oplus_chg_ic_dev or mac_addr is NULL\n");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_drvdata(dev);
+
+	addr = (u16)ADDR(struct tx_cust_type, mac_check);
+	rc = sc96257_read_block(chip, addr, mac_check, sizeof(chip->info.tx_info.mac_check));
+	if (rc < 0) {
+		chg_err("read mac_check err, rc=%d\n", rc);
+		return rc;
+	}
+	chg_info("<~WPC~> mac_check:0x%x,0x%x,0x%x,0x%x.\n",
+		mac_check[0], mac_check[1], mac_check[2], mac_check[3]);
+	addr = (u16)ADDR(struct tx_cust_type, mac_addr_l);
+	rc = sc96257_read_block(chip, addr, mac_addr_l, sizeof(chip->info.tx_info.mac_addr_l));
+	if (rc < 0) {
+		chg_err("read mac_addr_l err, rc=%d\n", rc);
+		return rc;
+	}
+	chg_info("<~WPC~> mac_addr_l:0x%x,0x%x,0x%x,0x%x,0x%x.\n",
+		mac_addr_l[0], mac_addr_l[1], mac_addr_l[2], mac_addr_l[3], mac_addr_l[4]);
+	addr = (u16)ADDR(struct tx_cust_type, mac_addr_h);
+	rc = sc96257_read_block(chip, addr, mac_addr_h, sizeof(chip->info.tx_info.mac_addr_h));
+	if (rc < 0) {
+		chg_err("read mac_addr_h err, rc=%d\n", rc);
+		return rc;
+	}
+	chg_info("<~WPC~> mac_addr_h:0x%x,0x%x,0x%x,0x%x,0x%x.\n",
+		mac_addr_h[0], mac_addr_h[1], mac_addr_h[2], mac_addr_h[3], mac_addr_h[4]);
+	/*mac_addr_l/h byte[0~1] is packet head, byte[2~4] is MAC data*/
+	decode_addr[5] = ((mac_addr_h[4] & 0x0F) << 4) | ((mac_addr_l[4] & 0xF0) >> 4);
+	decode_addr[4] = ((mac_addr_h[3] & 0x0F) << 4) | ((mac_addr_l[3] & 0xF0) >> 4);
+	decode_addr[3] = ((mac_addr_h[2] & 0x0F) << 4) | ((mac_addr_l[2] & 0xF0) >> 4);
+
+	decode_addr[2] = ((mac_addr_l[4] & 0x0F) << 4) | ((mac_addr_h[4] & 0xF0) >> 4);
+	decode_addr[1] = ((mac_addr_l[3] & 0x0F) << 4) | ((mac_addr_h[3] & 0xF0) >> 4);
+	decode_addr[0] = ((mac_addr_l[2] & 0x0F) << 4) | ((mac_addr_h[2] & 0xF0) >> 4);
+
+	/*MAC address verify*/
+	if ((decode_addr[5] ^ decode_addr[4] ^ decode_addr[3]) != mac_check[2] ||
+	    (decode_addr[2] ^ decode_addr[1] ^ decode_addr[0]) != mac_check[3]) {
+		chg_err("MAC address verify fail\n");
+		return -EINVAL;
+	}
+
+	*mac_addr = decode_addr[5]  << 16 | decode_addr[4] << 8 | decode_addr[3];
+	*mac_addr = *mac_addr << 24 | decode_addr[2] << 16 | decode_addr[1] << 8 | decode_addr[0];
+	chg_debug("<~WPC~> mac addr: 0x%x:0x%x:0x%x:0x%x:0x%x:0x%x, check data: 0x%x,0x%x.\n", decode_addr[5], decode_addr[4],
+		decode_addr[3], decode_addr[2], decode_addr[1], decode_addr[0], mac_check[2], mac_check[3]);
+	return 0;
+}
+
+static int sc96257_get_wlspen_id(struct oplus_chg_ic_dev *dev, u8 *wlspen_id)
+{
+	struct oplus_sc96257 *chip;
+	int rc;
+	u16 addr;
+
+	if (dev == NULL || wlspen_id == NULL) {
+		chg_err("oplus_chg_ic_dev or wlspen_id is NULL\n");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_drvdata(dev);
+
+	addr = (u16)ADDR(struct tx_cust_type, wlspen_id);
+	rc = sc96257_read_block(chip, addr, (u8 *)wlspen_id, sizeof(chip->info.tx_info.wlspen_id));
+	if (rc < 0) {
+		chg_err("read wlspen_id err, rc=%d\n", rc);
+		return rc;
+	}
+	chg_info("<~WPC~> wlspen_id:0x%x.\n", *wlspen_id);
+
+	return 0;
+}
+
+static int sc96257_get_wlspen_chg_status(struct oplus_chg_ic_dev *dev, u8 *chg_status)
+{
+	struct oplus_sc96257 *chip;
+	int rc;
+	u16 addr;
+	u8 val[2] = { 0 };
+
+	if (dev == NULL || chg_status == NULL) {
+		chg_err("oplus_chg_ic_dev or chg_status is NULL\n");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_drvdata(dev);
+
+	addr = (u16)ADDR(struct tx_cust_type, chg_status);
+	rc = sc96257_read_block(chip, addr, (u8 *)val, sizeof(chip->info.tx_info.chg_status));
+	if (rc < 0) {
+		chg_err("read chg_status err, rc=%d\n", rc);
+		return rc;
+	}
+	/*val[0] is packet head*/
+	*chg_status = val[1];
+	chg_info("<~WPC~> chg_status:0x%x.\n", *chg_status);
+
+	return 0;
+}
+
+static int sc96257_get_ac_ov_flag(struct oplus_chg_ic_dev *dev, int *ac_ov_flag)
+{
+	if (dev == NULL || ac_ov_flag == NULL) {
+		chg_err("oplus_chg_ic_dev or ac_ov_flag is NULL\n");
+		return -ENODEV;
+	}
+	*ac_ov_flag = SC96257_AC_OV_FLAG;
 
 	return 0;
 }
@@ -3535,7 +3704,7 @@ static void sc96257_shutdown(struct i2c_client *client)
 
 	/*set TX_EN=0 when shutdown*/
 	if (sc96257_get_wls_type(chip) == OPLUS_CHG_WLS_TRX)
-		sc96257_set_tx_start(chip->ic_dev, false);
+		sc96257_set_tx_start(chip->ic_dev, OPLUS_CHG_WLS_TX_STOP);
 
 	sc96257_rx_is_connected(chip->ic_dev, &is_connected);
 	if (is_connected &&
@@ -3776,6 +3945,22 @@ static void *oplus_chg_rx_get_func(struct oplus_chg_ic_dev *ic_dev,
 	case OPLUS_IC_FUNC_RX_SEND_EPP_MATCH_Q:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_RX_SEND_EPP_MATCH_Q,
 			sc96257_epp_send_match_q);
+		break;
+	case OPLUS_IC_FUNC_RX_GET_BLE_MAC_ADDR:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_RX_GET_BLE_MAC_ADDR,
+			sc96257_get_ble_mac_addr);
+		break;
+	case OPLUS_IC_FUNC_RX_GET_WLSPEN_ID:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_RX_GET_WLSPEN_ID,
+			sc96257_get_wlspen_id);
+		break;
+	case OPLUS_IC_FUNC_RX_GET_WLSPEN_CHG_STATUS:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_RX_GET_WLSPEN_CHG_STATUS,
+			sc96257_get_wlspen_chg_status);
+		break;
+	case OPLUS_IC_FUNC_RX_GET_AC_OV_FLAG:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_RX_GET_AC_OV_FLAG,
+			sc96257_get_ac_ov_flag);
 		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);

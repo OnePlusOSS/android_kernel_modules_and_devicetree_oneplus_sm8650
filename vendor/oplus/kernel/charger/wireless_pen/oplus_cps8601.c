@@ -1094,6 +1094,15 @@ static int cps_wls_get_tx_ept_type(void)
 		(int)cps_reg->reg_bytes_len);
 }
 
+static int cps_wls_get_ept_code(void)
+{
+	struct cps_reg_s *cps_reg;
+
+	cps_reg = (struct cps_reg_s*)(&cps_tx_reg[CPS_TX_REG_EPT_CODE]);
+	return cps_wls_read_reg((int)cps_reg->reg_addr,
+		(int)cps_reg->reg_bytes_len);
+}
+
 static int cps_wls_set_tx_ocp_threshold(int value)
 {
 	struct cps_reg_s *cps_reg;
@@ -1858,6 +1867,7 @@ static int cps_wls_tx_irq_handler(struct cps_wls_chrg_chip *chip, int irq_flag)
 {
 	int rc = 0;
 	struct timeval now_time;
+	int cnt, width, ept;
 
 	if (!chip) {
 		cps_wls_log(CPS_LOG_DEBG, "[%s] chip null\n", __func__);
@@ -1875,6 +1885,9 @@ static int cps_wls_tx_irq_handler(struct cps_wls_chrg_chip *chip, int irq_flag)
 		}
 		if (irq_flag & TX_INT_RX_ATTACH) {
 			cps_wls_log(CPS_LOG_ERR, "Rx attach!\n");
+			cnt = cps_wls_get_no_rx_cnt();
+			width = cps_wls_get_no_rx_width();
+			cps_wls_log(CPS_LOG_ERR, "cnt:%d, width:%d\n", cnt, width);
 			do_gettimeofday(&now_time);
 			chip->tx_start_time =
 				now_time.tv_sec * 1000 + now_time.tv_usec / 1000;
@@ -1887,6 +1900,10 @@ static int cps_wls_tx_irq_handler(struct cps_wls_chrg_chip *chip, int irq_flag)
 		}
 		if (irq_flag & TX_INT_RX_REMOVED) {
 			cps_wls_log(CPS_LOG_ERR, "Rx remove!\n");
+			cnt = cps_wls_get_no_rx_cnt();
+			width = cps_wls_get_no_rx_width();
+			ept = cps_wls_get_ept_code();
+			cps_wls_log(CPS_LOG_ERR, "cnt:%d, width:%d ept_code:%d\n", cnt, width, ept);
 			if (chip->led_on)
 				cps_set_gpio_value(chip, GP_1, 1);
 			else
@@ -1919,7 +1936,7 @@ static int cps_wls_tx_irq_handler(struct cps_wls_chrg_chip *chip, int irq_flag)
 		cps_notify_q_cali_int(chip);
 	}
 
-	if (irq_flag & TX_INT_MIS_LOC) {
+	if ((irq_flag & TX_INT_MIS_LOC) && chip->led_on) {
 		cps_wls_log(CPS_LOG_ERR, "mislocated!\n");
 		cps8601_send_mislocated_uevent(chip->wireless_dev);
 	}
@@ -1935,7 +1952,7 @@ static irqreturn_t cps_wls_irq_handler(int irq, void *dev_id)
 		cps_wls_log(CPS_LOG_ERR, "[%s] chip null\n", __func__);
 		return IRQ_HANDLED;
 	}
-	cps_wls_log(CPS_LOG_DEBG, "[%s] IRQ triggered\n", __func__);
+	cps_wls_log(CPS_LOG_ERR, "[%s] IRQ triggered\n", __func__);
 	__pm_stay_awake(chip->cps_iic_wake_lock);
 	wait_event_interruptible_timeout(i2c_waiter, chip->i2c_ready, msecs_to_jiffies(50));
 	if (!chip->i2c_ready) {

@@ -2116,6 +2116,12 @@ int ili_switch_tp_mode(u8 mode)
 		if (ges_dbg) {
 			ILI_INFO("Enable gesture debug func\n");
 			ili_set_tp_data_len(DATA_FORMAT_GESTURE_DEBUG, false, NULL);
+			if (ilits->differ_mode) {
+				ret = ilits->wrapper(open_differ_cmd, 2, NULL, 0, ON, OFF);
+				if (ret < 0) {
+					ILI_ERR("switch ilitek diff mode fail\n");
+				}
+			}
 		}
 
 		break;

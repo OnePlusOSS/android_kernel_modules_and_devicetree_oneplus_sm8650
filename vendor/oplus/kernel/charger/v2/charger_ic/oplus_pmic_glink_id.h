@@ -140,6 +140,10 @@ enum {
     OPLUS_USB_SET_OVP_FORCED,
     OPLUS_USB_SET_WIRED_USB_STATUS,
     OPLUS_USB_WCD_OVP_DISABLE,
+    OPLUS_USB_REVERSE_CHG_SET_VOLT,
+    OPLUS_USB_REVERSE_CHG_SET_CURRENT,
+    /* PD partner SVID (lower 16 bits valid) */
+    OPLUS_GET_ADAPTER_SVID,
     OPLUS_PROPERTY_MAX,
 } oplus_property_type_e;
 #endif /*_USBPD_DPM_H_*/

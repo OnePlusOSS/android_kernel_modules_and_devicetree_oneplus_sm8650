@@ -60,7 +60,7 @@ static inline bool pd_evaluate_accept_vconn_swap(struct pd_port *pd_port)
 }
 #endif	/* CONFIG_USB_PD_VCONN_SWAP */
 
-#ifdef OPLUS_FEATURE_CHG_BASIC
+#if defined(OPLUS_FEATURE_CHG_BASIC) && defined(CONFIG_USB_DWC3_MSM)
 #if (LINUX_VERSION_CODE == KERNEL_VERSION(5, 1, 5))
 extern bool get_dwc3_msm_lpm_status(void);
 #endif
@@ -75,7 +75,7 @@ static inline bool pd_process_ctrl_msg_dr_swap(
 	}
 
 #ifdef CONFIG_USB_PD_DR_SWAP
-#ifdef OPLUS_FEATURE_CHG_BASIC
+#if defined(OPLUS_FEATURE_CHG_BASIC) && defined(CONFIG_USB_DWC3_MSM)
 #if (LINUX_VERSION_CODE == KERNEL_VERSION(5, 1, 5))
 	if (get_dwc3_msm_lpm_status() == false) {
 		PE_TRANSIT_STATE(pd_port, PE_WAIT);

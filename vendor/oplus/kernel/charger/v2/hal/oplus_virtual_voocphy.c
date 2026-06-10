@@ -465,6 +465,29 @@ static int oplus_chg_vphy_set_pdqc_config(struct oplus_chg_ic_dev *ic_dev)
 	return rc;
 }
 
+static int oplus_chg_vphy_set_usb_dischg_enable(struct oplus_chg_ic_dev *ic_dev, bool enable)
+{
+	int rc;
+	struct oplus_virtual_vphy_ic *va;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+	va = oplus_chg_ic_get_drvdata(ic_dev);
+	if ((va == NULL) || (va->vphy == NULL)) {
+		chg_err("va or vphy is NULL");
+		return -ENODEV;
+	}
+
+	rc = oplus_chg_ic_func(va->vphy, OPLUS_IC_FUNC_VOOCPHY_SET_USB_DISCHG_ENABLE, enable);
+	if (rc < 0)
+		chg_err("set usb dischg enable error, rc=%d\n", rc);
+
+	return rc;
+}
+
 static int oplus_chg_vphy_get_cp_vbat(struct oplus_chg_ic_dev *ic_dev,
 				      int *cp_vbat)
 {
@@ -693,6 +716,33 @@ static int oplus_chg_vphy_set_chg_auto_mode(struct oplus_chg_ic_dev *ic_dev,
 	if (rc < 0)
 		chg_err("failed to %s chg auto mode, rc=%d\n",
 			enable ? "enable" : "disable", rc);
+
+	return rc;
+}
+
+static int oplus_chg_vphy_set_vac2v2x_uvp(struct oplus_chg_ic_dev *ic_dev,
+					 bool disable)
+{
+	int rc;
+	struct oplus_virtual_vphy_ic *va;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+	va = oplus_chg_ic_get_drvdata(ic_dev);
+	if (va->vphy == NULL) {
+		chg_err("no active vphy found");
+		return -ENODEV;
+	}
+
+	rc = oplus_chg_ic_func(va->vphy,
+			       OPLUS_IC_FUNC_VOOCPHY_SET_VAC2V2X_UVP,
+			       disable);
+	if (rc < 0)
+		chg_err("failed to %s vac2v2x uvp, rc=%d\n",
+			disable ? "disable" : "enable", rc);
 
 	return rc;
 }
@@ -948,6 +998,14 @@ static void *oplus_chg_vphy_get_func(struct oplus_chg_ic_dev *ic_dev,
 	case OPLUS_IC_FUNC_VOOCPHY_GET_FASTCHG_COMMU_ING:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_VOOCPHY_GET_FASTCHG_COMMU_ING,
 					       oplus_chg_vphy_get_fastchg_commu_ing);
+		break;
+	case OPLUS_IC_FUNC_VOOCPHY_SET_VAC2V2X_UVP:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_VOOCPHY_SET_VAC2V2X_UVP,
+					       oplus_chg_vphy_set_vac2v2x_uvp);
+		break;
+	case OPLUS_IC_FUNC_VOOCPHY_SET_USB_DISCHG_ENABLE:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_VOOCPHY_SET_USB_DISCHG_ENABLE,
+					       oplus_chg_vphy_set_usb_dischg_enable);
 		break;
 	case OPLUS_IC_FUNC_VOOC_FW_UPGRADE:
 	case OPLUS_IC_FUNC_VOOC_USER_FW_UPGRADE:

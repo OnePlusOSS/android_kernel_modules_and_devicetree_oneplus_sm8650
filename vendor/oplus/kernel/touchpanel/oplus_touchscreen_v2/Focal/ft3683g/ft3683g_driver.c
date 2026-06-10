@@ -2553,6 +2553,12 @@ static int fts_mode_switch(void *chip_data, work_mode mode, int flag)
 
 	case MODE_SLEEP:
 		TPD_INFO("MODE_SLEEP, write 0xA5=3");
+		if (ts_data->fod_info.fp_down) {
+			TPD_INFO("fingerprint auto up");
+			ts_data->ts->view_area_touched = 0;
+			ts_data->fod_info.event_type = 0;
+			ts_data->fod_info.fp_down = 0;
+		}
 		ret = fts_write_reg(FTS_REG_POWER_MODE, 0x03);
 
 		if (ret < 0) {

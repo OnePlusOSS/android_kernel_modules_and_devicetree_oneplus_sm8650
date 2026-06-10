@@ -55,6 +55,8 @@ extern int oplus_chg_get_charger_subtype(void);
 #endif
 extern int oplus_check_pd_usb_type(void);
 
+int sgm41542_input_current_limit_without_aicl(int current_ma);
+
 struct chip_sgm41542 {
 	struct device		*dev;
 	struct i2c_client	*client;
@@ -96,6 +98,7 @@ struct chip_sgm41542 {
 	bool is_hvdcp;
 	bool pre_is_hvdcp;
 	int	part_id;
+	int pd_curr_max;
 
 	struct wakeup_source *suspend_ws;
 	/*fix chgtype identify error*/
@@ -110,6 +113,7 @@ static int aicl_result = 500;
 static bool btb_detect_over;
 static bool dumpreg_by_irq = 0;
 
+#define SGM41542_PD_AICR_MAX_3000MA 3000
 #define PORT_PD_WITH_USB 2
 
 static const unsigned int SGM41515D_IPRECHG_CURRENT_STABLE[IPRECHG_CURRENT_STABLE_LEN] = {
@@ -362,7 +366,7 @@ int sgm41542_set_vindpm_vol(int vindpm)
 }
 
 int sgm41542_usb_icl[] = {
-	300, 500, 900, 1200, 1350, 1500, 1750, 2000, 2200, 2500, 2750, 3000,
+	100, 500, 900, 1200, 1350, 1500, 1750, 2000, 2200, 2500, 2750, 3000,
 };
 
 static int sgm41542_get_usb_icl(void)
@@ -381,6 +385,21 @@ static int sgm41542_get_usb_icl(void)
 	}
 	tmp = (tmp & REG00_SGM41542_INPUT_CURRENT_LIMIT_MASK) >> REG00_SGM41542_INPUT_CURRENT_LIMIT_SHIFT;
 	return (tmp * REG00_SGM41542_INPUT_CURRENT_LIMIT_STEP + REG00_SGM41542_INPUT_CURRENT_LIMIT_OFFSET);
+}
+
+static int sgm41542_pd_set_aicr(int current_ma, bool en)
+{
+	struct chip_sgm41542 *chip = charger_ic;
+
+	if (!chip)
+		return 0;
+
+	chip->pd_curr_max = current_ma;
+	if (en){
+		return sgm41542_input_current_limit_without_aicl(chip->pd_curr_max);
+	}
+	else
+		return 0;
 }
 
 int sgm41542_input_current_limit_without_aicl(int current_ma)
@@ -404,7 +423,13 @@ int sgm41542_input_current_limit_without_aicl(int current_ma)
 		current_ma = REG00_SGM41542_INPUT_CURRENT_LIMIT_OFFSET;
 
 	tmp = (current_ma - REG00_SGM41542_INPUT_CURRENT_LIMIT_OFFSET) / REG00_SGM41542_INPUT_CURRENT_LIMIT_STEP;
-	chg_err("tmp current [%d]ma\n", current_ma);
+
+	if (chip->pd_curr_max <= 100)
+		sgm41542_set_vindpm_vol(7400);
+	else
+		sgm41542_set_vindpm_vol(chip->hw_aicl_point);
+
+	chg_err("tmp current [%d,%02x]ma\n", current_ma, tmp << REG00_SGM41542_INPUT_CURRENT_LIMIT_SHIFT);
 	rc = sgm41542_config_interface(chip, REG00_SGM41542_ADDRESS,
 			tmp << REG00_SGM41542_INPUT_CURRENT_LIMIT_SHIFT,
 			REG00_SGM41542_INPUT_CURRENT_LIMIT_MASK);
@@ -511,6 +536,9 @@ int sgm41542_get_ibus_current(void)
 }
 
 #define SW_AICL_COUNT_MAX	3
+#define DEFAULT_IBUS_MA		100
+#define SUSPEND_IBUS_MA		100
+
 int sgm41542_input_current_limit_write(int current_ma)
 {
 	int i = 0, rc = 0;
@@ -531,6 +559,7 @@ int sgm41542_input_current_limit_write(int current_ma)
 		return 0;
 	}
 
+	current_ma = min(current_ma, chip->pd_curr_max);
 	if (chip->charger_current_pre == current_ma) {
 		chg_err("[%s] the same as the previous current(%d), skip!\n", __func__, chip->charger_current_pre);
 		return 0;
@@ -558,6 +587,11 @@ int sgm41542_input_current_limit_write(int current_ma)
 		else
 			chg_err("icl_down: set icl to %d mA\n", sgm41542_usb_icl[i]);
 		msleep(50);
+	}
+
+	if (current_ma <= 0) {
+		sgm41542_input_current_limit_without_aicl(0);
+		return 0;
 	}
 
 	/*second: aicl process, step from 500ma*/
@@ -1876,7 +1910,7 @@ int sgm41542_hardware_init(void)
 
 	sgm41542_set_termchg_current(WPC_TERMINATION_CURRENT);
 
-	sgm41542_input_current_limit_without_aicl(REG00_SGM41542_INIT_INPUT_CURRENT_LIMIT_500MA);
+	sgm41542_input_current_limit_without_aicl(DEFAULT_IBUS_MA);
 
 	sgm41542_set_rechg_voltage(WPC_RECHARGE_VOLTAGE_OFFSET);
 
@@ -1895,7 +1929,7 @@ int sgm41542_hardware_init(void)
 
 	sgm41542_set_wdt_timer(REG05_SGM41542_WATCHDOG_TIMER_40S);
 
-	chip->charger_current_pre = REG00_SGM41542_INIT_INPUT_CURRENT_LIMIT_500MA;
+	chip->charger_current_pre = DEFAULT_IBUS_MA;
 	return true;
 }
 
@@ -2491,6 +2525,15 @@ static irqreturn_t sgm41542_irq_handler(int irq, void *data)
 		}
 		sgm41542_set_wdt_timer(REG05_SGM41542_WATCHDOG_TIMER_40S);
 		oplus_wake_up_usbtemp_thread();
+		ret = sgm41542_input_current_limit_without_aicl(sgm41542_usb_icl[0]);
+		if (ret){
+			chg_info("FAIL:sgm41542_input_current_limit_without_aicl\n");
+		}
+		chip->charger_current_pre = sgm41542_usb_icl[0];
+		ret = sgm41542_set_vindpm_vol(chip->hw_aicl_point);
+		if (ret){
+			chg_info("FAIL:sgm41542_set_vindpm_vol\n");
+		}
 		if (chip->oplus_charger_type == POWER_SUPPLY_TYPE_UNKNOWN) {
 			sgm41542_get_bc12(chip);
 		}
@@ -2504,6 +2547,15 @@ static irqreturn_t sgm41542_irq_handler(int irq, void *data)
 						&& oplus_vooc_get_allow_reading()
 						&& !oplus_is_rf_ftm_mode()) {
 					sgm41542_enable_charging();
+					ret = sgm41542_input_current_limit_without_aicl(sgm41542_usb_icl[0]);
+					if (ret){
+						chg_info("FAIL:sgm41542_input_current_limit_without_aicl\n");
+					}
+					chip->charger_current_pre = sgm41542_usb_icl[0];
+					ret = sgm41542_set_vindpm_vol(chip->hw_aicl_point);
+					if (ret){
+						chg_info("FAIL:sgm41542_set_vindpm_vol\n");
+					}
 				}
 			}
 		}
@@ -2609,6 +2661,7 @@ static int sgm41542_inform_charger_type(struct chip_sgm41542 *chip)
 		chg_err("inform power supply online failed:%d", ret);
 
 	power_supply_changed(chip->psy);
+	oplus_chg_wake_update_work();
 	return ret;
 }
 
@@ -3155,17 +3208,34 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 	struct chip_sgm41542 * chip =
 		(struct chip_sgm41542 *)container_of(nb,
 		struct chip_sgm41542, pd_nb);
+	int sink_mv;
+	int sink_ma;
+	struct oplus_chg_chip *chg_chip = oplus_chg_get_chg_struct();
 
+	pr_err("PD charger event:%d %d\n", (int)event, (int)noti->pd_state.connected);
+	if (chip == NULL || chg_chip == NULL)
+		return NOTIFY_BAD;
 	switch (event) {
 	case TCP_NOTIFY_TYPEC_STATE:
 		if (noti->typec_state.old_state == TYPEC_UNATTACHED &&
-		    noti->typec_state.new_state == TYPEC_ATTACHED_SNK) {
+				(noti->typec_state.new_state == TYPEC_ATTACHED_SNK ||
+				noti->typec_state.new_state == TYPEC_ATTACHED_NORP_SRC ||
+				noti->typec_state.new_state == TYPEC_ATTACHED_CUSTOM_SRC ||
+				noti->typec_state.new_state == TYPEC_ATTACHED_DBGACC_SNK)) {
+			sgm41542_pd_set_aicr(SGM41542_PD_AICR_MAX_3000MA, false);
+			sgm41542_inform_charger_type(chip);
+			if (!chg_chip->authenticate || chg_chip->balancing_bat_stop_chg)
+				sgm41542_disable_charging();
 			chg_debug("USB Plug in\n");
 			power_supply_changed(chip->psy);
-		} else if (noti->typec_state.old_state == TYPEC_ATTACHED_SNK
-			&& noti->typec_state.new_state == TYPEC_UNATTACHED) {
-			sgm41542_unsuspend_charger();
+		} else if ((noti->typec_state.old_state == TYPEC_ATTACHED_SNK ||
+				noti->typec_state.old_state == TYPEC_ATTACHED_NORP_SRC ||
+				noti->typec_state.old_state == TYPEC_ATTACHED_CUSTOM_SRC ||
+				noti->typec_state.old_state == TYPEC_ATTACHED_DBGACC_SNK) &&
+				noti->typec_state.new_state == TYPEC_UNATTACHED) {
+			sgm41542_pd_set_aicr(SGM41542_PD_AICR_MAX_3000MA, false);
 			chg_debug("USB Plug out\n");
+			sgm41542_unsuspend_charger();
 			if (oplus_vooc_get_fast_chg_type() == CHARGER_SUBTYPE_FASTCHG_VOOC && oplus_chg_get_wait_for_ffc_flag() != true) {
 				chip->power_good = 0;
 				chip->bc12_done = false;
@@ -3184,6 +3254,17 @@ static int pd_tcp_notifier_call(struct notifier_block *nb,
 			}
 		}
 		break;
+	case TCP_NOTIFY_SINK_VBUS:
+		sink_mv = noti->vbus_state.mv;
+		sink_ma = noti->vbus_state.ma;
+		pr_info("%s: sink vbus %dmV %dmA type(0x%02x) adapter\n", __func__,
+			sink_mv, sink_ma, noti->vbus_state.type);
+		if (noti->vbus_state.type & TCP_VBUS_CTRL_PD_DETECT || (noti->vbus_state.type == TCP_VBUS_CTRL_TYPEC && sink_mv == 5000 && sink_ma == 100)) {
+			sgm41542_pd_set_aicr(sink_ma, true);
+			pr_err("set sgm41542 pd aicr %d\n", sink_ma);
+		}
+		break;
+
 	default:
 		break;
 	}
@@ -3273,6 +3354,7 @@ static int sgm41542_charger_probe(struct i2c_client *client,
 	btb_detect_over = false;
 	chip->charger_current_pre = -1;
 	chip->sw_aicl_count = 0;
+	chip->pd_curr_max = SGM41542_PD_AICR_MAX_3000MA;
 	ret = sgm41542_get_deivce_online();
 	if (!ret) {
 		chg_err("!!!sgm41542 is not detected\n");

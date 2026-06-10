@@ -79,6 +79,7 @@
 #define REG02_SGM41515_FAST_CHG_CURRENT_LIMIT_OFFSET   0
 #define REG02_SGM41515_FAST_CHG_CURRENT_LIMIT_STEP     60
 #define REG02_SGM41515_FAST_CHG_CURRENT_LIMIT_2000MA   2000
+#define REG02_SGM41515_FAST_CHG_CURRENT_LIMIT_500MA    500
 
 /* Address:03h */
 #define REG03_SGM41515_ADDRESS                         0x03
@@ -137,6 +138,7 @@
 #define REG06_SGM41515_OVP_14P0V                       (BIT(7) | BIT(6))
 
 #define REG06_SGM41515_OTG_VLIM_MASK                   (BIT(5) | BIT(4))
+#define REG06_SGM41515_OTG_VLIM_SHIFT                  4
 #define REG06_SGM41515_OTG_VLIM_OFFSET                 4850
 #define REG06_SGM41515_OTG_VLIM_MAXMV                  5300
 #define REG06_SGM41515_OTG_VLIM_STEP                   150
@@ -230,6 +232,10 @@
 #define REG0A_SGM41515_BUS_GD_NO                       0x00
 #define REG0A_SGM41515_BUS_GD_YES                      BIT(7)
 
+#define REG0A_SGM41515_VINDPM_MASK                     BIT(6)
+#define REG0A_SGM41515_NOT_VINDPM                      0x00
+#define REG0A_SGM41515_IN_VINDPM                       BIT(6)
+
 #define REG0A_SGM41515_VINDPM_INT_MASK                 BIT(1)
 #define REG0A_SGM41515_VINDPM_INT_ALLOW                0x00
 #define REG0A_SGM41515_VINDPM_INT_NOT_ALLOW            BIT(1)
@@ -255,11 +261,13 @@
     0001=SGM41515A or SGM41515D
     1100=SGM41541
     1101=SGM41542
+    1110=SGM41512SA or SGM41512SD
 */
 #define SGM41515_PART_ID                               0x00
 #define SGM41515D_PART_ID                              BIT(3) >> SGM41515_DEVID_SHIFT
 #define SGM41541_PART_ID                               (BIT(6) | BIT(5)) >> SGM41515_DEVID_SHIFT
 #define SGM41542_PART_ID                               (BIT(6) | BIT(5) | BIT(3)) >> SGM41515_DEVID_SHIFT
+#define SGM41512SD_PART_ID                             (BIT(6) | BIT(5) | BIT(4)) >> SGM41515_DEVID_SHIFT
 
 /* Address:0Dh */
 #define REG0D_SGM41515_ADDRESS                         0x0d
@@ -286,6 +294,18 @@
 #define REG0F_SGM41515_VINDPM_THRESHOLD_OFFSET_5900MV  BIT(0)
 #define REG0F_SGM41515_VINDPM_THRESHOLD_OFFSET_7500MV  BIT(1)
 #define REG0F_SGM41515_VINDPM_THRESHOLD_OFFSET_10500MV (BIT(1) | BIT(0)))
+#define REG0F_SGM41515_VREG_FT_MASK                 (BIT(7) | BIT(6))
+#define REG0F_SGM41515_VREG_FT_SHIFT                6
+#define REG0F_SGM41515_VREG_FT_DISABLE              0x00  /* 00 = Disable */
+#define REG0F_SGM41515_VREG_FT_PLUS_8MV             0x01  /* 01 = VREG + 8mV */
+#define REG0F_SGM41515_VREG_FT_MINUS_8MV            0x02  /* 10 = VREG - 8mV */
+#define REG0F_SGM41515_VREG_FT_MINUS_16MV           0x03  /* 11 = VREG - 16mV */
+
+/* Address:10h */
+#define REG10_SGM41515_ADDRESS                         0x10
+
+/* Smart tuning thresholds */
+#define SMART_TUNING_MAX_ADJUSTMENT        12
 
 /* Other */
 #define SGM41515_FIRST_REG                             0x00
@@ -295,15 +315,17 @@
 #define SGM41515_DEFAULT_PRECHG_CURRENT                480
 #define SGM41515_DEFAULT_TERMINATION_VOLTAGE           4500
 
-#define SGM41515_BATT_VOL_4V14  4140
-#define SGM41515_INP_VOL_4V44   4440
-#define SGM41515_INP_VOL_4V5    4500
-#define SGM41515_INP_VOL_4V52   4520
-#define SGM41515_INP_VOL_4V535  4535
+#define USB_HW_AICL_POINT       4600
+#define USB_SW_AICL_POINT       4620
+#define HW_AICL_POINT_DEFAULT   4500
+#define SW_AICL_POINT_DEFAULT   4520
+#define SGM41515_FAKE_VBUS_5V   5000
+#define SGM41515_FAKE_VBUS_9V   9000
 
-#define INIT_WORK_OTHER_DELAY   1000
+#define INIT_WORK_OTHER_DELAY      200
+#define REPORT_BC12_COMPLETE_DELAY 30
 
-enum SGM4154x_VINDPM_OS {
+enum SGM41515_VINDPM_OS {
 	VINDPM_OS_3900mV,
 	VINDPM_OS_5900mV,
 	VINDPM_OS_7500mV,

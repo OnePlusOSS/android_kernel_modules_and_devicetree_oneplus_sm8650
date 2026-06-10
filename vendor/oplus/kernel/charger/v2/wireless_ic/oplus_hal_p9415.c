@@ -1016,7 +1016,7 @@ static int p9415_set_tx_enable(struct oplus_chg_ic_dev *dev, bool en)
 	return rc;
 }
 
-static int p9415_set_tx_start(struct oplus_chg_ic_dev *dev, bool start)
+static int p9415_set_tx_start(struct oplus_chg_ic_dev *dev, enum oplus_chg_wls_tx_start_type start)
 {
 	return 0;
 }
