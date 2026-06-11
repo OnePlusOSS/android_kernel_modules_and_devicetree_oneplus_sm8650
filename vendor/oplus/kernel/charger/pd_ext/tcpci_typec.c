@@ -1609,8 +1609,10 @@ static inline void typec_attach_wait_entry(struct tcpc_device *tcpc)
 	if (tcpc->typec_attach_old == TYPEC_ATTACHED_SNK ||
 	    tcpc->typec_attach_old == TYPEC_ATTACHED_DBGACC_SNK) {
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
-		if (pd_port->pe_data.pd_connected && pd_check_rev30(pd_port))
-			pd_put_sink_tx_event(tcpc, typec_get_cc_res());
+		if (pd_port->pe_data.pd_connected && pd_check_rev30(pd_port)) {
+			tcpc->typec_remote_rp_level = typec_get_cc_res();
+			pd_put_sink_tx_event(tcpc, tcpc->typec_remote_rp_level);
+		}
 #endif	/* CONFIG_USB_POWER_DELIVERY */
 		tcpc_enable_timer(tcpc, TYPEC_TIMER_PDDEBOUNCE);
 		TYPEC_DBG("RpLvl Alert\n");
@@ -2587,9 +2589,8 @@ static inline int typec_handle_vbus_absent(struct tcpc_device *tcpc)
 	if (ret < 0)
 		return ret;
 	
-	if (!typec_is_cc_no_res()) {
+	if (!typec_is_cc_no_res() && tcpc->typec_state <= typec_unattached_src)
 		tcpc_typec_handle_cc_change(tcpc);
-	}
 
 	return 0;
 }

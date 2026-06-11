@@ -82,6 +82,16 @@ config TCPC_UPM7610
 	  TypeC port Controller
 	  Driver
 
+config TCPC_CPS8851
+	tristate "TCPC_CPS8851 TypeC port Controller Driver"
+	depends on TCPC_CLASS
+	default n
+	help
+	  Say Y to enable
+	  CPS8851
+	  TypeC port Controller
+	  Driver
+
 config USB_PD_VBUS_STABLE_TOUT
 	int "PD VBUS Stable Timeout"
 	depends on USB_POWER_DELIVERY

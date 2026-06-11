@@ -294,6 +294,11 @@
 #define EVENT_ACTION_FOR_CAMERA				0x01
 #define WLS_FASTCHG_ENTER_TIMEOUT			40
 
+#define WLSPEN_CHG_STOP_WATER		0xF1
+#define WLSPEN_CHG_STOP_HIGHTEMP	0xF2
+#define WLSPEN_CHG_STOP_LOWTEMP		0xF3
+#define WLSPEN_CHG_STOP_FULL		0x64
+
 enum CAMERA_CALL_PARA {
 	CAMERA_CALL_OFF = 0,
 	CAMERA_CALL_ON = 1,
@@ -309,6 +314,18 @@ static const char * const wls_err_scene_text[] = {
 	[WLS_ERR_SCENE_RX] = "wls_rx_err",
 	[WLS_ERR_SCENE_TX] = "wls_tx_err",
 	[WLS_ERR_SCENE_UPDATE] = "wls_update_err",
+};
+
+enum wls_chg_mode {
+	RX_MODE,
+	TX_MODE,
+	WLSPEN_MODE,
+};
+
+static const char* const wls_chg_mode_text[] = {
+	[RX_MODE] = "rx_mode",
+	[TX_MODE] = "trx_mode",
+	[WLSPEN_MODE] = "wlspen_mode",
 };
 
 enum oplus_chg_temp_region {
@@ -528,6 +545,9 @@ enum wls_topic_item {
 	WLS_ITEM_PRODUCT_ID,
 	WLS_ITEM_TRACK_RECORD_FASTCHG,
 	WLS_ITEM_TRACK_BREAK_MANU,
+	WLS_ITEM_PING_TIME,
+	WLS_ITEM_WLSPEN_SOC,
+	WLS_ITEM_TX_START_TYPE,
 };
 
 enum {
@@ -549,6 +569,22 @@ enum oplus_bt_type {
 	BT_MAG_HANDLE,
 };
 
+enum {
+	WLSPEN_STATUS_UNKOWN,
+	WLSPEN_STATUS_PRESENT,
+	WLSPEN_STATUS_PING,
+	WLSPEN_STATUS_CHGING,
+	WLSPEN_STATUS_FULL,
+	WLSPEN_STATUS_PING_TIMEOUT,
+	WLSPEN_STATUS_CHG_TIMEOUT,
+	WLSPEN_STATUS_ERR,
+};
+
+enum {
+	TX_POWER_BOOST,
+	TX_POWER_WIRED,
+};
+
 #ifdef OPLUS_CHG_DEBUG
 ssize_t oplus_chg_wls_upgrade_fw_show(struct oplus_mms *mms, char *buf);
 ssize_t oplus_chg_wls_upgrade_fw_store(struct oplus_mms *mms, const char *buf, size_t count);
@@ -561,4 +597,7 @@ ssize_t oplus_chg_wls_rx_disable_show(struct oplus_mms *mms, char *buf);
 ssize_t oplus_chg_wls_rx_disable_store(struct oplus_mms *mms, const char *buf, size_t count);
 
 ssize_t oplus_chg_wls_bt_info_store(struct oplus_mms *mms, const char *buf, size_t count);
+ssize_t oplus_chg_wls_wlspen_info_store(struct oplus_mms *mms, const char *buf, size_t count);
+ssize_t oplus_chg_wls_wlspen_soc_store(struct oplus_mms *mms, const char *buf, size_t count);
+ssize_t oplus_chg_wls_wlspen_dischg_soc_store(struct oplus_mms *mms, const char *buf, size_t count);
 #endif /* __OPLUS_CHG_WLS_H__ */

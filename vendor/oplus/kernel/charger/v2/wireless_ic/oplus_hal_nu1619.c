@@ -1088,13 +1088,13 @@ static int nu1619_set_tx_enable(struct oplus_chg_ic_dev *dev, bool en)
 	return rc;
 }
 
-static int nu1619_set_tx_start(struct oplus_chg_ic_dev *dev, bool start)
+static int nu1619_set_tx_start(struct oplus_chg_ic_dev *dev, enum oplus_chg_wls_tx_start_type start)
 {
 	int ret = -1;
 	static int cnt = 0;
 	struct oplus_nu1619 *chip;
 
-	if (!start)
+	if (start == OPLUS_CHG_WLS_TX_STOP)
 		return 0;
 	if (dev == NULL) {
 		chg_err("oplus_chg_ic_dev is NULL\n");

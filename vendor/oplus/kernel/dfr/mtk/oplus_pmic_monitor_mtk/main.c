@@ -418,10 +418,55 @@ static ssize_t pmic_monitor_show(struct kobject *kobj,
 
 }
 pmic_info_attr_ro(pmic_monitor);
+
+#define PON_PWRKEY   0x01
+#define PON_CHARIN   0x04
+static unsigned int is_batt_remove_occur(struct PMICRegStruct pmic_reg_value)
+{
+	printk(KERN_INFO "poff 0x%x, pon 0x%x\n",
+		pmic_reg_value.poff_reason, pmic_reg_value.pon_reason);
+	if (pmic_reg_value.poff_reason == 0 &&
+	   (pmic_reg_value.pon_reason == PON_PWRKEY ||
+	    pmic_reg_value.pon_reason == PON_CHARIN)) {
+		return 1;
+	}
+
+	return 0;
+}
+
+static ssize_t batt_remove_show(struct kobject *kobj,
+	struct kobj_attribute *attr, char *buf)
+{
+	struct PMICHistoryKernelStruct *pmic_history_ptr = NULL;
+	struct PMICRecordKernelStruct pmic_first_record = {0};
+	struct PMICRegStruct pmic_reg_value = {0};
+	u64 pmic_history_count = 0;
+	unsigned int batt_remove = 0;
+
+	pmic_history_ptr = (struct PMICHistoryKernelStruct *)get_pmic_history();
+	if (NULL == pmic_history_ptr) {
+		return snprintf(buf, 16, "%x\n", batt_remove);
+	}
+
+	pmic_history_count = pmic_history_ptr->log_count;
+	printk(KERN_INFO "pmic_history_count = %llu\n", pmic_history_count);
+	if (pmic_history_count >= 1) {
+		pmic_first_record = pmic_history_ptr->pmic_record[pmic_history_count-1];   // last record
+		pmic_reg_value = pmic_first_record.pmic_pon_poff_reason[0];
+		if (DATA_VALID_FLAG == pmic_reg_value.data_is_valid &&
+		    is_batt_remove_occur(pmic_reg_value)) {
+			batt_remove = 1;
+		}
+	}
+	return snprintf(buf, 16, "%x\n", batt_remove);
+}
+
+pmic_info_attr_ro(batt_remove);
 /**********************************************/
 
 static struct attribute * g[] = {
-    &pmic_monitor_attr.attr,
+	&pmic_monitor_attr.attr,
+	&batt_remove_attr.attr,
 	NULL,
 };
 

@@ -46,6 +46,8 @@
 #define MAX_NORMAL_REVERSE_COUNT	5
 #define MAX_HARDRESET_LIMIT_COUNT	6
 #define HIGH_VBUS_START			6000
+#define MIN_HIGH_REVERSE_POWER		15
+
 
 struct reverse_limit_data {
 	int reverse_uisoc_limit[DEC_REVERSE_UISOC_LINIT_COUNT];
@@ -182,6 +184,7 @@ struct oplus_chg_reverse {
 	u32 reverse_chg_svid;
 	u32 last_high_reverse_pdo;
 	int reverse_vbus_pdo_limit_num;
+	u32 max_reverse_power;
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0))
 	struct wake_lock reverse_wake_lock;
 #else
@@ -608,13 +611,15 @@ static int oplus_reverse_parse_dt(struct oplus_chg_reverse *chip)
 	rc = of_property_count_elems_of_size(node, "oplus_spec,reverse-led-on-limit", sizeof(u32));
 	if (rc > 0 && rc <= DEC_LAST_LINIT_COUNT) {
 		rc = of_property_read_u32_array(node, "oplus_spec,reverse-led-on-limit", (u32 *)chip->reverse_limit.reverse_led_on_limit, rc);
+		for (i = 0; i < DEC_LAST_LINIT_COUNT; i++) {
+			chg_info("oplus_spec,reverse_led_on_limit[%d]=%d \n", i, chip->reverse_limit.reverse_led_on_limit[i]);
+		}
+		chip->led_on_pdo_limit =
+		chip->reverse_limit.reverse_led_on_limit[LAST_LEVEL_1] << 16 | chip->reverse_limit.reverse_led_on_limit[LAST_LEVEL_2];
+	} else {
+		chg_err("not support led_on power limmit\n");
+		chip->led_on_pdo_limit = 0;
 	}
-	for (i = 0; i < DEC_LAST_LINIT_COUNT; i++) {
-		chg_info("oplus_spec,reverse_led_on_limit[%d]=%d \n", i, chip->reverse_limit.reverse_led_on_limit[i]);
-	}
-	chip->led_on_pdo_limit =
-	chip->reverse_limit.reverse_led_on_limit[LAST_LEVEL_1] << 16 | chip->reverse_limit.reverse_led_on_limit[LAST_LEVEL_2];
-
 	rc = of_property_count_elems_of_size(node,
 		"oplus_spec,reverse-authenticate-limit", sizeof(u32));
 	if (rc > 0 && rc <= DEC_LAST_LINIT_COUNT) {
@@ -653,6 +658,12 @@ static int oplus_reverse_parse_dt(struct oplus_chg_reverse *chip)
 		chg_err("get oplus,reverse_normal_current error, rc=%d\n", rc);
 		chip->reset_watchdog_time = 1000;
 	}
+	rc = of_property_read_u32(node, "oplus,max_reverse_power", &chip->max_reverse_power);
+	if (rc) {
+		chg_err("get oplus,max_reverse_power error, rc=%d\n", rc);
+		chip->max_reverse_power = 27;
+	}
+	chg_info("max_reverse_power = %d", chip->max_reverse_power);
 	chip->use_high_reverse_awake = of_property_read_bool(node, "oplus,use_high_reverse_awake");
 	chg_info("use_high_reverse_awake is %d", chip->use_high_reverse_awake);
 	chip->use_cp_reverse = of_property_read_bool(node, "oplus,use_cp_reverse");
@@ -689,6 +700,9 @@ static void oplus_reverse_error_flag_work(struct work_struct *work)
 	int cp_vbus_mv;
 	int rc;
 	int i;
+
+	if (chip->max_reverse_power <= MIN_HIGH_REVERSE_POWER)
+		return;
 
 	if (get_client_vote(chip->high_reverse_disable_votable, USER_VOTER)) {
 		chip->high_reverse_err_flag = HPR_USER_VOTER_DISABLE;
@@ -1382,7 +1396,8 @@ static void oplus_reverse_handle_level_for_drop_down(void)
 
 	if (chip->drop_down_count == pre_drop_down_count
 		|| chip->drop_down_count <= 0
-		|| chip->drop_down_count <= chip->hard_reset_count)
+		|| chip->drop_down_count <= chip->hard_reset_count
+		|| chip->max_reverse_power <= MIN_HIGH_REVERSE_POWER)
 		return;
 
 	pre_drop_down_count = chip->drop_down_count;
@@ -1417,7 +1432,11 @@ static void oplus_reverse_online_work(struct work_struct *work)
 		schedule_delayed_work(&chip->reverse_vbus_retention_check_work, 0);
 		chip->drop_down_count += 1;
 		cancel_delayed_work(&chip->reverse_clear_keep_status_work);
-		schedule_delayed_work(&chip->reverse_clear_keep_status_work, msecs_to_jiffies(5000));
+		if (chip->max_reverse_power <= MIN_HIGH_REVERSE_POWER) {
+			schedule_delayed_work(&chip->reverse_clear_keep_status_work, 0);
+		} else {
+			schedule_delayed_work(&chip->reverse_clear_keep_status_work, msecs_to_jiffies(5000));
+		}
 	}
 
 	if (!chip->use_high_reverse_awake) {
@@ -1641,6 +1660,10 @@ static int oplus_reverse_charge_allow_check(struct oplus_chg_reverse *chip)
 		chg_temp = data.intval;
 	}
 	chg_info("chg_temp =%d \r\n", chg_temp);
+
+	if (chip->max_reverse_power <= MIN_HIGH_REVERSE_POWER)
+		return 0;
+
 	/*chg_temp over_low or over_high vote*/
 	if (chg_temp < chip->reverse_limit.reverse_temp_limit[TEMP_LEVLE_RANGE_COLD]) {
 		vote(chip->high_reverse_disable_votable, BATT_TEMP_VOTER, true, 1, false);
@@ -1678,7 +1701,7 @@ static int oplus_reverse_get_boost_vol(
 		return rc;
 
 	if (chip->use_cp_reverse && chip->cp_ic) {
-		rc = oplus_chg_ic_func(chip->cp_ic, OPLUS_IC_FUNC_CP_GET_VOUT, vout);
+		rc = oplus_chg_ic_func(chip->cp_ic, OPLUS_IC_FUNC_CP_GET_REVERSE_VOUT, vout);
 	} else {
 		*vout = oplus_wired_get_vbus();
 		chg_info("reverse chg: vout = %d\n", *vout);
@@ -1709,6 +1732,9 @@ static int  oplus_reverse_check_ibus_curr(struct oplus_chg_reverse *chip)
 
 	if (batt_num <= 0 || batt_num > 2)
 		batt_num = 1;
+
+	if (chip->max_reverse_power <= MIN_HIGH_REVERSE_POWER)
+		return -EINVAL;
 
 	ret = oplus_reverse_get_boost_curr(chip, &cp_ibus_ma);
 	if (ret < 0)
@@ -1837,7 +1863,7 @@ static void oplus_reverse_protection_check(struct oplus_chg_reverse *chip, struc
 	int rc;
 	struct mms_msg *msg;
 	/* authenticate or hmac vote */
-	if (!chip->authenticate || !chip->hmac) {
+	if ((!chip->authenticate || !chip->hmac) && (chip->max_reverse_power > MIN_HIGH_REVERSE_POWER)) {
 		vote(chip->reverse_pdo_votable, AUTH_VOTER,
 			true, chip->authenticate_pdo_limit, false);/* 5V1.5A */
 		vote(chip->high_reverse_disable_votable, AUTH_VOTER, true, 1, false);
@@ -1860,7 +1886,8 @@ static void oplus_reverse_protection_check(struct oplus_chg_reverse *chip, struc
 	}
 
 	/* led_on vote */
-	if (chip->led_on && !get_effective_result(chip->high_reverse_disable_votable)) {
+	if (chip->led_on && !get_effective_result(chip->high_reverse_disable_votable) &&
+		(chip->led_on_pdo_limit > 0)) {
 		vote(chip->reverse_pdo_votable, LED_ON_VOTER, true, chip->led_on_pdo_limit, false);/* 9V1A */
 	} else {
 		vote(chip->reverse_pdo_votable, LED_ON_VOTER, false, 0, false);
@@ -2545,6 +2572,9 @@ static void oplus_reverse_pdo_update_work(struct work_struct *work)
 	struct oplus_chg_reverse *chip =
 		container_of(dwork, struct oplus_chg_reverse, reverse_pdo_update_work);
 
+	if (chip->led_on_pdo_limit == 0)
+		return;
+
 	if (chip->led_on && !get_effective_result(chip->high_reverse_disable_votable))
 		vote(chip->reverse_pdo_votable, LED_ON_VOTER, true, chip->led_on_pdo_limit, false);/* 9V1A */
 	else
@@ -2653,9 +2683,10 @@ static void oplus_usbtemp_high_work(struct work_struct *work)
 	chg_info("temp_l =%d temp_r =%d batt_temp =%d volt_l[%d] volt_r[%d] [%d]\r\n",
 		usb_temp_l, usb_temp_r, chip->batt_realy_temp / 10,
 		usbtemp_volt_l, usbtemp_volt_r, data.intval);
-	if (usb_temp_l >= USB_54C || usb_temp_r >= USB_54C
+	if ((usb_temp_l >= USB_54C || usb_temp_r >= USB_54C
 		|| usb_temp_l - chip->batt_realy_temp / 10 >= USB_12C
-		|| usb_temp_r - chip->batt_realy_temp / 10 >= USB_12C) {
+		|| usb_temp_r - chip->batt_realy_temp / 10 >= USB_12C)
+		&& (chip->high_reverse_enable)) {
 		vote(chip->reverse_pdo_votable, USB_VOTER, true,
 				(PD_VBUS << 16 | NORMAL_IBUS), false);
 	} else if (usb_temp_l <= USB_48C && usb_temp_r <= USB_48C

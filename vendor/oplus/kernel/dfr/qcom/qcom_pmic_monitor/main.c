@@ -1020,6 +1020,58 @@ static ssize_t ocp_status_gen3_show(struct kobject *kobj,
 	return len;
 }
 pmic_gen3_info_attr_ro(ocp_status);
+
+static ssize_t batt_remove_gen3_show(struct kobject *kobj,
+	struct kobj_attribute *attr, char *buf)
+{
+	struct PMICGen3HistoryKernelStruct *pmic_history_ptr = NULL;
+	struct PMICGen3RecordKernelStruct pmic_first_record;
+	u64 pmic_history_count = 0;
+	struct PmicGen3PonStateStruct tmp_pon_log;
+	unsigned int batt_remove = 0;
+	int cur_count = 0;
+	bool xvdd = false;
+	bool s3_reset = false;
+
+	pmic_history_ptr = (struct PMICGen3HistoryKernelStruct *)get_pmic_history();
+	if (NULL == pmic_history_ptr) {
+		return snprintf(buf, 16, "%x\n", batt_remove);
+	}
+
+	pmic_history_count = pmic_history_ptr->log_count;
+	printk(KERN_INFO "pmic_history_count = %llu\n", pmic_history_count);
+	if (pmic_history_count > MAX_HISTORY_COUNT) {
+		printk(KERN_INFO "pmic_history_count is too long\n");
+		return snprintf(buf, 16, "%x\n", batt_remove);
+	}
+
+	for (cur_count = 0 ;cur_count < pmic_history_count; cur_count++) {
+		pmic_first_record = pmic_history_ptr->pmic_record[cur_count];
+		if (-1 != get_pon_log_by_state_event(PMIC_PON_STATE_MAX, /* ignore state */
+						PMIC_PON_EVENT_FUNDAMENTAL_RESET,
+						0,
+						&pmic_first_record,
+						&tmp_pon_log)) {
+			printk(KERN_INFO "fundamental data1 = %02x, data0 = %02x\n", tmp_pon_log.data1, tmp_pon_log.data0);
+			if (tmp_pon_log.data1 & BIT(6)) {
+				xvdd = true;
+			}
+			if (tmp_pon_log.data0) {
+				s3_reset = true;
+			}
+		}
+	}
+
+	printk(KERN_INFO "xvdd = %d, s3_reset = %d\n", xvdd, s3_reset);
+
+	if (xvdd && !s3_reset) {
+		batt_remove = 1;
+	}
+
+	return snprintf(buf, 16, "%x\n", batt_remove);
+}
+
+pmic_gen3_info_attr_ro(batt_remove);
 /**********************************************/
 
 static struct attribute * gen3[] = {
@@ -1028,6 +1080,7 @@ static struct attribute * gen3[] = {
 	&poff_reason_gen3_attr.attr,
 	&pon_reason_gen3_attr.attr,
 	&ocp_status_gen3_attr.attr,
+	&batt_remove_gen3_attr.attr,
 	NULL,
 };
 

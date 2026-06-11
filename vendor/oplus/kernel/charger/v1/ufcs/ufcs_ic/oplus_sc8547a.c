@@ -2357,20 +2357,13 @@ static bool sc8547_cp_feed_dog(struct i2c_client *client)
 static int sc8547a_cp_sstimeout_ucp_enable(struct i2c_client *client, bool enable)
 {
 	int ret = 0;
-	struct oplus_voocphy_manager *chip = NULL;
 
-	if (!client) {
-		pps_err(" not get i2c_client");
-		return 0;
-	}
-
-	chip = (struct oplus_voocphy_manager *) i2c_get_clientdata(client);
-	if (!chip) {
+	if (!oplus_voocphy_mg) {
 		pps_err("device chip in clientdata is null");
 		return 0;
 	}
 
-	ret = sc8547a_voocphy_set_sstimeout_ucp_enable(chip, enable);
+	ret = sc8547a_voocphy_set_sstimeout_ucp_enable(oplus_voocphy_mg, enable);
 
 	return ret;
 }

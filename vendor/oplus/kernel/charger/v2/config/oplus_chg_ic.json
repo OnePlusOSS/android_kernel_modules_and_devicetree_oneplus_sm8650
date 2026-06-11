@@ -870,6 +870,34 @@
                     "str": "batt_cells_damage"
                 },
                 {
+                    "lable": "TRACK_GAUGE_ERR_IMP_MODEL",
+                    "desc": {
+                        "zh": "电量计阻抗模型异常"
+                    },
+                    "str": "gauge_imp_model"
+                },
+                {
+                    "lable": "TRACK_GAGUE_FCC_RA0_ERR_INFO",
+                    "desc": {
+                        "zh": "FCC偏小RA0修改信息"
+                    },
+                    "str": "charge_ra0_info"
+                },
+                {
+                    "lable": "TRACK_GAGUE_FCC_VDELTA_ERR_INFO",
+                    "desc": {
+                        "zh": "FCC偏小delta voltage修改信息"
+                    },
+                    "str": "charge_delta_volt"
+                },
+                {
+                    "lable": "TRACK_GAGUE_FCC_RA_T_ERR_INFO",
+                    "desc": {
+                        "zh": "FCC偏小阻抗修改信息"
+                    },
+                    "str": "charge_ra_t_info"
+                },
+                {
                     "lable": "TRACK_GAGUE_ERR_MAX",
                     "desc": {
                         "zh": "异常上限"

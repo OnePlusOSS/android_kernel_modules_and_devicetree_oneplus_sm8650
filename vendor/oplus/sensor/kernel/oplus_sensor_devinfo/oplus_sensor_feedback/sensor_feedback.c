@@ -109,6 +109,8 @@ struct sensor_fb_conf g_fb_conf[] = {
 	{MAG_CALI_DATA_ID, "device_mag_cali_data", SENSOR_DEBUG_DEVICE_TYPE},
 	{MAG_DATA_BLOCK_ID, "device_mag_data_block_data", SENSOR_DEBUG_DEVICE_TYPE},
 	{MAG_DATA_FULL_RANGE_ID, "device_mag_data_full_range", SENSOR_DEBUG_DEVICE_TYPE},
+	{MAG_NO_DATA_ID, "device_mag_no_data", SENSOR_DEVICE_TYPE},
+	{MAG_ENABLE_FAIL_ID, "device_mag_enable_fail", SENSOR_DEVICE_TYPE},
 
 
 	{SAR_INIT_FAIL_ID, "device_sar_init_fail", SENSOR_DEVICE_TYPE},

@@ -152,5 +152,12 @@ int oplus_wired_set_chg_path(struct oplus_mms *topic, int path);
 int oplus_wired_get_chg_path_status(struct oplus_mms *topic);
 int oplus_wired_push_info(struct oplus_mms *topic, const char *err_scene, const char *err_reason);
 int oplus_wired_iterm_check(struct oplus_mms *topic, bool enable);
+int oplus_wired_get_shaft_btb_temp(void);
+bool oplus_wired_get_shaft_btb_is_normal(void);
+int oplus_wired_set_shaft_btb_over(bool is_shaft_btb_over);
+bool oplus_wired_get_supplementary_power_mos(void);
+int oplus_wired_set_supplementary_power_mos(struct oplus_mms *topic, bool enable);
 int oplus_wired_set_dischg_status(bool dischg_en);
+int oplus_set_ovp_forced(bool enable);
+int oplus_set_dpdm_ovp_disable(bool disable);
 #endif /* __OPLUS_MMS_WIRED_H__ */

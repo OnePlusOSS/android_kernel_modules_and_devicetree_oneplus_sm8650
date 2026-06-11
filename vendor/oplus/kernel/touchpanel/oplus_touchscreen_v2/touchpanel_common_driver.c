@@ -1086,6 +1086,10 @@ static inline void tp_touch_handle(struct touchpanel_data *ts)
 				}
 
 				input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, 0);
+				if (CHK_BIT(ts->irq_slot, (1 << i))) {
+					TP_INFO(ts->tp_index, "touch point id %d up.\n", i);
+					CLR_BIT(ts->irq_slot, (1 << i));
+				}
 			}
 		}
 

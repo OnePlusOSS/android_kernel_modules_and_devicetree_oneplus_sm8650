@@ -85,10 +85,14 @@ void *msm_vb2_attach_dmabuf(struct vb2_buffer *vb, struct device *dev,
 		goto exit;
 	}
 	buf->inst = inst;
+	//buf->dmabuf = dbuf;
+	buf->buffer_size = size;
 
 	buf->attach = call_mem_op(core, dma_buf_attach, core, dbuf, dev);
 	if (!buf->attach) {
-		buf->attach = NULL;
+		i_vpr_e(inst, "failed to attach. %s: %s: idx %2d size %8d\n",
+			buf_name(buf->type), buf_region_name(buf->region),
+			buf->index, buf->buffer_size);
 		buf = NULL;
 		goto exit;
 	}
@@ -177,6 +181,21 @@ int msm_vb2_map_dmabuf(void *buf_priv)
 	buf->sg_table = call_mem_op(core, dma_buf_map_attachment, core, buf->attach);
 	if (!buf->sg_table || !buf->sg_table->sgl) {
 		buf->sg_table = NULL;
+		i_vpr_e(inst, "failed to map. %s: %s: idx %2d size %8d\n",
+			buf_name(buf->type), buf_region_name(buf->region),
+			buf->index, buf->buffer_size);
+
+		/* print all active mappings */
+		inst_unlock(inst, __func__);
+		msm_vidc_print_core_info(core);
+		inst_lock(inst, __func__);
+
+		/* enable bugon for map failure cases via debugfs */
+		if (msm_vidc_enable_bugon & MSM_VIDC_BUG_ON_DMA_MAP_FAILURE) {
+			i_vpr_e(inst, "%s: force bugon for map failure\n", __func__);
+			MSM_VIDC_FATAL(true);
+		}
+
 		rc = -ENOMEM;
 		goto exit;
 	}

@@ -65,6 +65,17 @@
 
 /* Register 09h */
 #define NU2118A_REG_09 0x09
+#define NU2118A_SS_TIMEOUT_SET_MASK 0xE0
+#define NU2118A_SS_TIMEOUT_SET_SHIFT         5
+#define NU2118A_SS_TIMEOUT_DISABLE           0
+#define NU2118A_SS_TIMEOUT_40MS              1
+#define NU2118A_SS_TIMEOUT_80MS              2
+#define NU2118A_SS_TIMEOUT_320MS             3
+#define NU2118A_SS_TIMEOUT_1280MS            4
+#define NU2118A_SS_TIMEOUT_5120MS            5
+#define NU2118A_SS_TIMEOUT_20480MS           6
+#define NU2118A_SS_TIMEOUT_81920MS           7
+
 
 /* Register 0Ah */
 #define NU2118A_REG_0A 0x0A
@@ -126,6 +137,9 @@
 
 #define NU2118A_PIN_DIAG_FALL_FLAG_MASK 0x01
 #define NU2118A_PIN_DIAG_FALL_FLAG_SHIFT 0
+
+#define NU2118A_LOOP_REGULATION_TIMEOUT_FLAG_MASK 0x02
+#define NU2118A_WD_TIMEOUT_FLAG_MASK 0x08
 
 #define NU2118A_POWER_NG_FLAG_MASK 0x10
 
@@ -263,6 +277,8 @@
 #define NU2118A_MAX_REG (0x0264)
 #define NU2118A_FLAG_NUM (3)
 #define NU2118A_TRACK_NUM (5)
+#define INT_EVENT_NAME_LEN 30
+#define NU2118A_REG_LEN 219
 
 
 /************************Timer***********************************/
@@ -282,7 +298,7 @@
 #define SEND_CABLE_HARDRESET BIT(1)
 #define FLAG_BAUD_RATE_VALUE (BIT(4) | BIT(3))
 #define FLAG_BAUD_NUM_SHIFT (3)
-#define NU2118A_CMD_EN_CHIP (0x88)
+#define NU2118A_CMD_EN_CHIP (0x80)
 #define NU2118A_CMD_DIS_CHIP (0X00)
 #define NU2118A_MASK_EN_HANDSHAKE BIT(5)
 #define NU2118A_CMD_EN_HANDSHAKE BIT(5)

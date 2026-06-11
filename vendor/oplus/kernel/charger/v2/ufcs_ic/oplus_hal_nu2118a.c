@@ -61,12 +61,16 @@
 #include "oplus_hal_nu2118a.h"
 
 #include <oplus_mms_wired.h>
+#include <oplus_chg_vooc.h>
 #include <oplus_reverse_chg.h>
 
 enum nu2118a_ic_status {
 	NU2118A_IC_OK,
 	NU2118A_IC_PIN_DIAG_FAIL,
 	NU2118A_IC_POWER_NG,
+	NU2118A_IC_LOOP_REGULATION_TIMEOUT,
+	NU2118A_IC_SS_TIMEOUT,
+	NU2118A_IC_WD_TIMEOUT,
 };
 
 static bool error_reported = false;
@@ -81,6 +85,7 @@ static bool error_reported = false;
 #define TRACK_REG_DUMP_NUM	(TRACK_REG_ADDR_END - TRACK_REG_ADDR_START)
 #define NU2118A_FLAG_REG_NUMS	4
 #define IRQ_EVENT_NU2118A_NUM	13
+#define MAX_CP_ICHG_MA	15000
 
 static struct ufcs_config nu2118a_ufcs_config = {
 	.check_crc = false,
@@ -94,6 +99,7 @@ struct nu2118a_device {
 	struct i2c_client *client;
 	struct regmap *regmap;
 	struct oplus_voocphy_manager *voocphy;
+	struct oplus_voocphy_manager *voocphy_mg;
 	struct ufcs_dev *ufcs;
 
 	struct oplus_chg_ic_dev *cp_ic;
@@ -114,6 +120,7 @@ struct nu2118a_device {
 	int ovp_reg;
 	int ocp_reg;
 	int ovpgate_reg;
+	u8 vbus_ovp_reg;
 
 	bool ufcs_enable;
 
@@ -122,7 +129,9 @@ struct nu2118a_device {
 
 	bool use_ufcs_phy;
 	bool use_vooc_phy;
+	bool use_slave_cp;
 	bool vac_support;
+	bool chg_enabled;
 
 	u8 ufcs_reg_dump[NU2118A_FLAG_NUM];
 	u8 track_reg_dump[TRACK_REG_DUMP_NUM];
@@ -151,6 +160,7 @@ struct irq_info {
 	u8 mask;
 	int err_type;
 	int level;
+	char event_name[INT_EVENT_NAME_LEN];
 };
 enum {
 	REG_0X11_FLG,
@@ -171,6 +181,8 @@ static int nu2118a_init_device(struct nu2118a_device *chip);
 static int nu2118a_svooc_hw_setting(struct nu2118a_device *chip);
 static int nu2118a_vooc_hw_setting(struct nu2118a_device *chip);
 static int nu2118a_set_chg_enable(struct oplus_voocphy_manager *chip, bool enable);
+static int nu2118a_read_data(struct nu2118a_device *chip, u8 addr, u8 *buf, int len);
+static s32 nu2118a_read_block_data(const struct i2c_client *client, u8 addr, int len, u8 *buf);
 
 const char *nu2118a_adapter_error_info[16] = {
 	"adapter output OVP!",
@@ -192,22 +204,22 @@ const char *nu2118a_adapter_error_info[16] = {
 };
 
 static struct irq_info nu2118a_int_flag[IRQ_EVENT_NU2118A_NUM] = {
-	{REG_0X11_FLG, CP_NU2118A_IBUS_OCP_FLAG_MASK, TRACK_CP_ERR_IBUS_OCP, 5},
-	{REG_0X11_FLG, CP_NU2118A_VBUS_OVP_FLAG_MASK, TRACK_CP_ERR_VBUS_OVP, 4},
-	{REG_0X11_FLG, CP_NU2118A_IBAT_OCP_FLAG_MASK, TRACK_CP_ERR_IBAT_OCP, 11},
-	{REG_0X11_FLG, CP_NU2118A_VBAT_OVP_FLAG_MASK, TRACK_CP_ERR_VBAT_OVP, 3},
-	{REG_0X11_FLG, CP_NU2118A_VOUT_OVP_FLAG_MASK, TRACK_CP_ERR_VOUT_OVP, 6},
-	{REG_0X12_FLG, CP_NU2118A_PMID2OUT_UVP_FLAG_MASK, TRACK_CP_ERR_PMID2OUT_UVP, 8},
-	{REG_0X12_FLG, CP_NU2118A_PMID2OUT_OVP_FLAG_MASK, TRACK_CP_ERR_PMID2OUT_OVP, 7},
-	{REG_0X12_FLG, CP_NU2118A_TSD_FLAG_MASK, TRACK_CP_ERR_TSD, 2},
-	{REG_0X13_FLG, CP_NU2118A_VOUT_INVALID_REVERSE_FLAG_MASK, TRACK_CP_ERR_VOUT_REVERSE, 12},
-	{REG_0X14_FLG, CP_NU2118A_PIN_DIAG_FALL_FLAG_MASK, TRACK_CP_ERR_DIAG_FAIL, 0},
-	{REG_0X14_FLG, CP_NU2118A_SS_TIMEOUT_FLAG_MASK, TRACK_CP_ERR_SS_TIMEOUT, 9},
-	{REG_0X14_FLG, CP_NU2118A_WD_TIMEOUT_FLAG_MASK, TRACK_CP_ERR_WD_TIMEOUT, 10},
-	{REG_0X14_FLG, CP_NU2118A_POWER_NG_MASK, TRACK_CP_ERR_POWER_NG, 1},
+	{REG_0X11_FLG, CP_NU2118A_IBUS_OCP_FLAG_MASK, TRACK_CP_ERR_IBUS_OCP, 5, "IBUS_OCP"},
+	{REG_0X11_FLG, CP_NU2118A_VBUS_OVP_FLAG_MASK, TRACK_CP_ERR_VBUS_OVP, 4, "VBUS_OVP"},
+	{REG_0X11_FLG, CP_NU2118A_IBAT_OCP_FLAG_MASK, TRACK_CP_ERR_IBAT_OCP, 11, "IBAT_OCP"},
+	{REG_0X11_FLG, CP_NU2118A_VBAT_OVP_FLAG_MASK, TRACK_CP_ERR_VBAT_OVP, 3, "VBAT_OVP"},
+	{REG_0X11_FLG, CP_NU2118A_VOUT_OVP_FLAG_MASK, TRACK_CP_ERR_VOUT_OVP, 6, "VOUT_OVP"},
+	{REG_0X12_FLG, CP_NU2118A_PMID2OUT_UVP_FLAG_MASK, TRACK_CP_ERR_PMID2OUT_UVP, 8, "PMID2OUT_UVP"},
+	{REG_0X12_FLG, CP_NU2118A_PMID2OUT_OVP_FLAG_MASK, TRACK_CP_ERR_PMID2OUT_OVP, 7, "PMID2OUT_OVP"},
+	{REG_0X12_FLG, CP_NU2118A_TSD_FLAG_MASK, TRACK_CP_ERR_TSD, 2, "THERMAL_SHUTDOWN"},
+	{REG_0X13_FLG, CP_NU2118A_VOUT_INVALID_REVERSE_FLAG_MASK, TRACK_CP_ERR_VOUT_REVERSE, 12, "VOUT_INVALID_REVERSE"},
+	{REG_0X14_FLG, CP_NU2118A_PIN_DIAG_FALL_FLAG_MASK, TRACK_CP_ERR_DIAG_FAIL, 0, "PIN_DIAG_FAIL"},
+	{REG_0X14_FLG, CP_NU2118A_SS_TIMEOUT_FLAG_MASK, TRACK_CP_ERR_SS_TIMEOUT, 9, "SS_TIMEOUT"},
+	{REG_0X14_FLG, CP_NU2118A_WD_TIMEOUT_FLAG_MASK, TRACK_CP_ERR_WD_TIMEOUT, 10, "WD_TIMEOUT"},
+	{REG_0X14_FLG, CP_NU2118A_POWER_NG_MASK, TRACK_CP_ERR_POWER_NG, 1, "POWER_NG"},
 };
 
-static u8 nu2118a_get_initial_value(struct oplus_voocphy_manager *chip);
+static u8 nu2118a_get_int_value(struct oplus_voocphy_manager *chip);
 static void nu2118a_upload_i2c_err_info(struct nu2118a_device *chip, bool read, s32 *err_info);
 static int nu2118a_track_upload_cp_err_info(struct oplus_voocphy_manager *chip, int err_type);
 static void nu2118a_i2c_error(struct oplus_voocphy_manager *chip, bool happen, bool read, s32 *err_info)
@@ -322,6 +334,24 @@ static int nu2118a_write_byte(struct i2c_client *client, u8 reg, u8 data)
 	mutex_unlock(&chip->i2c_rw_lock);
 
 	return ret;
+}
+
+static int oplus_chg_get_vooc_charging(void)
+{
+	int vooc_charging_status = 0;
+	struct oplus_mms *vooc_topic;
+	union mms_msg_data data = { 0 };
+	int rc;
+
+	vooc_topic = oplus_mms_get_by_name("vooc");
+	if (!vooc_topic)
+		return -ENODEV;
+
+	rc = oplus_mms_get_item_data(vooc_topic, VOOC_ITEM_VOOC_CHARGING, &data, true);
+	if (!rc)
+		vooc_charging_status = data.intval;
+
+	return vooc_charging_status;
 }
 
 static int nu2118a_update_bits(struct i2c_client *client, u8 reg, u8 mask, u8 data)
@@ -447,13 +477,13 @@ static int nu2118a_set_predata(struct oplus_voocphy_manager *chip, u16 val)
 	s32 ret;
 	if (!chip) {
 		pr_err("failed: chip is null\n");
-		return -1;
+		return -ENODEV;
 	}
 
 	ret = nu2118a_write_word(chip->client, NU2118A_REG_31, val);
 	if (ret < 0) {
-		pr_err("failed: write predata\n");
-		return -1;
+		pr_err("failed: write predata, ret=%d\n", ret);
+		return ret;
 	}
 	pr_info("write predata 0x%0x\n", val);
 	return ret;
@@ -464,13 +494,13 @@ static int nu2118a_set_txbuff(struct oplus_voocphy_manager *chip, u16 val)
 	s32 ret;
 	if (!chip) {
 		pr_err("failed: chip is null\n");
-		return -1;
+		return -ENODEV;
 	}
 
 	ret = nu2118a_write_word(chip->client, NU2118A_REG_2C, val);
 	if (ret < 0) {
-		pr_err("write txbuff\n");
-		return -1;
+		pr_err("write NU2118A_REG_2C error, ret=%d\n", ret);
+		return ret;
 	}
 
 	return ret;
@@ -482,14 +512,14 @@ static int nu2118a_get_adapter_info(struct oplus_voocphy_manager *chip)
 
 	if (!chip) {
 		chg_err("chip is null\n");
-		return -1;
+		return -ENODEV;
 	}
 
 	data = nu2118a_read_word(chip->client, NU2118A_REG_2E);
 
 	if (data < 0) {
-		chg_err("nu2118a_read_word faile\n");
-		return -1;
+		chg_err("read NU2118A_REG_2E error, data=%d\n", data);
+		return data;
 	}
 
 	VOOCPHY_DATA16_SPLIT(data, chip->voocphy_rx_buff, chip->vooc_flag);
@@ -498,96 +528,147 @@ static int nu2118a_get_adapter_info(struct oplus_voocphy_manager *chip)
 	return 0;
 }
 
-static void nu2118a_update_data(struct oplus_voocphy_manager *chip)
+static void nu2118a_update_data(struct oplus_voocphy_manager *voocphy)
 {
 	u8 data_block[4] = { 0 };
 	int i = 0;
 	s32 ret = 0;
-	s32 err_info[2] = { 0 };
+	struct nu2118a_device *chip;
+
+	if (voocphy == NULL) {
+		pr_err("oplus_voocphy_manager is NULL\n");
+		return;
+	}
+	chip = voocphy->priv_data;
+	if (chip == NULL) {
+		pr_err("nu2118a chip is NULL\n");
+		return;
+	}
 
 	/*int_flag*/
-	chip->interrupt_flag = nu2118a_get_initial_value(chip);
+	voocphy->interrupt_flag = nu2118a_get_int_value(voocphy);
 
 	/*parse data_block for improving time of interrupt*/
-	ret = i2c_smbus_read_i2c_block_data(chip->client, NU2118A_REG_20, 4,
-					    data_block); /*REG20-21 vsys, REG22-23 vbat*/
+	ret = nu2118a_read_data(chip, NU2118A_REG_20, data_block, 4);/*REG20-21 vsys, REG22-23 vbat*/
 	if (ret < 0) {
-		err_info[0] = NU2118A_REG_20;
-		err_info[1] = ret;
-		nu2118a_i2c_error(chip, true, true, err_info);
-		pr_err("nu2118a_update_data read vsys vbat error \n");
-	} else {
-		nu2118a_i2c_error(chip, false, true, err_info);
+		pr_err("nu2118a_update_data read vsys vbat error, ret=%d\n", ret);
+		return;
 	}
 	for (i = 0; i < 4; i++) {
-		pr_info("read vsys vbat data_block[%d] = %u\n", i, data_block[i]);
+		pr_debug("read vsys vbat data_block[%d] = %u\n", i, data_block[i]);
 	}
-	chip->cp_vsys = (((data_block[0] & NU2118A_VOUT_POL_H_MASK) << 8) | data_block[1]) * NU2118A_VOUT_ADC_LSB;
-	chip->cp_vbat = (((data_block[2] & NU2118A_VOUT_POL_H_MASK) << 8) | data_block[3]) * NU2118A_VOUT_ADC_LSB;
+	voocphy->cp_vsys = (((data_block[0] & NU2118A_VOUT_POL_H_MASK) << 8) | data_block[1]) * NU2118A_VOUT_ADC_LSB;
+	voocphy->cp_vbat = (((data_block[2] & NU2118A_VOUT_POL_H_MASK) << 8) | data_block[3]) * NU2118A_VOUT_ADC_LSB;
 
 	memset(data_block, 0, sizeof(u8) * 4);
 
-	ret = i2c_smbus_read_i2c_block_data(chip->client, NU2118A_REG_1A, 4,
-					    data_block); /*REG1A-1B ibus, REG1C-1D vbus*/
+	ret = nu2118a_read_data(chip, NU2118A_REG_1A, data_block, 4);/*REG1A-1B ibus, REG1C-1D vbus*/
 	if (ret < 0) {
-		err_info[0] = NU2118A_REG_1A;
-		err_info[1] = ret;
-		nu2118a_i2c_error(chip, true, true, err_info);
-		pr_err("nu2118a_update_data read vsys vbat error \n");
-	} else {
-		nu2118a_i2c_error(chip, false, true, err_info);
+		pr_err("nu2118a_update_data read ibus vbus error, ret=%d\n", ret);
+		return;
 	}
 	for (i = 0; i < 4; i++) {
-		pr_info("read ichg vbus data_block[%d] = %u\n", i, data_block[i]);
+		pr_debug("read ichg vbus data_block[%d] = %u\n", i, data_block[i]);
 	}
 
-	chip->cp_ichg = (((data_block[0] & NU2118A_IBUS_POL_H_MASK) << 8) | data_block[1]) * NU2118A_IBUS_ADC_LSB;
-	chip->cp_vbus = (((data_block[2] & NU2118A_VBUS_POL_H_MASK) << 8) | data_block[3]) * NU2118A_VBUS_ADC_LSB;
+	voocphy->cp_ichg = (((data_block[0] & NU2118A_IBUS_POL_H_MASK) << 8) | data_block[1]) * NU2118A_IBUS_ADC_LSB;
+	voocphy->cp_vbus = (((data_block[2] & NU2118A_VBUS_POL_H_MASK) << 8) | data_block[3]) * NU2118A_VBUS_ADC_LSB;
+	voocphy->master_cp_ichg = voocphy->cp_ichg;
 
 	memset(data_block, 0, sizeof(u8) * 4);
 
-	ret = i2c_smbus_read_i2c_block_data(chip->client, NU2118A_REG_1E, 2, data_block); /*REG1E-1F vac*/
+	ret = nu2118a_read_data(chip, NU2118A_REG_1E, data_block, 2); /*REG1E-1F vac*/
 	if (ret < 0) {
-		err_info[0] = NU2118A_REG_1E;
-		err_info[1] = ret;
-		nu2118a_i2c_error(chip, true, true, err_info);
-		pr_err("nu2118a_update_data read vac error\n");
-	} else {
-		nu2118a_i2c_error(chip, false, true, err_info);
+		pr_err("nu2118a_update_data read vac error, ret=%d\n", ret);
+		return;
 	}
 	for (i = 0; i < 2; i++) {
-		pr_info("read vac data_block[%d] = %u\n", i, data_block[i]);
+		pr_debug("read vac data_block[%d] = %u\n", i, data_block[i]);
 	}
 
-	chip->cp_vac = (((data_block[0] & NU2118A_VAC_POL_H_MASK) << 8) | data_block[1]) * NU2118A_VAC_ADC_LSB;
+	voocphy->cp_vac = (((data_block[0] & NU2118A_VAC_POL_H_MASK) << 8) | data_block[1]) * NU2118A_VAC_ADC_LSB;
 
 	pr_info("cp_ichg = %d cp_vbus = %d, cp_vsys = %d cp_vbat = %d cp_vac = "
-		"%d int_flag = %d, reg[0x11/0x12/0x14]=[0x%x, 0x%x, 0x%x]",
-		chip->cp_ichg, chip->cp_vbus, chip->cp_vsys, chip->cp_vbat, chip->cp_vac, chip->interrupt_flag,
-		chip->int_column[REG_0X11_FLG], chip->int_column[REG_0X12_FLG], chip->int_column[REG_0X14_FLG]);
+		"%d int_flag = 0x%04X, reg[0x11/0x12/0x14]=[0x%x, 0x%x, 0x%x]",
+		voocphy->cp_ichg, voocphy->cp_vbus, voocphy->cp_vsys, voocphy->cp_vbat, voocphy->cp_vac, voocphy->interrupt_flag,
+		voocphy->int_column[REG_0X11_FLG], voocphy->int_column[REG_0X12_FLG], voocphy->int_column[REG_0X14_FLG]);
 }
 
-static int nu2118a_get_cp_ichg(struct oplus_voocphy_manager *chip)
+static int nu2118a_voocphy_get_cp_ichg(struct oplus_voocphy_manager *voocphy)
 {
 	u8 data_block[2] = { 0 };
 	int cp_ichg = 0;
 	u8 cp_enable = 0;
 	s32 ret = 0;
-	s32 err_info[2] = { 0 };
+	struct nu2118a_device *chip;
 
-	nu2118a_get_chg_enable(chip, &cp_enable);
+	if (voocphy == NULL) {
+		chg_err("oplus_voocphy_manager is NULL\n");
+		return -ENODEV;
+	}
+	chip = voocphy->priv_data;
+	if (chip == NULL) {
+		chg_err("nu2118a chip is NULL\n");
+		return -ENODEV;
+	}
+
+	if (oplus_chg_get_vooc_charging()) {
+		if (voocphy->master_cp_ichg < 0 || voocphy->master_cp_ichg > MAX_CP_ICHG_MA) {
+			chg_err("Invalid cached master_cp_ichg: %d\n", voocphy->master_cp_ichg);
+			return -EINVAL;
+		} else {
+			return voocphy->master_cp_ichg;
+		}
+	}
+
+	nu2118a_get_chg_enable(voocphy, &cp_enable);
 
 	if (cp_enable == 0)
 		return 0;
 	/*parse data_block for improving time of interrupt*/
-	ret = i2c_smbus_read_i2c_block_data(chip->client, NU2118A_REG_1A, 2, data_block);
+	ret = nu2118a_read_data(chip, NU2118A_REG_1A, data_block, 2);
 	if (ret < 0) {
-		err_info[0] = NU2118A_REG_1A;
-		err_info[1] = ret;
-		nu2118a_i2c_error(chip, true, true, err_info);
-		pr_err("nu2118a read ichg error \n");
-	} else {
-		nu2118a_i2c_error(chip, false, true, err_info);
+		pr_err("nu2118a read cp_ichg error, ret=%d\n", ret);
+		return ret;
+	}
+
+	cp_ichg = (((data_block[0] & NU2118A_IBUS_POL_H_MASK) << 8) | data_block[1]) * NU2118A_IBUS_ADC_LSB;
+	chg_info("%s cp_ichg:%d\n", chip->dev->of_node->name, cp_ichg);
+
+	return cp_ichg;
+}
+
+static int nu2118a_get_cp_ichg(struct oplus_voocphy_manager *voocphy)
+{
+	u8 data_block[2] = { 0 };
+	int cp_ichg = 0;
+	u8 cp_enable = 0;
+	s32 ret = 0;
+	struct nu2118a_device *chip;
+
+	if (voocphy == NULL) {
+		chg_err("oplus_voocphy_manager is NULL\n");
+		return -ENODEV;
+	}
+	chip = voocphy->priv_data;
+	if (chip == NULL) {
+		chg_err("nu2118a chip is NULL\n");
+		return -ENODEV;
+	}
+
+	ret = nu2118a_get_chg_enable(voocphy, &cp_enable);
+	if (ret < 0) {
+		chg_err("nu2118a_get_chg_enable error, ret=%d\n", ret);
+		return ret;
+	}
+
+	if (cp_enable == 0)
+		return 0;
+	/*parse data_block for improving time of interrupt*/
+	ret = nu2118a_read_data(chip, NU2118A_REG_1A, data_block, 2);
+	if (ret < 0) {
+		chg_err("read NU2118A_REG_1A error, ret=%d\n", ret);
+		return ret;
 	}
 
 	cp_ichg = (((data_block[0] & NU2118A_IBUS_POL_H_MASK) << 8) | data_block[1]) * NU2118A_IBUS_ADC_LSB;
@@ -595,48 +676,122 @@ static int nu2118a_get_cp_ichg(struct oplus_voocphy_manager *chip)
 	return cp_ichg;
 }
 
-static int nu2118a_get_cp_vbat(struct oplus_voocphy_manager *chip)
+static int nu2118a_voocphy_get_cp_vbat(struct oplus_voocphy_manager *voocphy)
 {
 	u8 data_block[2] = { 0 };
 	s32 ret = 0;
-	s32 err_info[2] = { 0 };
+	struct nu2118a_device *chip;
+
+	if (voocphy == NULL) {
+		chg_err("oplus_voocphy_manager is NULL\n");
+		return -ENODEV;
+	}
+	chip = voocphy->priv_data;
+	if (chip == NULL) {
+		chg_err("nu2118a chip is NULL\n");
+		return -ENODEV;
+	}
+
+	if (oplus_chg_get_vooc_charging())
+		return voocphy->cp_vbat;
 
 	/*parse data_block for improving time of interrupt*/
-	ret = i2c_smbus_read_i2c_block_data(chip->client, NU2118A_REG_22, 2, data_block);
+	ret = nu2118a_read_data(chip, NU2118A_REG_22, data_block, 2);
 	if (ret < 0) {
-		err_info[0] = NU2118A_REG_22;
-		err_info[1] = ret;
-		nu2118a_i2c_error(chip, true, true, err_info);
-		pr_err("nu2118a read vbat error \n");
-	} else {
-		nu2118a_i2c_error(chip, false, true, err_info);
+		pr_err("read NU2118A_REG_22 error, ret=%d\n", ret);
+		return ret;
 	}
 
-	chip->cp_vbat = (((data_block[0] & NU2118A_VBAT_POL_H_MASK) << 8) | data_block[1]) * NU2118A_VBAT_ADC_LSB;
+	voocphy->cp_vbat = (((data_block[0] & NU2118A_VBAT_POL_H_MASK) << 8) | data_block[1]) * NU2118A_VBAT_ADC_LSB;
 
-	return chip->cp_vbat;
+	return voocphy->cp_vbat;
 }
 
-static int nu2118a_get_cp_vbus(struct oplus_voocphy_manager *chip)
+static int nu2118a_get_cp_vbat(struct nu2118a_device *chip)
 {
 	u8 data_block[2] = { 0 };
 	s32 ret = 0;
-	s32 err_info[2] = { 0 };
+	struct oplus_voocphy_manager *voocphy;
 
-	/* parse data_block for improving time of interrupt */
-	ret = i2c_smbus_read_i2c_block_data(chip->client, NU2118A_REG_1C, 2, data_block);
-	if (ret < 0) {
-		err_info[0] = NU2118A_REG_1C;
-		err_info[1] = ret;
-		nu2118a_i2c_error(chip, true, true, err_info);
-		pr_err("nu2118a read vbat error \n");
-	} else {
-		nu2118a_i2c_error(chip, false, true, err_info);
+	if (chip == NULL) {
+		chg_err("nu2118a chip is NULL\n");
+		return -ENODEV;
+	}
+	voocphy = chip->voocphy;
+	if (voocphy == NULL) {
+		chg_err("oplus_voocphy_manager is NULL\n");
+		return -ENODEV;
 	}
 
-	chip->cp_vbus = (((data_block[0] & NU2118A_VBUS_POL_H_MASK) << 8) | data_block[1]) * NU2118A_VBUS_ADC_LSB;
+	/*parse data_block for improving time of interrupt*/
+	ret = nu2118a_read_data(chip, NU2118A_REG_22, data_block, 2);
+	if (ret < 0) {
+		chg_err("read NU2118A_REG_22 error,ret=%d\n", ret);
+		return ret;
+	}
 
-	return chip->cp_vbus;
+	voocphy->cp_vbat = (((data_block[0] & NU2118A_VBAT_POL_H_MASK) << 8) | data_block[1]) * NU2118A_VBAT_ADC_LSB;
+
+	return voocphy->cp_vbat;
+}
+
+static int nu2118a_voocphy_get_cp_vbus(struct oplus_voocphy_manager *voocphy)
+{
+	u8 data_block[2] = { 0 };
+	s32 ret = 0;
+	struct nu2118a_device *chip;
+
+	if (voocphy == NULL) {
+		chg_err("oplus_voocphy_manager is NULL\n");
+		return -ENODEV;
+	}
+	chip = voocphy->priv_data;
+	if (chip == NULL) {
+		chg_err("nu2118a chip is NULL\n");
+		return -ENODEV;
+	}
+
+	if (oplus_chg_get_vooc_charging())
+		return voocphy->cp_vbus;
+
+	/* parse data_block for improving time of interrupt */
+	ret = nu2118a_read_data(chip, NU2118A_REG_1C, data_block, 2);
+	if (ret < 0) {
+		chg_err("read NU2118A_REG_1C error, ret=%d\n", ret);
+		return ret;
+	}
+
+	voocphy->cp_vbus = (((data_block[0] & NU2118A_VBUS_POL_H_MASK) << 8) | data_block[1]) * NU2118A_VBUS_ADC_LSB;
+
+	return voocphy->cp_vbus;
+}
+
+static int nu2118a_get_cp_vbus(struct nu2118a_device *chip)
+{
+	u8 data_block[2] = { 0 };
+	s32 ret = 0;
+	struct oplus_voocphy_manager *voocphy;
+
+	if (chip == NULL) {
+		chg_err("nu2118a chip is NULL\n");
+		return -ENODEV;
+	}
+	voocphy = chip->voocphy;
+	if (voocphy == NULL) {
+		chg_err("oplus_voocphy_manager is NULL\n");
+		return -ENODEV;
+	}
+
+	/* parse data_block for improving time of interrupt */
+	ret = nu2118a_read_data(chip, NU2118A_REG_1C, data_block, 2);
+	if (ret < 0) {
+		pr_err("read NU2118A_REG_1C error, ret=%d\n", ret);
+		return ret;
+	}
+
+	voocphy->cp_vbus = (((data_block[0] & NU2118A_VBUS_POL_H_MASK) << 8) | data_block[1]) * NU2118A_VBUS_ADC_LSB;
+
+	return voocphy->cp_vbus;
 }
 
 /*********************************************************************/
@@ -662,13 +817,13 @@ static int nu2118a_get_chg_enable(struct oplus_voocphy_manager *chip, u8 *data)
 
 	if (!chip) {
 		pr_err("Failed\n");
-		return -1;
+		return -EINVAL;
 	}
 
 	ret = nu2118a_read_byte(chip->client, NU2118A_REG_07, data);
 	if (ret < 0) {
-		pr_err("NU2118A_REG_07\n");
-		return -1;
+		pr_err("read NU2118A_REG_07 error, ret=%d\n", ret);
+		return ret;
 	}
 
 	*data = *data >> NU2118A_CHG_EN_SHIFT;
@@ -682,25 +837,29 @@ static int nu2118a_get_voocphy_enable(struct oplus_voocphy_manager *chip, u8 *da
 
 	if (!chip) {
 		pr_err("Failed\n");
-		return -1;
+		return -EINVAL;
 	}
 
 	ret = nu2118a_read_byte(chip->client, NU2118A_REG_2B, data);
 	if (ret < 0) {
-		pr_err("NU2118A_REG_2B\n");
-		return -1;
+		pr_err("read NU2118A_REG_2B error, ret=%d\n", ret);
+		return ret;
 	}
+
+	*data = *data >> NU2118A_VOOC_EN_SHIFT;
 
 	return ret;
 }
 
 static void nu2118a_dump_reg_in_err_issue(struct oplus_voocphy_manager *chip)
 {
+	/*TODO*/
 	return;
 }
 
 static void nu2118a_track_dump_reg(struct oplus_voocphy_manager *voocphy)
 {
+	s32 ret;
 	struct nu2118a_device *chip = voocphy->priv_data;
 
 	if (chip == NULL) {
@@ -708,7 +867,16 @@ static void nu2118a_track_dump_reg(struct oplus_voocphy_manager *voocphy)
 		return;
 	}
 
-	i2c_smbus_read_i2c_block_data(chip->client, TRACK_REG_ADDR_START, TRACK_REG_DUMP_NUM, chip->track_reg_dump);
+	ret = nu2118a_read_block_data(chip->client, TRACK_REG_ADDR_START, TRACK_REG_DUMP_NUM, chip->track_reg_dump);
+	if (ret < 0) {
+		chg_err("master read NU2118A_REG_07~NU2118A_REG_15 error, ret=%d\n", ret);
+	}
+}
+
+static void nu2118a_slave_track_dump_reg(struct oplus_voocphy_manager *voocphy)
+{
+	/*TODO*/
+	return;
 }
 
 #define ERR_MSG_BUF	PAGE_SIZE
@@ -764,6 +932,12 @@ static void nu2118a_track_abnormal_upload_info_work(struct work_struct *work)
 
 	if (chip->ic_status == NU2118A_IC_PIN_DIAG_FAIL)
 		index += scnprintf(buf + index, ERR_MSG_BUF, "$$err_reason@@pin_diag_fail$$reg_info@@");
+	else if (chip->ic_status == NU2118A_IC_LOOP_REGULATION_TIMEOUT)
+		index += scnprintf(buf + index, ERR_MSG_BUF, "$$err_reason@@loop_regulation_timeout$$reg_info@@");
+	else if (chip->ic_status == NU2118A_IC_SS_TIMEOUT)
+		index += scnprintf(buf + index, ERR_MSG_BUF, "$$err_reason@@ss_timeout$$reg_info@@");
+	else if (chip->ic_status == NU2118A_IC_WD_TIMEOUT)
+		index += scnprintf(buf + index, ERR_MSG_BUF, "$$err_reason@@wd_timeout$$reg_info@@");
 	else
 		index += scnprintf(buf + index, ERR_MSG_BUF, "$$err_reason@@power_ng$$reg_info@@");
 
@@ -780,6 +954,7 @@ static void nu2118a_track_abnormal_upload_info_work(struct work_struct *work)
 static bool nu2118a_ic_is_abnormal(struct oplus_voocphy_manager *chip)
 {
 	u8 data = 0;
+	int ret;
 	struct nu2118a_device *device_chip;
 	enum nu2118a_ic_status ic_status;
 
@@ -795,16 +970,26 @@ static bool nu2118a_ic_is_abnormal(struct oplus_voocphy_manager *chip)
 	}
 
 	ic_status = device_chip->ic_status;
-	nu2118a_read_byte(chip->client, NU2118A_REG_14, &data);
+	ret = nu2118a_read_byte(chip->client, NU2118A_REG_14, &data);
+	if (ret < 0) {
+		chg_err("master read NU2118A_REG_14 error, ret=%d\n", ret);
+		return false;
+	}
 
 	if (data & NU2118A_PIN_DIAG_FALL_FLAG_MASK)
 		device_chip->ic_status = NU2118A_IC_PIN_DIAG_FAIL;
+	else if (data & NU2118A_LOOP_REGULATION_TIMEOUT_FLAG_MASK)
+		device_chip->ic_status = NU2118A_IC_LOOP_REGULATION_TIMEOUT;
+	else if (data & NU2118A_SS_TIMEOUT_FLAG_MASK)
+		device_chip->ic_status = NU2118A_IC_SS_TIMEOUT;
+	else if (data & NU2118A_WD_TIMEOUT_FLAG_MASK)
+		device_chip->ic_status = NU2118A_IC_WD_TIMEOUT;
 	else if (data & NU2118A_POWER_NG_FLAG_MASK)
 		device_chip->ic_status = NU2118A_IC_POWER_NG;
 	else
 		device_chip->ic_status = NU2118A_IC_OK;
 
-	chg_info("reg[0x%x] = 0x%x, pre_ic_status:%d, ic_status:%d\n",
+	chg_debug("reg[0x%x] = 0x%x, pre_ic_status:%d, ic_status:%d\n",
 		NU2118A_REG_14, data, ic_status, device_chip->ic_status);
 	if (device_chip->ic_status != NU2118A_IC_OK) {
 		if (ic_status != device_chip->ic_status) {
@@ -929,8 +1114,11 @@ static int nu2118a_cp_get_vin(struct oplus_chg_ic_dev *ic_dev, int *vin)
 		return -ENODEV;
 	}
 	chip = oplus_chg_ic_get_priv_data(ic_dev);
-
-	rc = nu2118a_get_cp_vbus(chip->voocphy);
+	if (chip == NULL) {
+		chg_err("nu2118a_device chip is NULL");
+		return -ENODEV;
+	}
+	rc = nu2118a_get_cp_vbus(chip);
 	if (rc < 0) {
 		chg_err("can't get cp vin, rc=%d\n", rc);
 		return rc;
@@ -957,6 +1145,34 @@ static int nu2118a_cp_get_iin(struct oplus_chg_ic_dev *ic_dev, int *iin)
 		return rc;
 	}
 	*iin = rc;
+
+	return 0;
+}
+
+static int nu2118a_cp_get_vout(struct oplus_chg_ic_dev *ic_dev, int *vout)
+{
+	struct nu2118a_device *chip;
+	int rc;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_priv_data(ic_dev);
+    if (chip == NULL) {
+        chg_err("nu2118a_device chip is NULL");
+        return -ENODEV;
+    }
+    if (chip->voocphy == NULL) {
+        chg_err("chip->voocphy is NULL");
+        return -ENODEV;
+    }
+	rc = nu2118a_get_cp_vbat(chip);
+	if (rc < 0) {
+		chg_err("can't get cp vbat, rc=%d\n", rc);
+		return rc;
+	}
+	*vout = rc;
 
 	return 0;
 }
@@ -1076,47 +1292,43 @@ static u8 nu2118a_match_err_value(struct oplus_voocphy_manager *chip, u8 *data_b
 	return 0;
 }
 
-static u8 nu2118a_get_initial_value(struct oplus_voocphy_manager *chip)
+static u8 nu2118a_get_int_value(struct oplus_voocphy_manager *chip)
 {
 	int ret = 0;
 	u8 data_block[NU2118A_FLAG_REG_NUMS] = { 0 };
 	int i = 0;
 	u8 reg_data;
-	s32 err_info[2] = { 0 };
 
 	if (!chip) {
 		pr_err("%s: chip null\n", __func__);
 		return -1;
 	}
-	memset(data_block, 0, sizeof(u8) * NU2118A_FLAG_REG_NUMS);
 
-	ret = i2c_smbus_read_i2c_block_data(chip->client, NU2118A_REG_11, NU2118A_FLAG_REG_NUMS, data_block);
+	ret = nu2118a_read_block_data(chip->client, NU2118A_REG_11, NU2118A_FLAG_REG_NUMS, data_block);
 	if (ret < 0) {
-		err_info[0] = NU2118A_REG_11;
-		err_info[1] = ret;
-		nu2118a_i2c_error(chip, true, true, err_info);
-		pr_err("nu2118a_get_initial_value read vac error\n");
-	} else {
-		nu2118a_i2c_error(chip, false, true, err_info);
+		pr_err("read int_flag error, ret=%d\n", ret);
+		return ret;
 	}
 	for (i = 0; i < NU2118A_FLAG_REG_NUMS; i++) {
-		pr_info("read int data_block[%d] = %u\n", i, data_block[i]);
+		pr_debug("read int data_block[%d] = %u\n", i, data_block[i]);
 	}
+
 	ret = nu2118a_read_byte(chip->client, NU2118A_REG_08, &reg_data);
 	if (ret < 0) {
-		pr_err("READ NU2118A_REG_08 ERR\n");
-		return -1;
+		pr_err("read NU2118A_REG_08 error, ret=%d\n", ret);
+		return ret;
 	}
 	chip->int_column[REG_0X11_FLG] = data_block[0];
 	chip->int_column[REG_0X12_FLG] = data_block[1];
 	chip->int_column[REG_0X13_FLG] = data_block[2];
 	chip->int_column[REG_0X14_FLG] = data_block[3];
 	chip->int_column[REG_0X08_FLG] = reg_data;
-	memcpy(chip->int_column_pre, chip->int_column, sizeof(chip->int_column));
+	chip->interrupt_flag = data_block[0];
+	memmove(chip->int_column_pre, chip->int_column, sizeof(chip->int_column));
 
 	nu2118a_match_err_value(chip, data_block);
 
-	return data_block[0];
+	return chip->interrupt_flag;
 }
 
 static int nu2118a_set_chg_enable(struct oplus_voocphy_manager *chip, bool enable)
@@ -1129,7 +1341,7 @@ static int nu2118a_set_chg_enable(struct oplus_voocphy_manager *chip, bool enabl
 		return -1;
 	}
 	dev_chip = chip->priv_data;
-	if (dev_chip == NULL) {
+	if (!dev_chip) {
 		chg_err("nu2118a chip is NULL\n");
 		return -1;
 	}
@@ -1157,7 +1369,7 @@ static void nu2118a_set_pd_svooc_config(struct oplus_voocphy_manager *chip, bool
 		return;
 	}
 	dev_chip = chip->priv_data;
-	if (dev_chip == NULL) {
+	if (!dev_chip) {
 		chg_err("nu2118a chip is NULL\n");
 		return;
 	}
@@ -1275,7 +1487,7 @@ static int nu2118a_reset_voocphy(struct oplus_voocphy_manager *chip)
 		return -1;
 	}
 	dev_chip = chip->priv_data;
-	if (dev_chip == NULL) {
+	if (!dev_chip) {
 		chg_err("nu2118a chip is NULL\n");
 		return -1;
 	}
@@ -1289,7 +1501,7 @@ static int nu2118a_reset_voocphy(struct oplus_voocphy_manager *chip)
 	reg_data = chip->ovp_reg;
 	nu2118a_write_byte(chip->client, NU2118A_REG_00, reg_data); /* vbat ovp=4.65V */
 	nu2118a_write_byte(chip->client, NU2118A_REG_02, 0x04); /* vac ovp=12V */
-	nu2118a_write_byte(chip->client, NU2118A_REG_03, 0x50); /* VBUS OVP=10V */
+	nu2118a_write_byte(chip->client, NU2118A_REG_03, dev_chip->vbus_ovp_reg); /* VBUS OVP=10V */
 	reg_data = chip->ocp_reg & 0x3f;
 	nu2118a_write_byte(chip->client, NU2118A_REG_04, reg_data); /* IBUS OCP=3.6A */
 	reg_data = 0x00 | dev_chip->ovpgate_reg;
@@ -1345,13 +1557,64 @@ static int nu2118a_reactive_voocphy(struct oplus_voocphy_manager *chip)
 	return VOOCPHY_SUCCESS;
 }
 
-static int nu2118a_read_data(struct nu2118a_device *chip, u8 addr, u8 *buf,
-			     int len)
+static s32 nu2118a_read_block_data(const struct i2c_client *client, u8 addr, int len, u8 *buf)
+{
+	int rc = 0;
+	s32 err_info[2] = { 0 };
+	struct oplus_voocphy_manager *voocphy;
+	struct nu2118a_device *chip;
+
+	voocphy = i2c_get_clientdata(client);
+	if (voocphy == NULL) {
+		chg_err("oplus_voocphy_manager is NULL\n");
+		return -ENODEV;
+	}
+
+	chip = voocphy->priv_data;
+    if (chip== NULL) {
+        chg_err("chip is NULL\n");
+        return -ENODEV;
+    }
+
+	mutex_lock(&chip->i2c_rw_lock);
+	rc = i2c_smbus_read_i2c_block_data(client, addr, len, buf);
+	if (rc < 0) {
+		err_info[0] = addr;
+		err_info[1] = rc;
+		nu2118a_i2c_error(voocphy, true, true, err_info);
+		pr_err("nu2118a_read_block_data read 0x%X error\n", addr);
+		goto error;
+	} else {
+		nu2118a_i2c_error(voocphy, false, true, err_info);
+	}
+	mutex_unlock(&chip->i2c_rw_lock);
+	return rc;
+
+error:
+	mutex_unlock(&chip->i2c_rw_lock);
+	return rc;
+}
+
+static int nu2118a_read_data(struct nu2118a_device *chip, u8 addr, u8 *buf, int len)
 {
 	u8 addr_buf = addr & 0xff;
 	int rc = 0;
+	s32 err_info[2] = { 0 };
+	struct oplus_voocphy_manager *voocphy;
+
+	if (chip == NULL) {
+		chg_err("nu2118a chip is NULL\n");
+		return -ENODEV;
+	}
 
 	mutex_lock(&chip->i2c_rw_lock);
+	voocphy = chip->voocphy;
+	if (voocphy == NULL) {
+		chg_err("oplus_voocphy_manager is NULL\n");
+		mutex_unlock(&chip->i2c_rw_lock);
+		return -ENODEV;
+	}
+
 	rc = i2c_master_send(chip->client, &addr_buf, 1);
 	if (rc < 1) {
 		chg_err("read 0x%04x error, rc=%d\n", addr, rc);
@@ -1366,10 +1629,14 @@ static int nu2118a_read_data(struct nu2118a_device *chip, u8 addr, u8 *buf,
 		goto error;
 	}
 	mutex_unlock(&chip->i2c_rw_lock);
+	nu2118a_i2c_error(voocphy, false, true, err_info);
 	return rc;
 
 error:
 	mutex_unlock(&chip->i2c_rw_lock);
+	err_info[0] = addr;
+	err_info[1] = rc;
+	nu2118a_i2c_error(voocphy, true, true, err_info);
 	return rc;
 }
 
@@ -1386,7 +1653,7 @@ static int nu2118a_write_data(struct nu2118a_device *chip, u8 addr,
 	}
 
 	buf[0] = addr & 0xff;
-	memcpy(&buf[1], data, length);
+	memmove(&buf[1], data, length);
 
 	mutex_lock(&chip->i2c_rw_lock);
 	rc = i2c_master_send(chip->client, buf, length + 1);
@@ -1414,31 +1681,41 @@ static int nu2118a_retrieve_reg_flags(struct nu2118a_device *chip)
 		chg_err("failed to read flag register\n");
 		return -EBUSY;
 	}
-	memcpy(chip->ufcs_reg_dump, flag_buf, NU2118A_FLAG_NUM);
+	memmove(chip->ufcs_reg_dump, flag_buf, NU2118A_FLAG_NUM);
 
 	if (flag_buf[1] & NU2118A_FLAG_ACK_RECEIVE_TIMEOUT)
 		err_flag |= BIT(UFCS_RECV_ERR_ACK_TIMEOUT);
+
 	if (flag_buf[1] & NU2118A_FLAG_MSG_TRANS_FAIL)
 		err_flag |= BIT(UFCS_RECV_ERR_TRANS_FAIL);
+
 	if (flag_buf[1] & NU2118A_FLAG_RX_OVERFLOW)
 		err_flag |= BIT(UFCS_COMM_ERR_RX_OVERFLOW);
+
 	if (flag_buf[1] & NU2118A_FLAG_DATA_READY)
 		err_flag |= BIT(UFCS_RECV_ERR_DATA_READY);
+
 	if (flag_buf[1] & NU2118A_FLAG_SENT_PACKET_COMPLETE)
 		err_flag |= BIT(UFCS_RECV_ERR_SENT_CMP);
 
 	if (flag_buf[2] & NU2118A_FLAG_HARD_RESET)
 		err_flag |= BIT(UFCS_HW_ERR_HARD_RESET);
+
 	if (flag_buf[2] & NU2118A_FLAG_CRC_ERROR)
 		err_flag |= BIT(UFCS_COMM_ERR_CRC_ERR);
+
 	if (flag_buf[2] & NU2118A_FLAG_BAUD_RATE_CHANGE)
 		err_flag |= BIT(UFCS_COMM_ERR_BAUD_RATE_CHANGE);
+
 	if (flag_buf[2] & NU2118A_FLAG_LENGTH_ERROR)
 		err_flag |= BIT(UFCS_COMM_ERR_RX_LEN_ERR);
+
 	if (flag_buf[2] & NU2118A_FLAG_DATA_BYTE_TIMEOUT)
 		err_flag |= BIT(UFCS_COMM_ERR_BYTE_TIMEOUT);
+
 	if (flag_buf[2] & NU2118A_FLAG_TRAINING_BYTE_ERROR)
 		err_flag |= BIT(UFCS_COMM_ERR_TRAINING_ERR);
+
 	if (flag_buf[2] & NU2118A_FLAG_BAUD_RATE_ERROR)
 		err_flag |= BIT(UFCS_COMM_ERR_BAUD_RATE_ERR);
 
@@ -1490,7 +1767,7 @@ static int nu2118a_init_device(struct nu2118a_device *chip)
 
 	nu2118a_write_byte(chip->client, NU2118A_REG_18, 0x10); /* ADC_CTRL:disable */
 	nu2118a_write_byte(chip->client, NU2118A_REG_02, 0x4); /*VAC OVP=12V*/
-	nu2118a_write_byte(chip->client, NU2118A_REG_03, 0x50); /* VBUS_OVP:10V */
+	nu2118a_write_byte(chip->client, NU2118A_REG_03, chip->vbus_ovp_reg); /* VBUS_OVP:10V  2:1 or 1:1V */
 	reg_data = chip->ovp_reg;
 	nu2118a_write_byte(chip->client, NU2118A_REG_00, reg_data); /* VBAT_OVP:4.65V */
 	reg_data = chip->ocp_reg & 0x3f;
@@ -1637,7 +1914,7 @@ static int nu2118a_svooc_hw_setting(struct nu2118a_device *chip)
 	u8 reg_data;
 
 	nu2118a_write_byte(chip->client, NU2118A_REG_02, 0x04); /* VAC_OVP:12v */
-	nu2118a_write_byte(chip->client, NU2118A_REG_03, 0x50); /* VBUS_OVP:10v */
+	nu2118a_write_byte(chip->client, NU2118A_REG_03, chip->vbus_ovp_reg); /* VBUS_OVP:10v */
 	reg_data = chip->ocp_reg & 0x3f;
 	nu2118a_write_byte(chip->client, NU2118A_REG_04, reg_data); /* IBUS_OCP_UCP:3.6A */
 	nu2118a_write_byte(chip->client, NU2118A_REG_17, 0x28); /* Mask IBUS UCP rising */
@@ -1657,7 +1934,7 @@ static int nu2118a_vooc_hw_setting(struct nu2118a_device *chip)
 	u8 reg_data;
 
 	nu2118a_write_byte(chip->client, NU2118A_REG_02, 0x06); /* VAC_OVP:7V */
-	nu2118a_write_byte(chip->client, NU2118A_REG_03, 0x50); /* VBUS_OVP:10V */
+	nu2118a_write_byte(chip->client, NU2118A_REG_03, 0x64); /* VBUS_OVP:5.5V */
 	nu2118a_write_byte(chip->client, NU2118A_REG_04, 0x2B); /* IBUS_OCP_UCP:4.8A */
 	nu2118a_write_byte(chip->client, NU2118A_REG_17, 0x28); /* Mask IBUS UCP rising */
 	reg_data = 0x83 | chip->ovpgate_reg;
@@ -1675,7 +1952,7 @@ static int nu2118a_5v2a_hw_setting(struct nu2118a_device *chip)
 	u8 reg_data;
 
 	nu2118a_write_byte(chip->client, NU2118A_REG_02, 0x06); /* VAC_OVP:7V */
-	nu2118a_write_byte(chip->client, NU2118A_REG_03, 0x50); /* VBUS_OVP:10V */
+	nu2118a_write_byte(chip->client, NU2118A_REG_03, chip->vbus_ovp_reg); /* VBUS_OVP:10V */
 
 	nu2118a_write_byte(chip->client, NU2118A_REG_17, 0x28); /* Mask IBUS UCP rising */
 	reg_data = 0x00 | chip->ovpgate_reg;
@@ -1692,7 +1969,7 @@ static int nu2118a_pdqc_hw_setting(struct nu2118a_device *chip)
 	u8 reg_data;
 
 	nu2118a_write_byte(chip->client, NU2118A_REG_02, 0x04); /* VAC_OVP:12V */
-	nu2118a_write_byte(chip->client, NU2118A_REG_03, 0x50); /* VBUS_OVP:10V */
+	nu2118a_write_byte(chip->client, NU2118A_REG_03, chip->vbus_ovp_reg); /* VBUS_OVP:10V */
 	reg_data = 0x00 | chip->ovpgate_reg;
 	nu2118a_write_byte(chip->client, NU2118A_REG_08, 0x00); /* WD */
 	nu2118a_write_byte(chip->client, NU2118A_REG_18, 0x10); /* ADC_CTRL:ADC_EN */
@@ -1758,7 +2035,6 @@ static void nu2118a_voocphy_hardware_init(struct oplus_voocphy_manager *voocphy)
 	nu2118a_init_device(chip);
 }
 
-
 static bool nu2118a_voocphy_check_cp_int_status(
 	struct oplus_voocphy_manager *chip, int *err_type, bool check)
 {
@@ -1781,8 +2057,8 @@ static bool nu2118a_voocphy_check_cp_int_status(
 	for (i = 0; i < IRQ_EVENT_NU2118A_NUM; i++) {
 		if ((chip_device->cp_reg_track[nu2118a_int_flag[i].reg_list_order] & nu2118a_int_flag[i].mask) ||
 		    (nu2118a_int_flag[i].mask & chip->int_column_pre[nu2118a_int_flag[i].reg_list_order])) {
-			chg_info("cp int reg [0x%x] happened [0x%x, 0x%x][%d, %d, %d]\n",
-				0x11 + nu2118a_int_flag[i].reg_list_order,
+			chg_info("cp int reg [0x%x] happened %s [0x%x, 0x%x][%d, %d, %d]\n",
+				0x11 + nu2118a_int_flag[i].reg_list_order, nu2118a_int_flag[i].event_name,
 				chip->int_column_pre[nu2118a_int_flag[i].reg_list_order],
 				chip_device->cp_reg_track[nu2118a_int_flag[i].reg_list_order],
 				i, nu2118a_int_flag[i].level, level);
@@ -1974,8 +2250,13 @@ static ssize_t nu2118a_track_reg_show(struct device *dev,
 		return -EINVAL;
 	}
 
-	return sprintf(buf, "reg 0x11/0x12/0x13/0x14/en[0x%x, 0x%x, 0x%x, 0x%x, 0x%x]\n", chip->cp_reg_track[0],
-		chip->cp_reg_track[1], chip->cp_reg_track[2], chip->cp_reg_track[3], chip->cp_reg_track[4]);
+	int result = scnprintf(buf, PAGE_SIZE, "reg 0x11/0x12/0x13/0x14/en[0x%x, 0x%x, 0x%x, 0x%x,0x%x]\n",
+		chip->cp_reg_track[0], chip->cp_reg_track[1], chip->cp_reg_track[2],
+		chip->cp_reg_track[3], chip->cp_reg_track[4]);
+	if (result < 0)
+		return -EINVAL;
+
+	return result;
 }
 
 static ssize_t nu2118a_track_reg_store(struct device *dev,
@@ -2011,7 +2292,7 @@ static ssize_t nu2118a_track_reg_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	memcpy(chip->cp_reg_track, track_buf, sizeof(track_buf));
+	memmove(chip->cp_reg_track, track_buf, sizeof(track_buf));
 
 	chg_info("reg 0x11/0x12/0x13/0x14/en[0x%x, 0x%x, 0x%x, 0x%x, 0x%x]\n", chip->cp_reg_track[0], chip->cp_reg_track[1],
 		chip->cp_reg_track[2], chip->cp_reg_track[3], chip->cp_reg_track[4]);
@@ -2035,7 +2316,7 @@ static ssize_t nu2118a_show_registers(struct device *dev, struct device_attribut
 		ret = nu2118a_read_byte(chip->client, addr, &val);
 		if (ret == 0) {
 			len = snprintf(tmpbuf, PAGE_SIZE - idx, "Reg[%.2X] = 0x%.2x\n", addr, val);
-			memcpy(&buf[idx], tmpbuf, len);
+			memmove(&buf[idx], tmpbuf, len);
 			idx += len;
 		}
 	}
@@ -2071,8 +2352,8 @@ static int nu2118a_parse_dt(struct nu2118a_device *chip)
 	struct device_node *node = NULL;
 
 	if (!chip) {
-		pr_debug("chip null\n");
-		return -1;
+		chg_err("nu2118a_device chip null\n");
+		return -ENODEV;
 	}
 
 	/* Parsing gpio switch gpio47*/
@@ -2082,22 +2363,26 @@ static int nu2118a_parse_dt(struct nu2118a_device *chip)
 	if (rc) {
 		chip->ovp_reg = 0x5C;
 	} else {
-		chg_err("ovp_reg is %d\n", chip->ovp_reg);
+		chg_err("ovp_reg val= 0x%X\n", chip->ovp_reg);
 	}
 
 	rc = of_property_read_u32(node, "ocp_reg", &chip->ocp_reg);
 	if (rc) {
 		chip->ocp_reg = 0x24;
 	} else {
-		chg_err("ocp_reg is %d\n", chip->ocp_reg);
+		chg_err("ocp_reg val= 0x%X\n", chip->ocp_reg);
 	}
 
 	rc = of_property_read_u32(node, "ovpgate_reg", &chip->ovpgate_reg);
 	if (rc) {
 		chip->ovpgate_reg = 0x00;
 	} else {
-		chg_err("ovpgate_reg is %d\n", chip->ovpgate_reg);
+		chg_err("ovpgate_reg val= 0x%X\n", chip->ovpgate_reg);
 	}
+
+	rc = of_property_read_u8(node, "vbus_ovp_reg", &chip->vbus_ovp_reg);
+	if (rc)
+		chip->vbus_ovp_reg = 0x50; /* VBUS_OVP 10V */
 
 	return 0;
 }
@@ -2105,6 +2390,70 @@ static int nu2118a_parse_dt(struct nu2118a_device *chip)
 static int nu2118a_get_chip_id(struct oplus_voocphy_manager *chip)
 {
 	return CHIP_ID_NU2112A;
+}
+
+static int nu2118a_cp_set_sstimeout_ucp_enable(struct oplus_chg_ic_dev *ic_dev, bool enable)
+{
+	struct nu2118a_device *chip;
+	int ret;
+	u8 reg_data;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_priv_data(ic_dev);
+	if (!chip) {
+		chg_err("nu2118a_device chip null\n");
+		return -ENODEV;
+	}
+
+	if (chip->use_slave_cp)
+		return 0;
+
+	ret = nu2118a_read_byte(chip->client, NU2118A_REG_05, &reg_data);
+	if (ret < 0) {
+		chg_err("read NU2118A_REG_05 error, ret=%d\n", ret);
+		return ret;
+	}
+	if ((enable && !(reg_data >> NU2118A_IBUS_UCP_DIS_SHIFT)) || (!enable && (reg_data >> NU2118A_IBUS_UCP_DIS_SHIFT)))
+		return 0;
+
+	if (enable && (reg_data >> NU2118A_IBUS_UCP_DIS_SHIFT)) {
+		ret = nu2118a_update_bits(chip->client, NU2118A_REG_05, NU2118A_IBUS_UCP_DIS_MASK,
+			NU2118A_IBUS_UCP_ENABLE << NU2118A_IBUS_UCP_DIS_SHIFT);
+		ret |= nu2118a_update_bits(chip->client, NU2118A_REG_09, NU2118A_SS_TIMEOUT_SET_MASK,
+			NU2118A_SS_TIMEOUT_81920MS << NU2118A_SS_TIMEOUT_SET_SHIFT);/* ucp ss_time enable*/
+	} else {
+		ret = nu2118a_update_bits(chip->client, NU2118A_REG_05, NU2118A_IBUS_UCP_DIS_MASK,
+			NU2118A_IBUS_UCP_DISABLE << NU2118A_IBUS_UCP_DIS_SHIFT);
+		ret |= nu2118a_update_bits(chip->client, NU2118A_REG_08, NU2118A_SS_TIMEOUT_SET_MASK,
+			NU2118A_SS_TIMEOUT_DISABLE << NU2118A_SS_TIMEOUT_SET_SHIFT);/* ucp ss_time disable*/
+	}
+	ret = nu2118a_read_byte(chip->client, NU2118A_REG_05, &reg_data);
+	if (ret < 0) {
+		chg_err("read NU2118A_REG_05 error, ret=%d\n", ret);
+		return ret;
+	}
+
+	chg_info("%s %s NU2118A_REG_05 = 0x%0x\n", chip->dev->of_node->name, enable ? "enable" : "disable", reg_data);
+
+	return 0;
+}
+
+static int nu2118a_voocphy_set_sstimeout_ucp_enable(struct oplus_voocphy_manager *chip, bool enable)
+{
+	int rc = 0;
+	struct nu2118a_device *dev;
+	dev = chip->priv_data;
+
+	if (dev == NULL) {
+		chg_err("nu2118a chip is NULL\n");
+		return -ENODEV;
+	}
+
+	rc = nu2118a_cp_set_sstimeout_ucp_enable(dev->cp_ic, enable);
+	return rc;
 }
 
 static struct oplus_voocphy_operations oplus_nu2118a_ops = {
@@ -2120,12 +2469,12 @@ static struct oplus_voocphy_operations oplus_nu2118a_ops = {
 	.reset_voocphy = nu2118a_reset_voocphy,
 	.reactive_voocphy = nu2118a_reactive_voocphy,
 	.send_handshake = nu2118a_send_handshake,
-	.get_cp_vbat = nu2118a_get_cp_vbat,
-	.get_cp_vbus = nu2118a_get_cp_vbus,
-	.get_int_value = nu2118a_get_initial_value,
+	.get_cp_vbat = nu2118a_voocphy_get_cp_vbat,
+	.get_cp_vbus = nu2118a_voocphy_get_cp_vbus,
+	.get_int_value = nu2118a_get_int_value,
 	.get_adc_enable = nu2118a_get_adc_enable,
 	.set_adc_enable = nu2118a_set_adc_enable,
-	.get_ichg = nu2118a_get_cp_ichg,
+	.get_ichg = nu2118a_voocphy_get_cp_ichg,
 	.set_pd_svooc_config = nu2118a_set_pd_svooc_config,
 	.get_pd_svooc_config = nu2118a_get_pd_svooc_config,
 	.get_voocphy_enable = nu2118a_get_voocphy_enable,
@@ -2134,9 +2483,401 @@ static struct oplus_voocphy_operations oplus_nu2118a_ops = {
 	.get_chg_pmid2out = nu2118a_get_chg_pmid2out,
 	.dump_voocphy_reg = nu2118a_dump_reg_in_err_issue,
 	.ic_is_abnormal = nu2118a_ic_is_abnormal,
+	.set_sstimeout_ucp_enable = nu2118a_voocphy_set_sstimeout_ucp_enable,
 	.check_cp_int_happened = nu2118a_voocphy_check_cp_int_happened,
 	.upload_cp_error = nu2118a_track_upload_cp_err_info,
 	.get_cp_error_type = nu2118a_get_cp_error_type,
+};
+
+static int nu2118a_slave_hw_setting(struct oplus_voocphy_manager *voocphy_mg, int reason)
+{
+	struct oplus_voocphy_manager *voocphy;
+
+	if (!voocphy_mg) {
+		chg_err("voocphy_mg is null exit\n");
+		return -EINVAL;
+	}
+
+	voocphy = i2c_get_clientdata(voocphy_mg->slave_client);
+	return nu2118a_hw_setting(voocphy, reason);
+}
+
+static int nu2118a_slave_init_vooc(struct oplus_voocphy_manager *voocphy_mg)
+{
+	struct oplus_voocphy_manager *voocphy;
+
+	if (!voocphy_mg) {
+		chg_err("voocphy_mg is null exit\n");
+		return -EINVAL;
+	}
+
+	voocphy = i2c_get_clientdata(voocphy_mg->slave_client);
+	return nu2118a_init_vooc(voocphy);
+}
+
+static void nu2118a_slave_update_data(struct oplus_voocphy_manager *chip)
+{
+	u8 data_block[NU2118A_FLAG_REG_NUMS] = { 0 };
+	int i = 0;
+	s32 ret = 0;
+
+	if (!chip) {
+		pr_err("voocphy_mg is null exit\n");
+		return;
+	}
+
+	/*int_flag*/
+	ret = nu2118a_read_block_data(chip->slave_client, NU2118A_REG_11, NU2118A_FLAG_REG_NUMS, data_block);/*REG11-14 int flag*/
+	if (ret < 0) {
+		pr_err("slave read NU2118A_REG_11~14 error, ret=%d\n", ret);
+		return;
+	}
+	for (i = 0; i < NU2118A_FLAG_REG_NUMS; i++) {
+		pr_debug("slave read NU2118A_REG_11~14 data_block[%d] = %u\n", i, data_block[i]);
+	}
+	chip->interrupt_flag = (data_block[3] << 24) | (data_block[2] << 16) | (data_block[1] << 8) | (data_block[0]);
+
+	memset(data_block, 0, sizeof(u8) * NU2118A_FLAG_REG_NUMS);
+
+	ret = nu2118a_read_block_data(chip->slave_client, NU2118A_REG_1A, 2, data_block); /*REG1A-1B ibus*/
+	if (ret < 0) {
+		pr_err("slave read NU2118A_REG_1A~1B error, ret=%d\n", ret);
+		return;
+	}
+	for (i = 0; i < 2; i++) {
+		pr_debug("read NU2118A_REG_1A~1B data_block[%d] = %u\n", i, data_block[i]);
+	}
+	chip->slave_cp_ichg = (((data_block[0] & NU2118A_IBUS_POL_H_MASK) << 8) | data_block[1]) * NU2118A_IBUS_ADC_LSB;
+
+	pr_info("slave_cp_ichg = %d int_flag = 0x04%X", chip->slave_cp_ichg, chip->interrupt_flag);
+}
+
+static int nu2118a_slave_get_chg_enable(struct oplus_voocphy_manager *voocphy_mg, u8 *data)
+{
+	int ret = 0;
+
+	if (!voocphy_mg) {
+		pr_err("voocphy_mg is null exit\n");
+		return -ENODEV;
+	}
+
+	ret = nu2118a_read_byte(voocphy_mg->slave_client, NU2118A_REG_07, data);
+	if (ret < 0) {
+		pr_err("slave read NU2118A_REG_07 error, ret=%d\n", ret);
+		return ret;
+	}
+
+	*data = *data >> NU2118A_CHG_EN_SHIFT;
+
+	return ret;
+}
+
+static int nu2118a_slave_set_chg_enable(struct oplus_voocphy_manager *voocphy_mg, bool enable)
+{
+	int rc = 0;
+	struct oplus_voocphy_manager *voocphy;
+	struct nu2118a_device *chip;
+	u8 value = 0x8A;
+
+	if (!voocphy_mg) {
+		chg_err("voocphy_mg is null exit\n");
+		return -EINVAL;
+	}
+	voocphy = i2c_get_clientdata(voocphy_mg->slave_client);
+	if (!voocphy) {
+		chg_err("voocphy is null exit\n");
+		return -EINVAL;
+	}
+	chip = voocphy->priv_data;
+	if (chip == NULL) {
+		chg_err("nu2118a chip is NULL\n");
+		return -ENODEV;
+	}
+
+	if (enable)
+		value = 0x8A; /*Enable CP,550KHz*/
+	else
+		value = 0x0A; /*Disable CP,550KHz*/
+	chip->chg_enabled = enable;
+	rc = nu2118a_write_byte(voocphy_mg->slave_client, NU2118A_REG_07, value);
+	chg_err("slave_cp_enable = %d, value = 0x%x!\n", enable, value);
+
+	return rc;
+}
+
+static int nu2118a_slave_get_ichg(struct oplus_voocphy_manager *voocphy_mg)
+{
+	u8 data_block[2] = { 0 };
+	int i = 0;
+	s32 ret = 0;
+	struct oplus_voocphy_manager *voocphy;
+	struct nu2118a_device *chip;
+
+	if (voocphy_mg == NULL) {
+		chg_err("voocphy_mg is null exit\n");
+		return -ENODEV;
+	}
+
+	voocphy = i2c_get_clientdata(voocphy_mg->slave_client);
+	if (voocphy == NULL) {
+		chg_err("voocphy is null exit\n");
+		return -ENODEV;
+	}
+	chip = voocphy->priv_data;
+	if (chip == NULL) {
+		chg_err("nu2118a chip is NULL\n");
+		return -ENODEV;
+	}
+
+	if (oplus_chg_get_vooc_charging()) {
+		if (chip->chg_enabled)
+			return voocphy_mg->slave_cp_ichg;
+		else
+			return 0;
+	}
+
+	ret = nu2118a_read_block_data(voocphy->slave_client, NU2118A_REG_1A, 2, data_block); /*REG1A-1B ibus*/
+	if (ret < 0) {
+		chg_err("slave read ibus error, ret=%d\n", ret);
+		return ret;
+	}
+	for (i = 0; i < 2; i++) {
+		chg_debug("read ichg data_block[%d] = %u\n", i, data_block[i]);
+	}
+
+	voocphy->slave_cp_ichg = (((data_block[0] & NU2118A_IBUS_POL_H_MASK) << 8) | data_block[1]) * NU2118A_IBUS_ADC_LSB;
+	chg_info("slave cp_ichg=%d\n", voocphy->slave_cp_ichg);
+
+	return voocphy->slave_cp_ichg;
+}
+
+static int nu2118a_slave_reset_voocphy(struct oplus_voocphy_manager *chip)
+{
+	if (!chip) {
+		chg_err("voocphy_mg is null exit\n");
+		return -EINVAL;
+	}
+
+	nu2118a_slave_set_chg_enable(chip, false);
+	nu2118a_update_bits(chip->slave_client, NU2118A_REG_08, NU2118A_WATCHDOG_MASK, NU2118A_WATCHDOG_DIS);
+	nu2118a_slave_hw_setting(chip, SETTING_REASON_RESET);
+	pr_err("oplus_vooc_reset_voocphy done");
+	return VOOCPHY_SUCCESS;
+}
+
+static int nu2118a_slave_get_adc_enable(struct oplus_voocphy_manager *chip, u8 *data)
+{
+	int ret = 0;
+
+	if (!chip) {
+		pr_err("voocphy_mg is null exit\n");
+		return -ENODEV;
+	}
+
+	ret = nu2118a_read_byte(chip->slave_client, NU2118A_REG_18, data);
+	if (ret < 0) {
+		pr_err("read NU2118A_REG_18 error, ret=%d\n", ret);
+		return ret;
+	}
+
+	*data = *data >> NU2118A_ADC_ENABLE_SHIFT;
+
+	return ret;
+}
+
+static int nu2118a_slave_set_adc_enable(struct oplus_voocphy_manager *chip, bool enable)
+{
+	if (!chip) {
+		pr_err("voocphy_mg is null exit\n");
+		return -EINVAL;
+	}
+
+	if (enable)
+		return nu2118a_write_byte(chip->slave_client, NU2118A_REG_18, 0x90); /*Enable ADC*/
+	else
+		return nu2118a_write_byte(chip->slave_client, NU2118A_REG_18, 0x10); /*Disable ADC*/
+}
+
+static int nu2118a_slave_get_cp_status(struct oplus_voocphy_manager *chip)
+{
+	u8 data_reg07, data_reg10;
+	int ret_reg07, ret_reg10;
+
+	if (!chip) {
+		pr_err("voocphy_mg is null exit\n");
+		return -EINVAL;
+	}
+
+	ret_reg07 = nu2118a_read_byte(chip->slave_client, NU2118A_REG_07, &data_reg07);
+	ret_reg10 = nu2118a_read_byte(chip->slave_client, NU2118A_REG_10, &data_reg10);
+
+	if (ret_reg07 < 0 || ret_reg10 < 0) {
+		pr_err("NU2118A_REG_07 or NU2118A_REG_10 err\n");
+		return 0;
+	}
+	data_reg07 = data_reg07 >> 7;
+	data_reg10 = data_reg10 & NU2118A_CP_SWITCHING_STAT_MASK;
+
+	data_reg10 = data_reg10 >> NU2118A_CP_SWITCHING_STAT_SHIFT;
+
+	pr_err("reg07 = %d reg10 = %d\n", data_reg07, data_reg10);
+
+	if (data_reg07 == 1 && data_reg10 == 1) {
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
+static int nu2118a_slave_get_voocphy_enable(struct oplus_voocphy_manager *chip, u8 *data)
+{
+	int ret = 0;
+
+	if (!chip) {
+		pr_err("voocphy_mg is null exit\n");
+		return -EINVAL;
+	}
+
+	ret = nu2118a_read_byte(chip->slave_client, NU2118A_REG_2B, data);
+	if (ret < 0) {
+		pr_err("read NU2118A_REG_2B error, ret=%d\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
+
+static void nu2118a_slave_dump_reg_in_err_issue(struct oplus_voocphy_manager *chip)
+{
+	/*TODO*/
+	return;
+}
+
+static int nu2118a_slave_set_chg_pmid2out(struct oplus_voocphy_manager *chip, bool enable, int reason)
+{
+	if (!chip) {
+		chg_err("voocphy_mg is null exit\n");
+		return -ENODEV;
+	}
+
+	if (enable) {
+		if (reason == SETTING_REASON_SVOOC)
+			return nu2118a_write_byte(chip->slave_client, NU2118A_REG_05,
+							0x31); /*PMID/2-VOUT < 10%VOUT*/
+		else if (reason == SETTING_REASON_VOOC)
+			return nu2118a_write_byte(chip->slave_client, NU2118A_REG_05,
+							0x33);
+		else
+			chg_err("no type for slave_set_chg_pmid2out\n");
+	} else {
+		if (reason == SETTING_REASON_SVOOC)
+			return nu2118a_write_byte(chip->slave_client, NU2118A_REG_05,
+							0xB1); /*PMID/2-VOUT < 10%VOUT*/
+		else if (reason == SETTING_REASON_VOOC)
+			return nu2118a_write_byte(chip->slave_client, NU2118A_REG_05,
+							0xA3);
+		else
+			chg_err("no type for slave_set_chg_pmid2out\n");
+	}
+
+	return 0;
+}
+
+static bool nu2118a_slave_get_chg_pmid2out(struct oplus_voocphy_manager *chip)
+{
+	int ret = 0;
+	u8 data = 0;
+
+	if (!chip) {
+		chg_err("voocphy_mg is null exit\n");
+		return -ENODEV;
+	}
+
+	ret = nu2118a_read_byte(chip->slave_client, NU2118A_REG_05, &data);
+	if (ret < 0) {
+		chg_err("read NU2118A_SLAVE_REG_05 error\n");
+		return -ENODEV;
+	}
+
+	chg_info("NU2118A_SLAVE_REG_05 = 0x%0x\n", data);
+
+	data = data >> NU2118A_PMID2OUT_OVP_DIS_SHIFT;
+	if (data == NU2118A_PMID2OUT_OVP_ENABLE)
+		return true;
+	else
+		return false;
+}
+
+static bool nu2118a_slave_ic_is_abnormal(struct oplus_voocphy_manager *chip)
+{
+	u8 data = 0;
+	int ret;
+	enum nu2118a_ic_status ic_status;
+	struct nu2118a_device *device_chip = NULL;
+
+	if (!chip) {
+		chg_err("chip is NULL\n");
+		return false;
+	}
+
+	device_chip = chip->priv_data;
+	if (!device_chip) {
+		chg_err("device chip is NULL\n");
+		return false;
+	}
+
+	ic_status = device_chip->ic_status;
+	ret = nu2118a_read_byte(chip->slave_client, NU2118A_REG_14, &data);
+	if (ret < 0) {
+		chg_err("slave read NU2118A_REG_14 error, ret=%d\n", ret);
+		return false;
+	}
+
+	if (data & NU2118A_PIN_DIAG_FALL_FLAG_MASK)
+		device_chip->ic_status = NU2118A_IC_PIN_DIAG_FAIL;
+	else if (data & NU2118A_LOOP_REGULATION_TIMEOUT_FLAG_MASK)
+		device_chip->ic_status = NU2118A_IC_LOOP_REGULATION_TIMEOUT;
+	else if (data & NU2118A_SS_TIMEOUT_FLAG_MASK)
+		device_chip->ic_status = NU2118A_IC_SS_TIMEOUT;
+	else if (data & NU2118A_WD_TIMEOUT_FLAG_MASK)
+		device_chip->ic_status = NU2118A_IC_WD_TIMEOUT;
+	else if (data & NU2118A_POWER_NG_FLAG_MASK)
+		device_chip->ic_status = NU2118A_IC_POWER_NG;
+	else
+		device_chip->ic_status = NU2118A_IC_OK;
+
+	chg_info("reg[0x%x] = 0x%x, pre_ic_status:%d, ic_status:%d\n",
+		NU2118A_REG_14, data, ic_status, device_chip->ic_status);
+
+	if (device_chip->ic_status != NU2118A_IC_OK) {
+		if (ic_status != device_chip->ic_status) {
+			nu2118a_slave_track_dump_reg(chip);
+			if (NU2118A_REG_14 >= TRACK_REG_ADDR_START && NU2118A_REG_14 < TRACK_REG_ADDR_END)
+				device_chip->track_reg_dump[NU2118A_REG_14 - TRACK_REG_ADDR_START] = data;
+			schedule_work(&device_chip->abnormal_upload_info_work);
+		}
+		return true;
+	}
+
+	return false;
+}
+
+static struct oplus_voocphy_operations oplus_nu2118a_slave_ops = {
+	.hw_setting		= nu2118a_slave_hw_setting,
+	.init_vooc		= nu2118a_slave_init_vooc,
+	.update_data		= nu2118a_slave_update_data,
+	.get_chg_enable		= nu2118a_slave_get_chg_enable,
+	.set_chg_enable		= nu2118a_slave_set_chg_enable,
+	.get_ichg		= nu2118a_slave_get_ichg,
+	.reset_voocphy      	= nu2118a_slave_reset_voocphy,
+	.get_adc_enable		= nu2118a_slave_get_adc_enable,
+	.set_adc_enable		= nu2118a_slave_set_adc_enable,
+	.get_cp_status 		= nu2118a_slave_get_cp_status,
+	.get_voocphy_enable 	= nu2118a_slave_get_voocphy_enable,
+	.dump_voocphy_reg	= nu2118a_slave_dump_reg_in_err_issue,
+	.set_chg_pmid2out = nu2118a_slave_set_chg_pmid2out,
+	.get_chg_pmid2out = nu2118a_slave_get_chg_pmid2out,
+	.ic_is_abnormal = nu2118a_slave_ic_is_abnormal,
 };
 
 static int nu2118a_ufcs_init(struct ufcs_dev *ufcs)
@@ -2243,11 +2984,6 @@ static int nu2118a_ufcs_set_baud_rate(struct ufcs_dev *ufcs, enum ufcs_baud_rate
 	struct nu2118a_device *chip = ufcs->drv_data;
 	int rc;
 
-	if (baud == UFCS_BAUD_115200) {
-		baud = UFCS_BAUD_57600;
-		chg_info("force modify baud 115200 to 57600\n");
-	}
-
 	rc = nu2118a_write_bit_mask(chip, NU2118A_ADDR_UFCS_CTRL0,
 				FLAG_BAUD_RATE_VALUE,
 				(baud << FLAG_BAUD_NUM_SHIFT));
@@ -2260,8 +2996,7 @@ static int nu2118a_ufcs_set_baud_rate(struct ufcs_dev *ufcs, enum ufcs_baud_rate
 static int nu2118a_ufcs_enable(struct ufcs_dev *ufcs)
 {
 	struct nu2118a_device *chip = ufcs->drv_data;
-	int i;
-	int rc;
+	int i, rc;
 	u8 reg_data;
 
 	u8 addr_buf[NU2118A_ENABLE_REG_NUM] = { NU2118A_ADDR_UFCS_CTRL0,
@@ -2360,8 +3095,10 @@ static int nu2118a_ufcs_watchdog_config(struct ufcs_dev *ufcs, unsigned int time
 	}
 
 	rc = nu2118a_get_wdt_reg_by_time(time_ms, &reg_val);
-	if (rc < 0)
+	if (rc < 0) {
+		chg_err("nu2118a_get_wdt_reg_by_time failed, rc=%d\n", rc);
 		return rc;
+	}
 
 	if (reg_val == NU2118A_WATCHDOG_DIS) {
 		rc = nu2118a_update_bits(chip->client, NU2118A_REG_08,
@@ -2408,7 +3145,7 @@ static int nu2118a_retrieve_flags(struct nu2118a_device *chip)
 	int err_type = 0;
 	struct oplus_voocphy_manager *voocphy = chip->voocphy;
 
-	rc = nu2118a_get_initial_value(voocphy);
+	voocphy->interrupt_flag = nu2118a_get_int_value(voocphy);
 	rc = nu2118a_get_cp_error_type(voocphy, &err_type);
 	if (rc == 0)
 		rc = nu2118a_track_upload_cp_err_info(voocphy, err_type);
@@ -2445,24 +3182,21 @@ static int nu2118a_reverse_watchdog_reset(struct oplus_chg_ic_dev *ic_dev)
 	s32 ret = 0;
 	int cp_ichg = 0;
 	int cp_vbus = 0;
-	s32 err_info[2] = { 0 };
 
 	if (ic_dev == NULL) {
-		chg_err("oplus_chg_ic_dev is NULL");
+		pr_err("oplus_chg_ic_dev is NULL");
 		return -ENODEV;
 	}
 	chip = oplus_chg_ic_get_priv_data(ic_dev);
 	voocphy = chip->voocphy;
 
-	ret = i2c_smbus_read_i2c_block_data(voocphy->client, NU2118A_REG_1A, 4,
-						data_block); /*REG1A-1B ibus, REG1C-1D vbus*/
+	if (chip->use_slave_cp)
+		return 0;
+
+	ret = nu2118a_read_data(chip, NU2118A_REG_1A, data_block, 4);/*REG1A-1B ibus, REG1C-1D vbus*/
 	if (ret < 0) {
-		err_info[0] = NU2118A_REG_1A;
-		err_info[1] = ret;
-		nu2118a_i2c_error(voocphy, true, true, err_info);
-		pr_err("nu2118a_update_data read vsys vbat error \n");
-	} else {
-		nu2118a_i2c_error(voocphy, false, true, err_info);
+		pr_err("nu2118a_update_data read ibus vbus error, ret=%d\n", ret);
+		return ret;
 	}
 	for (i = 0; i < 4; i++) {
 		pr_debug("read ichg vbus data_block[%d] = 0x%X\n", i, data_block[i]);
@@ -2471,7 +3205,7 @@ static int nu2118a_reverse_watchdog_reset(struct oplus_chg_ic_dev *ic_dev)
 	cp_vbus = (((data_block[2] & NU2118A_VBUS_POL_H_MASK) << 8) | data_block[3]) * NU2118A_VBUS_ADC_LSB;
 	cp_ichg = (cp_ichg > 0) ? (((~cp_ichg) & 0x1FFF) + 1) : 0;
 	cp_ichg = (cp_ichg > 0) ? -cp_ichg : 0;
-	pr_info("read ichg = %d, read vbus = %d\n", cp_ichg, cp_vbus);
+	pr_info("cp_ichg = %d, cp_vbus = %d\n", cp_ichg, cp_vbus);
 	return 0;
 }
 
@@ -2484,6 +3218,7 @@ static void nu2118a_reverse_event_handler(struct nu2118a_device *chip)
 	if ((chip->second_ktime - chip->first_ktime) < 350 && chip->reverse_status) {
 		nu2118a_read_byte(chip->client, NU2118A_REG_13, &reg_data);
 		start = reg_data & (1 << 7);
+		chg_info("HP_REVERSE_PGOOD: start = %s\n", start ? "true" : "false");
 		if (start) {
 			chg_info(" reverse EN \r\n");
 			chip->reverse_status = false;
@@ -2495,6 +3230,7 @@ static void nu2118a_reverse_event_handler(struct nu2118a_device *chip)
 	cancel_delayed_work(&chip->track_cp_switching_work);
 	schedule_delayed_work(&chip->track_cp_switching_work, 0);
 }
+
 static void nu2118a_reverse_enabled_work(struct work_struct *work)
 {
 	struct nu2118a_device *chip =
@@ -2506,16 +3242,16 @@ static void nu2118a_reverse_enabled_work(struct work_struct *work)
 	oplus_mms_get_item_data(chip->reverse_topic, REVERSE_ITEM_HIGH_REVERSE_CHG_ENABLE,
 	&reverse_data, false);
 	if (reverse_data.intval) {
-		nu2118a_write_byte(chip->client, NU2118A_REG_07, 0x02);
+		nu2118a_write_byte(chip->client, NU2118A_REG_07, 0x02); /*CP switching Frequency:500kHz*/
 		reg_data = 0x64 | chip->ovpgate_reg;
-		nu2118a_write_byte(chip->client, NU2118A_REG_08, reg_data);
-		nu2118a_write_byte(chip->client, NU2118A_REG_02, 0x03);
-		nu2118a_write_byte(chip->client, NU2118A_REG_03, 0x46);
-		nu2118a_write_byte(chip->client, NU2118A_REG_04, 0x1E);
-		nu2118a_write_byte(chip->client, NU2118A_REG_05, 0x12);
-		nu2118a_write_byte(chip->client, NU2118A_REG_0A, 0x23);
-		nu2118a_write_byte(chip->client, NU2118A_REG_18, 0x90);
-		nu2118a_write_byte(chip->client, NU2118A_REG_07, 0x82);
+		nu2118a_write_byte(chip->client, NU2118A_REG_08, reg_data); /*2:1charge mode, reverse mode, manual mode, OVPGATE:4.75V, WD:5s*/
+		nu2118a_write_byte(chip->client, NU2118A_REG_02, 0x03); /*VAC OVP:11V*/
+		nu2118a_write_byte(chip->client, NU2118A_REG_03, 0x46); /*VBUS OVP:9.5V*/
+		nu2118a_write_byte(chip->client, NU2118A_REG_04, 0x1E); /*IBUS OCP:3.5A*/
+		nu2118a_write_byte(chip->client, NU2118A_REG_05, 0x12); /*pmid2vout_ovp:300mV pmid2vout_uvp:-150mV*/
+		nu2118a_write_byte(chip->client, NU2118A_REG_0A, 0x23); /*VOUT VALID:3.2V*/
+		nu2118a_write_byte(chip->client, NU2118A_REG_18, 0x90); /*adc enable*/
+		nu2118a_write_byte(chip->client, NU2118A_REG_07, 0x82); /*charger enable*/
 		schedule_delayed_work(&chip->track_cp_switching_work,
 			msecs_to_jiffies(CP_SWITCHING_WORK_DELAY_MS));
 		chip->first_ktime = ktime_to_ms(ktime_get_boottime());
@@ -2527,7 +3263,6 @@ static void nu2118a_reverse_enabled_work(struct work_struct *work)
 		chg_info(" reverse out !!!!  \r\n");
 		nu2118a_reset_voocphy(voocphy);
 		chip->reverse_enable = false;
-
 		if (chip->otg_enable) {
 			reg_data = 0x20 | chip->ovpgate_reg;
 			nu2118a_write_byte(chip->client, NU2118A_REG_08, reg_data);
@@ -2540,6 +3275,8 @@ static void nu2118a_reverse_enabled_init_work(struct work_struct *work)
 	struct nu2118a_device *chip =
 		container_of(work, struct nu2118a_device, reverse_enabled_init_work.work);
 	u8 reg_data;
+
+	chg_info("HP_REVERSE_READY: write reg0x08 0x20 -> OTG source vbus, turn off OVPGATE temporarily\n");
 
 	reg_data = 0x20 | chip->ovpgate_reg;
 	nu2118a_write_byte(chip->client, NU2118A_REG_08, reg_data);
@@ -2561,6 +3298,30 @@ static int nu2118a_charger_choose(struct nu2118a_device *chip)
 		} else
 			return 1;
 	}
+}
+
+static int nu2118a_slave_charger_choose(struct nu2118a_device *chip)
+{
+	int ret;
+	int max_count = 5;
+
+	if (oplus_voocphy_chip_is_null()) {
+		chg_err("oplus_voocphy_chip null, will do after master cp init!");
+		return -EPROBE_DEFER;
+	} else {
+		while (max_count--) {
+			ret = i2c_smbus_read_byte_data(chip->client, 0x07);
+			chg_info("0x07 = %d\n", ret);
+			if (ret < 0) {
+				chg_err("i2c communication fail");
+				continue;
+			} else {
+				break;
+			}
+		}
+	}
+
+	return ret;
 }
 
 static int nu2118a_cp_init(struct oplus_chg_ic_dev *ic_dev)
@@ -2714,9 +3475,6 @@ static void *nu2118a_cp_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_chg
 	case OPLUS_IC_FUNC_CP_SET_WORK_MODE:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_WORK_MODE, nu2118a_cp_set_work_mode);
 		break;
-	case OPLUS_IC_FUNC_CP_GET_WORK_MODE:
-		/* func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_GET_WORK_MODE, nu2118a_cp_get_work_mode); */
-		break;
 	case OPLUS_IC_FUNC_CP_CHECK_WORK_MODE_SUPPORT:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_CHECK_WORK_MODE_SUPPORT,
 				nu2118a_cp_check_work_mode_support);
@@ -2731,13 +3489,13 @@ static void *nu2118a_cp_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_chg
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_GET_IIN, nu2118a_cp_get_iin);
 		break;
 	case OPLUS_IC_FUNC_CP_GET_VOUT:
-		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_GET_VOUT, nu2118a_cp_get_vin);
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_GET_VOUT, nu2118a_cp_get_vout);
+		break;
+	case OPLUS_IC_FUNC_CP_GET_REVERSE_VOUT:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_GET_REVERSE_VOUT, nu2118a_cp_get_vin);
 		break;
 	case OPLUS_IC_FUNC_CP_GET_IOUT:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_GET_IOUT, nu2118a_cp_get_iout);
-		break;
-	case OPLUS_IC_FUNC_CP_GET_VAC:
-		/* func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_GET_VAC, nu2118a_cp_get_vac); */
 		break;
 	case OPLUS_IC_FUNC_CP_SET_WORK_START:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_WORK_START, nu2118a_cp_set_work_start);
@@ -2757,6 +3515,10 @@ static void *nu2118a_cp_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_chg
 	case OPLUS_IC_FUNC_CP_WATCHDOG_RESET:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_WATCHDOG_RESET, nu2118a_reverse_watchdog_reset);
 		break;
+	case OPLUS_IC_FUNC_CP_SET_SSTIMEOUT_UCP_ENABLE:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_SSTIMEOUT_UCP_ENABLE,
+			nu2118a_cp_set_sstimeout_ucp_enable);
+		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);
 		func = NULL;
@@ -2771,32 +3533,34 @@ struct oplus_chg_ic_virq nu2118a_cp_virq_table[] = {
 	{.virq_id = OPLUS_IC_VIRQ_ONLINE},
 	{.virq_id = OPLUS_IC_VIRQ_OFFLINE},
 };
+
 static void nu2118a_wired_topic_callback(struct mms_subscribe *subs, enum mms_msg_type type,
 						u32 id, bool sync)
 {
-		struct nu2118a_device *chip = subs->priv_data;
-		union mms_msg_data data = { 0 };
+	struct nu2118a_device *chip = subs->priv_data;
+	union mms_msg_data data = { 0 };
 
-		switch (type) {
-		case MSG_TYPE_ITEM:
-			switch (id) {
-			case WIRED_ITEM_PRE_OTG_ENABLE:
-				schedule_delayed_work(&chip->reverse_enabled_init_work, 0);
-				break;
-			case WIRED_ITEM_OTG_ENABLE:
-				oplus_mms_get_item_data(chip->wired_topic, id, &data, false);
-				chip->otg_enable = !!data.intval;
-				if (!chip->otg_enable && !!chip->reverse_topic)
-					schedule_delayed_work(&chip->reverse_enabled_work, 0);
-				break;
-			default:
-				break;
-				}
+	switch (type) {
+	case MSG_TYPE_ITEM:
+		switch (id) {
+		case WIRED_ITEM_PRE_OTG_ENABLE:
+			schedule_delayed_work(&chip->reverse_enabled_init_work, 0);
+			break;
+		case WIRED_ITEM_OTG_ENABLE:
+			oplus_mms_get_item_data(chip->wired_topic, id, &data, false);
+			chip->otg_enable = !!data.intval;
+			if (!chip->otg_enable && !!chip->reverse_topic)
+				schedule_delayed_work(&chip->reverse_enabled_work, 0);
 			break;
 		default:
 			break;
 		}
+		break;
+	default:
+		break;
+	}
 }
+
 static void nu2118a_subscribe_wired_topic(struct oplus_mms *topic, void *prv_data)
 {
 	struct nu2118a_device *chip = prv_data;
@@ -2809,39 +3573,33 @@ static void nu2118a_subscribe_wired_topic(struct oplus_mms *topic, void *prv_dat
 		chg_err("subscribe wired topic error, rc=%ld\n", PTR_ERR(chip->wired_subs));
 		return;
 	}
-	oplus_mms_get_item_data(chip->wired_topic, WIRED_ITEM_PRE_OTG_ENABLE, &data, true);
-	if (!!data.intval && !!chip->reverse_topic)
-		schedule_delayed_work(&chip->reverse_enabled_init_work, 0);
 	oplus_mms_get_item_data(chip->wired_topic, WIRED_ITEM_OTG_ENABLE, &data, true);
 	chip->otg_enable = data.intval;
-	if (!chip->otg_enable && !!chip->reverse_topic)
-		schedule_delayed_work(&chip->reverse_enabled_work, 0);
 }
 
 static void nu2118a_reverse_topic_callback(struct mms_subscribe *subs, enum mms_msg_type type,
 						u32 id, bool sync)
 {
-		struct nu2118a_device *chip = subs->priv_data;
+	struct nu2118a_device *chip = subs->priv_data;
 
-		switch (type) {
-		case MSG_TYPE_ITEM:
-			switch (id) {
-			case REVERSE_ITEM_HIGH_REVERSE_CHG_ENABLE:
-				schedule_delayed_work(&chip->reverse_enabled_work, 0);
-				break;
-			default:
-				break;
-				}
+	switch (type) {
+	case MSG_TYPE_ITEM:
+		switch (id) {
+		case REVERSE_ITEM_HIGH_REVERSE_CHG_ENABLE:
+			schedule_delayed_work(&chip->reverse_enabled_work, 0);
 			break;
 		default:
 			break;
 		}
+		break;
+	default:
+		break;
+	}
 }
 
 static void nu2118a_subscribe_reverse_topic(struct oplus_mms *topic, void *prv_data)
 {
 	struct nu2118a_device *chip = prv_data;
-	union mms_msg_data data = { 0 };
 
 	chip->reverse_topic = topic;
 	chip->reverse_subs = oplus_mms_subscribe(chip->reverse_topic, chip,
@@ -2850,9 +3608,6 @@ static void nu2118a_subscribe_reverse_topic(struct oplus_mms *topic, void *prv_d
 		chg_err("subscribe reverse topic error, rc=%ld\n", PTR_ERR(chip->reverse_subs));
 		return;
 	}
-
-	oplus_mms_get_item_data(chip->wired_topic, REVERSE_ITEM_HIGH_REVERSE_CHG_ENABLE, &data, true);
-	schedule_delayed_work(&chip->reverse_enabled_work, 0);
 }
 
 static int nu2118a_ic_register(struct nu2118a_device *chip)
@@ -2950,12 +3705,6 @@ static int nu2118a_driver_probe(struct i2c_client *client, const struct i2c_devi
 	if (ret < 0)
 		goto parse_dt_err;
 
-	ret = nu2118a_charger_choose(chip);
-	if (ret <= 0) {
-		chg_err("choose error, rc=%d\n", ret);
-		goto regmap_init_err;
-	}
-
 	nu2118a_create_device_node(&(client->dev));
 	INIT_WORK(&chip->abnormal_upload_info_work, nu2118a_track_abnormal_upload_info_work);
 	INIT_DELAYED_WORK(&chip->reverse_enabled_work, nu2118a_reverse_enabled_work);
@@ -2963,17 +3712,35 @@ static int nu2118a_driver_probe(struct i2c_client *client, const struct i2c_devi
 	INIT_DELAYED_WORK(&chip->track_cp_switching_work, nu2118a_track_cp_switching_work);
 	chip->use_vooc_phy = of_property_read_bool(chip->dev->of_node, "oplus,use_vooc_phy");
 	chip->use_ufcs_phy = of_property_read_bool(chip->dev->of_node, "oplus,use_ufcs_phy");
+	chip->use_slave_cp = of_property_read_bool(chip->dev->of_node, "oplus,use_slave_cp");
 	chip->vac_support = of_property_read_bool(chip->dev->of_node, "oplus,vac_support");
-	chg_info("use_vooc_phy=%d, use_ufcs_phy=%d, vac_support=%d\n",
-		 chip->use_vooc_phy, chip->use_ufcs_phy, chip->vac_support);
+	chg_info("use_vooc_phy=%d, use_ufcs_phy=%d, vac_support=%d, use_slave_cp=%d\n",
+		 chip->use_vooc_phy, chip->use_ufcs_phy, chip->vac_support, chip->use_slave_cp);
 
 	if (chip->use_vooc_phy) {
+		ret = nu2118a_charger_choose(chip);
+		if (ret <= 0) {
+			chg_err("choose error, rc=%d\n", ret);
+			goto regmap_init_err;
+		}
 		voocphy->ops = &oplus_nu2118a_ops;
+		chip->voocphy_mg = voocphy;
 		ret = oplus_register_voocphy(voocphy);
 		if (ret < 0) {
 			chg_err("failed to register voocphy, ret = %d", ret);
 			goto reg_voocphy_err;
 		}
+	} else if (chip->use_slave_cp) {
+		ret = nu2118a_slave_charger_choose(chip);
+		if (ret < 0) {
+			chg_err("slave cp choose error, ret = %d\n", ret);
+			goto regmap_init_err;
+		}
+		voocphy->slave_client = client;
+		voocphy->slave_dev = &client->dev;
+		voocphy->slave_ops = &oplus_nu2118a_slave_ops;
+		oplus_voocphy_get_chip(&chip->voocphy_mg);
+		oplus_voocphy_slave_init(voocphy);
 	}
 
 	if (chip->use_ufcs_phy) {
@@ -3002,8 +3769,12 @@ static int nu2118a_driver_probe(struct i2c_client *client, const struct i2c_devi
 	chip->ufcs_enable = false;
 
 	nu2118a_cp_init(chip->cp_ic);
-	oplus_mms_wait_topic("wired", nu2118a_subscribe_wired_topic, chip);
-	oplus_mms_wait_topic("reverse", nu2118a_subscribe_reverse_topic, chip);
+
+	if (!chip->use_slave_cp) {
+		oplus_mms_wait_topic("wired", nu2118a_subscribe_wired_topic, chip);
+		oplus_mms_wait_topic("reverse", nu2118a_subscribe_reverse_topic, chip);
+	}
+
 	chg_info("nu2118a(%s) probe successfully\n", chip->dev->of_node->name);
 
 	return 0;
@@ -3054,7 +3825,7 @@ static const struct dev_pm_ops nu2118a_pm_ops = {
 	.suspend = nu2118a_pm_suspend,
 };
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 static void nu2118a_driver_remove(struct i2c_client *client)
 {
 	struct oplus_voocphy_manager *chip = i2c_get_clientdata(client);
@@ -3082,7 +3853,6 @@ static int nu2118a_driver_remove(struct i2c_client *client)
 static void nu2118a_shutdown(struct i2c_client *client)
 {
 	nu2118a_write_byte(client, NU2118A_REG_18, 0x10);
-
 	return;
 }
 
