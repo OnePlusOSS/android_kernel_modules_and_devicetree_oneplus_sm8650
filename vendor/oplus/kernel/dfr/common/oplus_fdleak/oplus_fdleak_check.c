@@ -28,7 +28,7 @@
 #define FD_MAX 32768
 #define DEFAULT_THRESHOLD (FD_MAX/2)
 #define DEFAULT_DUMP_THRESHOLD (DEFAULT_THRESHOLD + 500)
-#define TASK_COMM_LEN			16
+#define TASK_COMM_LEN			24
 #define THRESHOLD_LEN                   10
 #define MAX_SYMBOL_LEN 64
 #define TASK_WHITE_LIST_MAX  128
@@ -229,7 +229,7 @@ static int ret_handler(struct kretprobe_instance *kri, struct pt_regs *regs)
 	leader = rcu_dereference(current->group_leader);
 	if (likely(leader && pid_alive(leader))) {
 		leader_pid = leader->pid;
-		get_task_comm(leader_comm, leader);
+		snprintf(leader_comm, TASK_COMM_LEN, "%llu", (unsigned long long)leader->start_time);
 	}
 	rcu_read_unlock();
 

@@ -30,6 +30,7 @@
 #include <oplus_chg_ic.h>
 #include <oplus_mms.h>
 #include <oplus_mms_wired.h>
+#include <oplus_mms_gauge.h>
 
 #define CP_REG_TIMEOUT_MS	120000
 #define PROC_DATA_BUF_SIZE	256
@@ -175,6 +176,7 @@ static struct oplus_cp_strategy *obc_strategy_alloc(
 	int rc;
 	int i;
 
+	node = oplus_get_node_by_child_gauge(node);
 	if (node == NULL) {
 		chg_err("device node is NULL\n");
 		return NULL;
@@ -372,7 +374,7 @@ static struct oplus_cp_strategy_desc g_strategy_desc[] = {
 
 static struct oplus_cp_strategy *oplus_vc_strategy_alloc(struct oplus_virtual_cp_ic *cp)
 {
-	struct device_node *node = cp->dev->of_node;
+	struct device_node *node = oplus_get_node_by_child_gauge(cp->dev->of_node);
 	struct device_node *strategy_node;
 	enum oplus_cp_strategy_type type;
 	struct oplus_cp_strategy_desc *desc = NULL;
@@ -502,6 +504,7 @@ static struct device_node *oplus_vc_find_ic_root_node(struct device_node *root, 
 	int rc;
 	int i;
 
+	root = oplus_get_node_by_child_gauge(root);
 	rc = of_property_count_elems_of_size(root, "oplus,cp_ic", sizeof(u32));
 	if (rc < 0) {
 		chg_err("can't get cp ic number, rc=%d\n", rc);
@@ -722,7 +725,7 @@ static void oplus_vc_child_reg_callback(struct oplus_chg_ic_dev *ic, void *data,
 
 static int oplus_vc_child_init(struct oplus_virtual_cp_ic *chip)
 {
-	struct device_node *node = chip->dev->of_node;
+	struct device_node *node = oplus_get_node_by_child_gauge(chip->dev->of_node);
 	int i = 0;
 	int rc = 0;
 	const char *name;
@@ -1229,7 +1232,7 @@ static int oplus_chg_vc_open_step(struct oplus_virtual_cp_ic *vc, struct oplus_c
 		return -ENODEV;
 
 	rc = oplus_chg_ic_func(ic_dev, OPLUS_IC_FUNC_CP_SET_ADC_ENABLE, true);
-	if (rc < 0) {
+	if (rc < 0 && rc != -ENOTSUPP) {
 		chg_err("can't enable cp[%s] adc, rc=%d\n", ic_dev->manu_name, rc);
 		return rc;
 	}
@@ -1501,6 +1504,47 @@ static int oplus_chg_vc_get_vac(struct oplus_chg_ic_dev *ic_dev, int *vac)
 	return err;
 }
 
+static int oplus_chg_vc_get_reverse_vout(struct oplus_chg_ic_dev *ic_dev, int *vac)
+{
+	struct oplus_virtual_cp_ic *vc;
+	int i;
+	int rc;
+	int err = -ENOTSUPP;
+	int vol;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+	vc = oplus_chg_ic_get_drvdata(ic_dev);
+	if (vc == NULL) {
+		chg_err("virtual_cp is NULL");
+		return -ENODEV;
+	}
+	if (vc->child_list == NULL) {
+		chg_err("child_list is NULL\n");
+		return -ENODATA;
+	}
+	for (i = 0; i < vc->child_num; i++) {
+		if (vc->child_list[i].ic_dev == NULL) {
+			chg_debug("child ic_dev[%d] is NULL, skip\n", i);
+			continue;
+		}
+		rc = oplus_chg_ic_func(vc->child_list[i].ic_dev,
+			OPLUS_IC_FUNC_CP_GET_REVERSE_VOUT, &vol);
+		if (rc < 0 && rc != -ENOTSUPP) {
+			chg_err("child ic[%d] get reverse vout error, rc=%d\n", i, rc);
+			err = rc;
+		} else if (rc >= 0) {
+			*vac = vol;
+			return 0;
+		}
+	}
+
+	return err;
+}
+
 static int oplus_chg_vc_set_work_start_strategy(struct oplus_virtual_cp_ic *vc)
 {
 	int open_flag;
@@ -1699,6 +1743,31 @@ static int oplus_chg_vc_set_sstimeout_ucp_enable(struct oplus_chg_ic_dev *ic_dev
 			OPLUS_IC_FUNC_CP_SET_SSTIMEOUT_UCP_ENABLE, enable);
 	if (rc < 0 && rc != -ENOTSUPP)
 		chg_err("main cp set sstimeout ucp err, enable = %d, rc=%d\n", enable, rc);
+	return rc;
+}
+
+static int oplus_chg_vc_set_pmid2vout_ovp_enable(struct oplus_chg_ic_dev *ic_dev, bool enable)
+{
+	struct oplus_virtual_cp_ic *vc;
+	int rc = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+	vc = oplus_chg_ic_get_drvdata(ic_dev);
+	if (vc == NULL) {
+		chg_err("oplus virtual cp is NULL");
+		return -ENODEV;
+	}
+
+	if (vc->main_cp < 0 || vc->main_cp >= vc->child_num)
+		return -EINVAL;
+	rc = oplus_chg_ic_func(vc->child_list[vc->main_cp].ic_dev,
+			OPLUS_IC_FUNC_CP_SET_PMID2VOUT_OVP_ENABLE, enable);
+	if (rc < 0 && rc != -ENOTSUPP)
+		chg_err("main cp set pmid2vout ovp err, enable = %d, rc=%d\n", enable, rc);
 	return rc;
 }
 
@@ -2112,6 +2181,9 @@ static void *oplus_chg_vc_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_c
 	case OPLUS_IC_FUNC_CP_GET_VAC:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_GET_VAC, oplus_chg_vc_get_vac);
 		break;
+	case OPLUS_IC_FUNC_CP_GET_REVERSE_VOUT:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_GET_REVERSE_VOUT, oplus_chg_vc_get_reverse_vout);
+		break;
 	case OPLUS_IC_FUNC_CP_SET_WORK_START:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_WORK_START, oplus_chg_vc_set_work_start);
 		break;
@@ -2139,6 +2211,10 @@ static void *oplus_chg_vc_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_c
 	case OPLUS_IC_FUNC_CP_SET_SSTIMEOUT_UCP_ENABLE:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_SSTIMEOUT_UCP_ENABLE,
 			oplus_chg_vc_set_sstimeout_ucp_enable);
+		break;
+	case OPLUS_IC_FUNC_CP_SET_PMID2VOUT_OVP_ENABLE:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_PMID2VOUT_OVP_ENABLE,
+			oplus_chg_vc_set_pmid2vout_ovp_enable);
 		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);

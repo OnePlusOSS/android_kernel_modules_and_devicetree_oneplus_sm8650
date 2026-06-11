@@ -130,6 +130,7 @@ void android_vh_free_task_handler(void *unused, struct task_struct *tsk)
 	ots->qos_recover_prio = -2;
 #endif
 
+	ots->im_flag = 0;
 	smp_mb();
 
 	free_oplus_task_struct(ots);

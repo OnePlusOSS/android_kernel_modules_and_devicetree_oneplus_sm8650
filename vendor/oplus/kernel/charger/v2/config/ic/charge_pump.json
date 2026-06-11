@@ -832,8 +832,72 @@
                     }
                 }
             }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_CP_SET_PMID2VOUT_OVP_ENABLE",
+            "desc": {
+                "zh": "设置开启PMID2VOUT的过压保护"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["bool"],
+            "parameter_desc": [
+                {
+                    "range": "0-1",
+                    "type": "in",
+                    "desc": {
+                        "zh": "1:打开, 0:关闭"
+                    }
+                }
+            ],
+            "vict": {
+                "read": false,
+                "write": {
+                    "cmd": "vict -f {id} -S{val} vic-*",
+                    "desc": {
+                        "zh": "设置开启PMID2VOUT的过压保护"
+                    }
+                },
+                "overwrite": {
+                    "cmd": "vict -f {id} -O {val} vic-*",
+                    "desc": {
+                        "zh": "使用val覆盖传入的开启状态"
+                    }
+                }
+            }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_CP_GET_REVERSE_VOUT",
+            "desc": {
+                "zh": "获取电荷泵反向输出电压"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["int *"],
+            "parameter_desc": [
+                {
+                    "range": "0-*",
+                    "type": "out",
+                    "desc": {
+                        "zh": "电荷泵获取反向输出电压,单位mV"
+                    }
+                }
+            ],
+            "vict": {
+               "read": {
+                    "cmd": "vict -f {id} -G vic-*",
+                    "desc": {
+                        "zh": "返回获取到的电压"
+                    }
+                },
+                "write": false,
+                "overwrite": {
+                    "cmd": "vict -f {id} -O {val} vic-*",
+                    "desc": {
+                        "zh": "使用val覆盖传出的电压"
+                    }
+                }
+            }
         }
     ],
 
-    "version": "V2.4:21:7b44fbb328c87fe9b7735dc69392d35940e7cc8ae44c4eb948b82c24bf138a7e"
+    "version": "V2.6:23:d5086394b1f02a1a8a6f4c94bf38ebbe5bdcf48749e8842a63d691333f7ec47c"
 }

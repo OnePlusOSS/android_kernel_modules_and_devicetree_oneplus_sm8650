@@ -41,6 +41,8 @@ static struct gauge_sili_ic_alg_cfg_map cfg_mapping_table[] = {
 	{ BIT(SILI_MONITOR_MODE), NFG8011B_SILI_MONITOR_MODE_MASK},
 };
 
+static bool nfg8011b_firmware_support_fast_sampling(struct chip_bq27541 *chip);
+
 bool nfg8011b_sha256_hmac_authenticate(struct chip_bq27541 *chip)
 {
 	int i;
@@ -1331,6 +1333,7 @@ int nfg8011b_get_sili_lifetime_info(struct chip_bq27541 *chip, u8 *info, int len
 	int data_check;
 	int try_count = NFG8011B_SUBCMD_TRY_COUNT;
 	u8 extend_data[34] = {0};
+	bool support_fast_sampling;
 	struct gauge_track_info_reg standard[] = {
 		{ NFG8011B_REG_CIS_ALERT_LEVEL, 2},
 	};
@@ -1342,6 +1345,7 @@ int nfg8011b_get_sili_lifetime_info(struct chip_bq27541 *chip, u8 *info, int len
 		{ NFG8011B_SUBCMD_LIFETIME_2_ADDR, 24, 0, 23},
 		{ NFG8011B_SUBCMD_ISC_INFO_ADDR, 32, 22, 31},
 		{ NFG8011B_SUBCMD_ISC_LAST_TEN_ADDR, 20, 0, 19},
+		{ NFG8011B_REG_ENABLE_STATE, 1, 0, 0},
 		{ NFG8011B_SUBCMD_SOH2_ADDR, 6, 0, 5},
 	};
 
@@ -1358,7 +1362,11 @@ int nfg8011b_get_sili_lifetime_info(struct chip_bq27541 *chip, u8 *info, int len
 			"0x%02x=%02x,%02x|", standard[i].addr, (data & 0xff), ((data >> 8) & 0xff));
 	}
 
+	support_fast_sampling = nfg8011b_firmware_support_fast_sampling(chip);
 	for (i = 0; i < size; i++) {
+		if (!support_fast_sampling && extend[i].addr == NFG8011B_REG_ENABLE_STATE)
+			continue;
+
 		try_count = NFG8011B_SUBCMD_TRY_COUNT;
 try:
 		mutex_lock(&chip->bq28z610_alt_manufacturer_access);
@@ -1710,7 +1718,8 @@ error:
 	return -EINVAL;
 }
 
-int nfg8011b_write_block(struct chip_bq27541 *chip, int addr, u8 *buf, int len, int offset, bool do_checksum)
+int nfg8011b_write_block(struct chip_bq27541 *chip,
+	int addr, u8 *buf, int len, int offset, bool do_checksum, bool read_back)
 {
 	int ret;
 	int data_check;
@@ -1763,24 +1772,30 @@ try:
 	if (ret < 0)
 		goto error;
 
-	try_count = NFG8011B_SUBCMD_TRY_COUNT;
-	do {
-		data_check = true;
-		memset(extend_read_data, 0, NFG8011B_BLOCK_SIZE + 2);
-		usleep_range(15000, 15000);
-		ret = bq27541_i2c_txsubcmd(chip, NFG8011B_DATAFLASHBLOCK, addr);
-		if (ret < 0)
+	if (read_back) {
+		try_count = NFG8011B_SUBCMD_TRY_COUNT;
+		do {
+			data_check = true;
+			memset(extend_read_data, 0, NFG8011B_BLOCK_SIZE + 2);
+			usleep_range(15000, 15000);
+			ret = bq27541_i2c_txsubcmd(chip, NFG8011B_DATAFLASHBLOCK, addr);
+			if (ret < 0)
+				goto error;
+			usleep_range(1000, 1000);
+			ret = bq27541_read_i2c_block(chip,
+				NFG8011B_DATAFLASHBLOCK, NFG8011B_BLOCK_SIZE + 2, extend_read_data);
+			if (memcmp(extend_read_data, extend_write_data, NFG8011B_BLOCK_SIZE + 2)) {
+				chg_err("reg not match.extend_read_data =[%*ph]\n",
+					NFG8011B_BLOCK_SIZE + 2, extend_read_data);
+				chg_err("reg not match.extend_write_data=[%*ph]\n",
+					NFG8011B_BLOCK_SIZE + 2, extend_write_data);
+				data_check = false;
+			}
+		} while (!data_check && try_count--);
+		if (!data_check)
 			goto error;
-		usleep_range(1000, 1000);
-		ret = bq27541_read_i2c_block(chip, NFG8011B_DATAFLASHBLOCK, NFG8011B_BLOCK_SIZE + 2, extend_read_data);
-		if (memcmp(extend_read_data, extend_write_data, NFG8011B_BLOCK_SIZE + 2)) {
-			chg_err("reg not match.extend_read_data =[%*ph]\n", NFG8011B_BLOCK_SIZE + 2, extend_read_data);
-			chg_err("reg not match.extend_write_data=[%*ph]\n", NFG8011B_BLOCK_SIZE + 2, extend_write_data);
-			data_check = false;
-		}
-	} while (!data_check && try_count--);
-	if (!data_check)
-		goto error;
+	}
+
 	mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
 	chg_info("addr=0x%04x offset=%d buf=[%*ph] write success\n", addr, offset, len, buf);
 	return 0;
@@ -1809,5 +1824,42 @@ int nfg8011b_soc_centi_init(struct chip_bq27541 *chip)
 error:
 	mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
 	return rc;
+}
+
+static bool nfg8011b_firmware_support_fast_sampling(struct chip_bq27541 *chip)
+{
+	mutex_lock(&chip->bq28z610_alt_manufacturer_access);
+	if (bq27541_check_fw_version(chip, FW_VERSION_1_3_0_P1T4) == false) {
+		chg_info("firmware version too old, need >= 1.3.0P1T4\n");
+		mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+		return false;
+	}
+	mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+
+	return true;
+}
+
+int nfg8011b_set_fast_sampling(struct chip_bq27541 *chip, bool enable)
+{
+	int ret;
+	bool firmware_support;
+	u8 enable_buf[] = {0xa1, 0xa2, 0xa3, 0xa4};
+	u8 disable_buf[] = {0x01, 0x02, 0x03, 0x04};
+
+	firmware_support = nfg8011b_firmware_support_fast_sampling(chip);
+	if (!firmware_support)
+		return -ENOTSUPP;
+
+	if (enable)
+		ret = nfg8011b_write_block(chip, NFG8011B_REG_ENABLE_FAST_SAMP,
+			enable_buf, sizeof(enable_buf), 0, false, false);
+	else
+		ret = nfg8011b_write_block(chip, NFG8011B_REG_DISABLE_FAST_SAMP,
+			disable_buf, sizeof(disable_buf), 0, false, false);
+
+	if (!ret)
+		chip->fast_sampling_enable = enable;
+
+	return ret;
 }
 

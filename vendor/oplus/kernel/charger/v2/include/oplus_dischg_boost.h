@@ -35,5 +35,6 @@ void oplus_boost_cv_mv_store(struct oplus_mms *topic, int val);
 int oplus_boost_cv_mv_show(struct oplus_mms *topic);
 void oplus_boost_disable_auto_mode_store(struct oplus_mms *topic, int val);
 void oplus_boost_set_otg_mode(struct oplus_mms *topic, bool en);
+bool oplus_boost_get_cv_mode(struct oplus_mms *topic);
 
 #endif /* __OPLUS_DISCHG_BOOST_H__ */

@@ -175,4 +175,11 @@
 
 /* Register 2Dh */
 #define SC8517_REG_2D                      0x2D
+
+/* Register 7Dh */
+#define SC8517_REG_7D                      0x7D
+#define SC8517_CHG_DIS_VAC2V2X_UV_MASK     BIT(6)
+#define SC8517_CHG_DIS_VAC2V2X_UV_SHIFT    6
+#define SC8517_CHG_DIS_VAC2V2X_UV_EN      0
+#define SC8517_CHG_DIS_VAC2V2X_UV_DIS     1
 #endif

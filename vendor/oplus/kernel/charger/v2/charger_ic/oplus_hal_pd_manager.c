@@ -73,6 +73,7 @@ struct pd_manager_chip {
 	struct delayed_work bc12_wait_work;
 	struct delayed_work vconn_wait_work;
 	struct delayed_work svid_check_work;
+	struct delayed_work tcpc_complete_work;
 
 	struct oplus_mms *wired_topic;
 	struct mms_subscribe *wired_subs;
@@ -91,6 +92,7 @@ struct pd_manager_chip {
 	bool pd_svooc;
 	bool svid_completed;
 	bool cpa_support;
+	bool enable_tcpc_irq;
 	struct power_supply *batt_psy;
 };
 
@@ -169,6 +171,10 @@ static void tcpc_set_current_max(struct pd_manager_chip *chip, int max)
 	}
 	chg_info("current_max_ma = %d\n", max);
 	chip->current_max_ma = max;
+	if (oplus_chg_get_common_charge_icl_support_flags()) {
+		if (max == 0)
+			return;
+	}
 	oplus_chg_ic_virq_trigger(chip->ic_dev, OPLUS_IC_VIRQ_CURRENT_CHANGED);
 }
 
@@ -253,7 +259,7 @@ static int oplus_discover_id(struct tcpc_device *tcpc_dev)
 	int ret = 0;
 
 	ret = tcpm_dpm_vdm_discover_id(tcpc_dev, NULL);
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)) && !IS_ENABLED(CONFIG_OPLUS_PD_EXT_SUPPORT)
 	if (ret == TCP_DPM_RET_NOT_SUPPORT ||
 	    ret == TCP_DPM_RET_DENIED_WRONG_ROLE ||
 	    ret == TCPM_ERROR_PUT_EVENT) {
@@ -319,11 +325,11 @@ static int oplus_get_adapter_svid(struct pd_manager_chip *chip)
 		} else if (ret != TCPM_SUCCESS) {
 			chg_err("failed to discover id,  disc_svid_retries: %d, ret = %d\n",
 				disc_svid_retries, ret);
-			mdelay(DISCOVER_SVID_RETRY_DELAY);
+			msleep(DISCOVER_SVID_RETRY_DELAY);
 			continue;
 		}
 
-		mdelay(DISCOVER_SVID_INTERNAL_CMD_DELAY);
+		msleep(DISCOVER_SVID_INTERNAL_CMD_DELAY);
 		discover_svid_ret = oplus_discover_svid(tcpc_dev);
 		if (discover_svid_ret == -EFAULT) {
 			chg_err("get the svid failed, ret = %d, retries: %d, not try again.\n",
@@ -333,7 +339,7 @@ static int oplus_get_adapter_svid(struct pd_manager_chip *chip)
 			chg_err("Failed to discover svid. ret %d retries: %d\n",
 				discover_svid_ret, disc_svid_retries);
 		}
-		mdelay(DISCOVER_SVID_INTERNAL_CMD_DELAY);
+		msleep(DISCOVER_SVID_INTERNAL_CMD_DELAY);
 
 		ret = oplus_get_pd_partner_svids(chip, tcpc_dev);
 		if (ret == TCPM_SUCCESS) {
@@ -346,11 +352,11 @@ static int oplus_get_adapter_svid(struct pd_manager_chip *chip)
 			if (discover_svid_ret == TCP_DPM_RET_NOT_SUPPORT)
 				chg_info("not support to get_pd_partner_svids, ret = %d, discover_svid_ret = %d\n",
 					 ret, discover_svid_ret);
-			mdelay(DISCOVER_SVID_RETRY_DELAY);
+			msleep(DISCOVER_SVID_RETRY_DELAY);
 		}
 
 		/* retry to get the SVID by PD partner inform. */
-		mdelay(DISCOVER_SVID_INTERNAL_CMD_DELAY);
+		msleep(DISCOVER_SVID_INTERNAL_CMD_DELAY);
 		ret = oplus_get_pd_partner_inform(chip, tcpc_dev);
 		if (ret == TCPM_SUCCESS) {
 			goto trigger_irq;
@@ -364,7 +370,7 @@ static int oplus_get_adapter_svid(struct pd_manager_chip *chip)
 					  ret, discover_svid_ret);
 				goto trigger_irq;
 			}
-			mdelay(DISCOVER_SVID_RETRY_DELAY);
+			msleep(DISCOVER_SVID_RETRY_DELAY);
 		}
 	} while (ret != TCPM_SUCCESS && disc_svid_retries < DISCOVER_SVID_MAX_RETRIES);
 
@@ -601,7 +607,6 @@ static void pd_sink_set_vol_and_cur(struct pd_manager_chip *chip,
 static int tcpc_pd_state_change(struct pd_manager_chip *chip, struct tcp_notify *noti)
 {
 	uint32_t partner_vdos[VDO_MAX_NR];
-	int pd_type;
 	int ret = 0;
 
 	switch (noti->pd_state.connected) {
@@ -654,16 +659,6 @@ static int tcpc_pd_state_change(struct pd_manager_chip *chip, struct tcp_notify 
 		break;
 	case PD_CONNECT_PE_READY_SRC:
 	case PD_CONNECT_PE_READY_SRC_PD30:
-		/* update chip->pd_active */
-		pd_type = noti->pd_state.connected ==
-					  PD_CONNECT_PE_READY_SNK_APDO ?
-				  OPLUS_CHG_USB_TYPE_PD_PPS :
-					OPLUS_CHG_USB_TYPE_PD;
-		tcpc_set_pd_type(chip, pd_type);
-		pd_sink_set_vol_and_cur(chip, chip->sink_mv_old,
-					chip->sink_ma_old,
-					TCP_VBUS_CTRL_PD_STANDBY);
-
 		typec_set_pwr_opmode(chip->typec_port, TYPEC_PWR_MODE_PD);
 		if (!chip->partner)
 			break;
@@ -1674,7 +1669,7 @@ static int pd_manager_bc12_completed(struct oplus_chg_ic_dev *ic_dev)
 
 	if (first_boot) {
 		first_boot = false;
-		oplus_mms_get_item_data(chip->wired_topic, WIRED_ITEM_REAL_CHG_TYPE,
+		oplus_mms_get_item_data(chip->wired_topic, WIRED_ITEM_CHG_TYPE,
 					&data, true);
 		chip->chg_type = data.intval;
 		chg_info("chg_type=%s\n", oplus_wired_get_chg_type_str(chip->chg_type));
@@ -1976,6 +1971,19 @@ static void tcpc_variable_init(struct pd_manager_chip *chip)
 	chip->current_max_ma = 0;
 }
 
+static void oplus_pd_tcpc_complete_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct pd_manager_chip *chip = container_of(dwork, struct pd_manager_chip, tcpc_complete_work);
+
+	if (chip->tcpc != NULL) {
+		tcpc_device_irq_enable(chip->tcpc);
+		chg_info("enable tcpc_device irq");
+	}
+
+	return;
+}
+
 static int oplus_pd_manager_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -2056,6 +2064,8 @@ static int oplus_pd_manager_probe(struct platform_device *pdev)
 		chg_err("can't get ic index, rc=%d\n", ret);
 		goto reg_ic_err;
 	}
+	chip->enable_tcpc_irq = of_property_read_bool(node, "oplus,enable_tcpc_irq");
+	chg_info("enable_tcpc_irq:%d", chip->enable_tcpc_irq);
 
 	ic_cfg.name = node->name;
 	ic_cfg.index = ic_index;
@@ -2074,6 +2084,12 @@ static int oplus_pd_manager_probe(struct platform_device *pdev)
 	}
 	chip->batt_psy = power_supply_get_by_name("battery");
 	chip->cpa_support = oplus_cpa_support();
+
+	if (chip->enable_tcpc_irq) {
+		INIT_DELAYED_WORK(&chip->tcpc_complete_work, oplus_pd_tcpc_complete_work);
+		schedule_delayed_work(&chip->tcpc_complete_work, msecs_to_jiffies(100));
+	}
+
 out:
 	platform_set_drvdata(pdev, chip);
 	tcpc_variable_init(chip);

@@ -83,6 +83,22 @@ exit:
 	return name;
 }
 
+static const char * const buf_region_name_arr[] =
+	FOREACH_BUF_REGION(GENERATE_STRING);
+
+const char *buf_region_name(enum msm_vidc_buffer_region region)
+{
+	const char *name = "UNKNOWN REGION";
+
+	if (region >= ARRAY_SIZE(buf_region_name_arr))
+		goto exit;
+
+	name = buf_region_name_arr[region];
+
+exit:
+	return name;
+}
+
 static const char * const inst_allow_name_arr[] =
 	FOREACH_ALLOW(GENERATE_STRING);
 
@@ -2803,8 +2819,23 @@ int msm_vidc_create_internal_buffer(struct msm_vidc_inst *inst,
 	mem->size = buffer->buffer_size;
 	mem->secure = is_secure_region(mem->region);
 	rc = call_mem_op(core, memory_alloc_map, core, mem);
-	if (rc)
+	if (rc) {
+		i_vpr_e(inst, "failed to alloc and map. %s: %s: size %8d\n",
+			buf_name(mem->type), buf_region_name(mem->region),
+			mem->size);
+
+		/* print all active mappings */
+		inst_unlock(inst, __func__);
+		msm_vidc_print_core_info(core);
+		inst_lock(inst, __func__);
+
+		/* enable bugon for map failure cases via debugfs */
+		if (msm_vidc_enable_bugon & MSM_VIDC_BUG_ON_DMA_MAP_FAILURE) {
+			i_vpr_e(inst, "%s: force bugon for alloc and map failure\n", __func__);
+			MSM_VIDC_FATAL(true);
+		}
 		return -ENOMEM;
+	}
 	list_add_tail(&mem->list, &mem_list->list);
 
 	buffer->dmabuf = mem->dmabuf;
@@ -3982,10 +4013,16 @@ int msm_vidc_print_inst_info(struct msm_vidc_inst *inst)
 	u32 bit_depth, bit_rate, frame_rate, width, height;
 	struct dma_buf *dbuf;
 	struct inode *f_inode;
-	unsigned long inode_num = 0;
-	long ref_count = -1;
-	int i = 0;
+	unsigned long inode_num;
+	u64 size_kb_arr[MSM_VIDC_REGION_MAX];
+	char region_size_arr[400];
+	long ref_count;
+	int len = 0, i = 0;
+	u32 map_str_len;
+	char *map_str;
 
+	memset(&size_kb_arr, 0, sizeof(size_kb_arr));
+	memset(&region_size_arr, 0, sizeof(region_size_arr));
 	is_secure = is_secure_session(inst);
 	is_decode = is_decode_session(inst);
 	port = is_decode ? INPUT_PORT : OUTPUT_PORT;
@@ -4015,6 +4052,8 @@ int msm_vidc_print_inst_info(struct msm_vidc_inst *inst)
 			if (!buf->dmabuf)
 				continue;
 			dbuf = (struct dma_buf *)buf->dmabuf;
+			inode_num = 0;
+			ref_count = -1;
 			if (dbuf && dbuf->file) {
 				f_inode = file_inode(dbuf->file);
 				if (f_inode) {
@@ -4022,13 +4061,32 @@ int msm_vidc_print_inst_info(struct msm_vidc_inst *inst)
 					ref_count = file_count(dbuf->file);
 				}
 			}
+			/* capture total mappings of each cb */
+			if (buf->region < MSM_VIDC_REGION_MAX) {
+				if ((buf->attach && buf->sg_table) || is_internal_buffer(buf->type))
+					size_kb_arr[buf->region] += buf->buffer_size;
+			}
+
 			i_vpr_e(inst,
-				"buf: type: %11s, index: %2d, fd: %4d, size: %9u, off: %8u, filled: %9u, daddr: %#llx, inode: %8lu, ref: %2ld, flags: %8x, ts: %16lld, attr: %8x\n",
-				buf_name(i), buf->index, buf->fd, buf->buffer_size,
-				buf->data_offset, buf->data_size, buf->device_addr,
-				inode_num, ref_count, buf->flags, buf->timestamp, buf->attr);
+				"%s: %s: idx %2d fd %3d off %d daddr %#llx inode %8lu ref %2ld size %8d filled %8d flags %#x ts %8lld attr %#x dbuf_get %d attach %d map %d\n",
+				buf_name(i), buf_region_name(buf->region), buf->index, buf->fd,
+				buf->data_offset, buf->device_addr, inode_num, ref_count,
+				buf->buffer_size, buf->data_size, buf->flags, buf->timestamp,
+				buf->attr, buf->dbuf_get, buf->attach ? 1 : 0,
+				buf->sg_table ? 1 : 0);
 		}
 	}
+
+	/* Print mapping details */
+	map_str = region_size_arr;
+	map_str_len = ARRAY_SIZE(region_size_arr);
+	for (i = 1; i < MSM_VIDC_REGION_MAX; i++) {
+		len = scnprintf(map_str, map_str_len, "%s %lld kb ",
+			buf_region_name(i), size_kb_arr[i] / 1024);
+		map_str_len -= len;
+		map_str += len;
+	}
+	i_vpr_e(inst, "mapping: %s\n", region_size_arr);
 
 	return 0;
 }
@@ -4051,6 +4109,7 @@ void msm_vidc_print_core_info(struct msm_vidc_core *core)
 			continue;
 		inst_lock(inst, __func__);
 		msm_vidc_print_inst_info(inst);
+		msm_vidc_print_memory_stats(inst);
 		inst_unlock(inst, __func__);
 		put_inst(inst);
 	}

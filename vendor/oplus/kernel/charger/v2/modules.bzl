@@ -256,6 +256,7 @@ def define_oplus_chg_v2_module():
         "v2/strategy/oplus_strategy_pps_ufcs_curve.c",
         "v2/strategy/oplus_strategy_low_curr_full.c",
         "v2/strategy/oplus_strategy_pps_ufcs_curve_v2.c",
+        "v2/strategy/oplus_strategy_cycle_current_derating.c",
         "v2/strategy/oplus_strategy_ddrc.c",
         "v2/strategy/oplus_strategy_ddrc_v2.c",
         "v2/strategy/oplus_strategy_battery_smooth.c",
@@ -296,6 +297,11 @@ def define_oplus_chg_v2_module():
         "CONFIG_OPLUS_GAUGE_SN28Z729": {
             True: [
                 "v2/gauge_ic/oplus_hal_sn28z729.c"
+            ],
+        },
+        "CONFIG_OPLUS_GAUGE_BQ28Z610_RA": {
+            True: [
+                "v2/gauge_ic/oplus_hal_bq28z610.c"
             ],
         },
         "CONFIG_OPLUS_CHG_IC_DEBUG": {
