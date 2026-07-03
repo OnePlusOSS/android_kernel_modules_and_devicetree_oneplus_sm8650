@@ -254,6 +254,14 @@
                         "zh": "虚拟反向充电协议栈"
                     },
                     "str": "virtual_reverse"
+                },
+                {
+                    "lable": "OPLUS_CHG_IC_VIRTUAL_BOOST",
+                    "desc": {
+                        "en": "virtual boost",
+                        "zh": "虚拟放电抬压芯片"
+                    },
+                    "str": "dischg_boost"
                 }
             ]
         },
@@ -879,6 +887,7 @@
                 "OPLUS_CHG_SPEC_VER_UNKNOW",
                 "OPLUS_CHG_SPEC_VER_V3P6",
                 "OPLUS_CHG_SPEC_VER_V3P7",
+                "OPLUS_CHG_SPEC_VER_V3P7_1",
                 "OPLUS_CHG_SPEC_VER_MAX"
             ]
         },
@@ -1517,6 +1526,7 @@
         "ic/batt_bal.json",
         "ic/gauge2.json",
         "ic/sec.json",
-        "ic/reverse_chg.json"
+        "ic/reverse_chg.json",
+        "ic/dischg_boost.json"
     ]
 }

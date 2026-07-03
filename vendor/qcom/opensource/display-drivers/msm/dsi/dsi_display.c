@@ -350,8 +350,10 @@ error:
 #endif /* OPLUS_FEATURE_DISPLAY_ONSCREENFINGERPRINT */
 
 #ifdef OPLUS_FEATURE_DISPLAY
-	if (!rc)
+	if (!rc && !oplus_ofp_get_aod_state()) {
+		//DSI_INFO("full_screen_aod:bl_temp=%d\n",(u32)bl_temp);
 		oplus_panel_backlight_notifier(panel, (u32)bl_temp);
+	}
 
 	if (oplus_bl_print_window > 0)
 		oplus_bl_print_window--;

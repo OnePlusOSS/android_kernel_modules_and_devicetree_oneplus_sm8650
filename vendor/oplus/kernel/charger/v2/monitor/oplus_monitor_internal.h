@@ -182,6 +182,7 @@ struct oplus_monitor {
 	int batt_fcc_comp;
 	int batt_soh_comp;
 	int uisoc_keep_2_err;
+	int uisoc_keep_3_err;
 	int batt_qmax;
 	int gauge_car_c;
 	struct super_endurance_mode_info sem_info;
@@ -313,7 +314,6 @@ struct oplus_monitor {
 	/* reverse */
 	bool reverse_state;
 	bool pre_reverse_state;
-	bool high_reverse_enable;
 	int high_reverse_err_flag;
 	int high_reverse_count;
 	int source_pdo_volt;
@@ -334,6 +334,8 @@ struct oplus_monitor {
 	int reverse_max_ibat;
 	int reverse_min_vbat;
 	int reverse_min_vbus;
+	u32 max_source_cap;
+	u32 max_sink_request;
 	int max_source_cap_current;
 	int max_source_cap_voltage;
 	int max_sink_request_current;

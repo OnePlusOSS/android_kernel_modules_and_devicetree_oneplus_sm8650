@@ -25,6 +25,7 @@ enum {
 	SCREEN_INIT = 0,
 	SCREEN_ON = 1,
 	SCREEN_OFF = 2,
+	SCREEN_LP = 3,
 };
 extern void ssc_fb_set_screen_status(int status);
 #endif

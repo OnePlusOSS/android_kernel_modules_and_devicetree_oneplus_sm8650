@@ -506,6 +506,8 @@ static ssize_t rt_info_proc_write(struct file *file, const char __user *buf,
 
 	rcu_read_lock();
 	task = find_task_by_vpid(pid);
+	if (task)
+		get_task_struct(task);
 	rcu_read_unlock();
 
 	if (task) {
@@ -524,8 +526,10 @@ static ssize_t rt_info_proc_write(struct file *file, const char __user *buf,
 		kfree(new_node);
 	}
 
-	if (task)
+	if (task){
+		put_task_struct(task);
 		pr_info("[waker_identify] %d start", pid);
+	}
 
 	return count;
 }

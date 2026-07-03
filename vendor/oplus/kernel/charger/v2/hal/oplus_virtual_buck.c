@@ -2381,7 +2381,7 @@ static int oplus_chg_vb_shipmod_enable(struct oplus_chg_ic_dev *ic_dev, bool en)
 		chg_err("oplus_chg_ic_dev is NULL");
 		return -ENODEV;
 	}
-
+	chg_info("shipmode:%d\n", en);
 	vb = oplus_chg_ic_get_drvdata(ic_dev);
 	if (gpio_is_valid(vb->misc_gpio.ship_gpio)) {
 		chg_info("select gpio ship mode control\n");
@@ -2405,10 +2405,11 @@ static int oplus_chg_vb_shipmod_enable(struct oplus_chg_ic_dev *ic_dev, bool en)
 			vb->child_list[i].ic_dev,
 			OPLUS_IC_FUNC_BUCK_SHIPMODE_ENABLE,
 			en);
+
 		if (rc < 0)
 			chg_err("child ic[%d] %s shipmod error, rc=%d\n", i, en ? "enable" : "disable", rc);
 		else
-			return 0;
+			chg_info("child ic[%d] %s shipmod success, rc=%d\n", i, en ? "enable" : "disable", rc);
 	}
 
 	return rc;
@@ -3974,6 +3975,37 @@ static int oplus_chg_vb_get_usb_btb_temp(struct oplus_chg_ic_dev *ic_dev,
 	return rc;
 }
 
+static int oplus_chg_vb_get_vbat_pwr(struct oplus_chg_ic_dev *ic_dev,
+					  int *vbat_pwr)
+{
+	struct oplus_virtual_buck_ic *vb;
+	int i;
+	int rc = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	vb = oplus_chg_ic_get_drvdata(ic_dev);
+
+	for (i = 0; i < vb->child_num; i++) {
+		if (!func_is_support(&vb->child_list[i],
+				     OPLUS_IC_FUNC_BUCK_GET_VBAT_PWR)) {
+			rc = -ENOTSUPP;
+			continue;
+		}
+		rc = oplus_chg_ic_func(vb->child_list[i].ic_dev,
+				       OPLUS_IC_FUNC_BUCK_GET_VBAT_PWR,
+				       vbat_pwr);
+		if (rc < 0)
+			chg_err("child ic[%d] can't get vbat pwr, rc=%d\n",
+				i, rc);
+		break;
+	}
+
+	return rc;
+}
+
 static int oplus_chg_vb_get_batt_btb_temp(struct oplus_chg_ic_dev *ic_dev,
 					  int *batt_btb_temp)
 {
@@ -4890,6 +4922,10 @@ static void *oplus_chg_vb_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_c
 	case OPLUS_IC_FUNC_BUCK_GET_BATT_BTB_TEMP:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_BUCK_GET_BATT_BTB_TEMP,
 					       oplus_chg_vb_get_batt_btb_temp);
+		break;
+	case OPLUS_IC_FUNC_BUCK_GET_VBAT_PWR:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_BUCK_GET_VBAT_PWR,
+					       oplus_chg_vb_get_vbat_pwr);
 		break;
 	case OPLUS_IC_FUNC_BUCK_GET_FV:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_BUCK_GET_FV, oplus_chg_vb_get_fv);

@@ -41,7 +41,7 @@ static char __oplus_chg_cmdline[COMMAND_LINE_SIZE];
 static char *oplus_chg_cmdline = __oplus_chg_cmdline;
 
 #define BATT_SN_NUM_LEN				12
-#define BATT_NUM_MAX				5
+#define BATT_NUM_MAX				10
 #define MAX_SN_NUM_SIZE		BATT_NUM_MAX * BATT_SN_NUM_LEN
 
 #define AUTH_MESSAGE_LEN			20

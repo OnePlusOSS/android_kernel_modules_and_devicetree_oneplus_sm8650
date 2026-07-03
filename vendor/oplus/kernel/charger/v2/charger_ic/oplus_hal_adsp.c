@@ -7021,6 +7021,18 @@ static const struct dev_pm_ops battery_chg_pm_ops = {
 #endif
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
+static void oplus_exit_reverse_chg(void)
+{
+	struct battery_chg_dev *bcdev = g_bcdev;
+
+	if (bcdev == NULL || bcdev->reverse_chg_ic_dev == NULL) {
+		chg_err("bcdev is NULL");
+		return;
+	}
+
+	bcdev->reverse_enable = false;
+	oplus_chg_ic_virq_trigger(bcdev->reverse_chg_ic_dev, OPLUS_IC_VIRQ_REVERSE_ENABLE);
+}
 static int oplus_chg_ssr_notifier_cb(struct notifier_block *nb,
 				     unsigned long code, void *data)
 {
@@ -7029,6 +7041,7 @@ static int oplus_chg_ssr_notifier_cb(struct notifier_block *nb,
 	switch (code) {
 	case QCOM_SSR_BEFORE_SHUTDOWN:
 		oplus_turn_off_power_when_adsp_crash();
+		oplus_exit_reverse_chg();
 		break;
 	case QCOM_SSR_AFTER_POWERUP:
 		oplus_adsp_crash_recover_work();
@@ -13821,7 +13834,8 @@ static int oplus_chg_get_high_reverse_enbale(struct oplus_chg_ic_dev *ic_dev, bo
 	return 0;
 }
 
-static int oplus_chg_set_reverse_boost_pdo(struct oplus_chg_ic_dev *ic_dev, int pdo_voltage, int pdo_current)
+static int oplus_chg_set_reverse_boost_pdo
+	(struct oplus_chg_ic_dev *ic_dev, int pdo0_volt, int pdo0_curr, int pdo_voltage, int pdo_current)
 {
 	struct battery_chg_dev *bcdev;
 	struct psy_state *pst = NULL;
@@ -14292,6 +14306,7 @@ static void oplus_chg_adsp_subscribe_plc_topic(struct oplus_mms *topic,
 	if (rc >= 0)
 		(void)oplus_chg_adsp_set_plc_status(bcdev, data.intval);
 }
+
 #endif /* OPLUS_FEATURE_CHG_BASIC */
 
 static void oplus_update_common_charge_flag_work(struct work_struct *work)
@@ -14588,7 +14603,6 @@ static int battery_chg_probe(struct platform_device *pdev)
 	if (bcdev->soccp_support) {
 		schedule_delayed_work(&bcdev->update_pd_svooc_work, 0);
 		schedule_delayed_work(&bcdev->plugin_irq_work, 0);
-		schedule_delayed_work(&bcdev->update_common_charge_flag_work, 0);
 		schedule_delayed_work(&bcdev->pdo_update_work, 0);
 	}
 

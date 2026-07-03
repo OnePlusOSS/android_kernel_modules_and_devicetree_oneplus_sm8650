@@ -800,8 +800,40 @@
                     }
                 }
             }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_CP_GET_ADC_ENABLE",
+            "desc": {
+                "zh": "读取电荷泵的ADC的开启状态"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["bool *"],
+            "parameter_desc": [
+                {
+                    "range": "0-1",
+                    "type": "out",
+                    "desc": {
+                        "zh": "0:关闭, 1:开启"
+                    }
+                }
+            ],
+            "vict": {
+                "read": {
+                    "cmd": "vict -f {id} -G vic-*",
+                    "desc": {
+                        "zh": "读取电荷泵ADC是否开启"
+                    }
+                },
+                "write": false,
+                "overwrite": {
+                    "cmd": "vict -f {id} -O {val} vic-*",
+                    "desc": {
+                        "zh": "读取开启状态"
+                    }
+                }
+            }
         }
     ],
 
-    "version": "V2.3:20:f5b8fe23dec6d58f3e5980881af2bb23af34eb7f0a541058c6a13bb833a102c6"
+    "version": "V2.4:21:7b44fbb328c87fe9b7735dc69392d35940e7cc8ae44c4eb948b82c24bf138a7e"
 }

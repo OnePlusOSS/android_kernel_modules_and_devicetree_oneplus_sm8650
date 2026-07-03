@@ -2848,6 +2848,13 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 	}
 	TP_INFO(ts->tp_index, "ts->irq_need_dev_resume_time = %d ms\n", ts->irq_need_dev_resume_time);
 
+	rc = of_property_read_u32(np, "touchpanel,bus_ready_wait_dev_spend_time", &ts->bus_ready_wait_dev_spend_time);
+	if (rc) {
+		TP_BOOT_INFO(ts->tp_index, "ts->bus_ready_wait_dev_spend_time not specified\n");
+		ts->bus_ready_wait_dev_spend_time = 0;
+	}
+	TP_INFO(ts->tp_index, "ts->bus_ready_wait_dev_spend_time = %d ms\n", ts->bus_ready_wait_dev_spend_time);
+
 	/* resolution info*/
 	rc = of_property_read_u32(np, "touchpanel,max-num-support", &ts->max_num);
 
@@ -5083,7 +5090,9 @@ static void lcd_off_early_event(struct touchpanel_data *ts)
 
 	} else if (ts->tp_suspend_order == LCD_TP_SUSPEND) {
 		if (!ts->gesture_enable && ts->is_incell_panel && (ts->tp_irq_desc->depth == 0)) {
+			mutex_lock(&ts->mutex);
 			disable_irq_nosync(ts->irq);
+			mutex_unlock(&ts->mutex);
 		}
 	}
 
@@ -5449,9 +5458,15 @@ static void wait_for_notify_suspend(struct touchpanel_data *ts)
 	}
 
 	if ((ts->notify_state == NOTIFY_BLANK_EARLY_ENTER) || (ts->notify_state == NOTIFY_BLANK_ENTER)) {
-		wait_event_interruptible_timeout(ts->notify_wait,
-						(ts->notify_state == NOTIFY_BLANK_EARLY_EXIT) || (ts->notify_state == NOTIFY_BLANK_EXIT),
-						msecs_to_jiffies(NOTIFY_TIME_OUT));
+		if (ts->bus_ready_wait_dev_spend_time == 0) {
+			wait_event_interruptible_timeout(ts->notify_wait,
+				(ts->notify_state == NOTIFY_BLANK_EARLY_EXIT) || (ts->notify_state == NOTIFY_BLANK_EXIT),
+				msecs_to_jiffies(NOTIFY_TIME_OUT));
+		} else {
+			wait_event_interruptible_timeout(ts->notify_wait,
+				(ts->notify_state == NOTIFY_BLANK_EARLY_EXIT) || (ts->notify_state == NOTIFY_BLANK_EXIT),
+				msecs_to_jiffies(ts->bus_ready_wait_dev_spend_time));
+		}
 		TP_INFO(ts->tp_index, "%s enter,notify_state %d!!\n", __func__, ts->notify_state);
 		if (ts->health_monitor_support) {
 			ts->monitor_data.wait_for_notify_suspend_count++;
@@ -5472,19 +5487,31 @@ void tp_pm_suspend(struct touchpanel_data *ts)
 		return;
 	}
 	touchpanel_trusted_touch_completion(ts);
+	if (ts->bus_ready_wait_dev_spend_time == 0) {
+		ts->bus_ready = false;
 
-	ts->bus_ready = false;
+		if (ts->health_monitor_support) {
+			ts->monitor_data.pm_suspend_count++;
+		}
 
-	if (ts->health_monitor_support) {
-		ts->monitor_data.pm_suspend_count++;
+		ts->suspend_task = get_current();
+
+		if (ts->bus_ready_check_support) {
+			wait_for_notify_suspend(ts);
+		}
+	} else {
+		if (ts->health_monitor_support) {
+			ts->monitor_data.pm_suspend_count++;
+		}
+
+		ts->suspend_task = get_current();
+
+		if (ts->bus_ready_check_support) {
+			wait_for_notify_suspend(ts);
+		}
+
+		ts->bus_ready = false;
 	}
-
-	ts->suspend_task = get_current();
-
-	if (ts->bus_ready_check_support) {
-		wait_for_notify_suspend(ts);
-	}
-
 	if (TP_ALL_GESTURE_SUPPORT) {
 		if (TP_ALL_GESTURE_ENABLE) {
 			/*enable gpio wake system through interrupt*/

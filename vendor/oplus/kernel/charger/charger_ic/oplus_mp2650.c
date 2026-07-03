@@ -93,6 +93,7 @@ static int aicl_result = 500;
 void mp2650_wireless_set_mps_otg_en_val(int value);
 int mp2650_get_vbus_voltage(void);
 int mp2650_burst_mode_enable(bool enable);
+extern bool oplus_is_power_off_charging(struct oplus_vooc_chip *chip);
 
 static DEFINE_MUTEX(mp2650_i2c_access);
 static int mp2650_chg_track_upload_icl_err_info(
@@ -163,11 +164,6 @@ int __attribute__((weak)) oplus_force_get_subboard_temp(void)
 int __attribute__((weak)) oplus_check_cc_mode(void)
 {
 	return -EINVAL;
-}
-
-int __attribute__((weak)) mt6375_force_get_port_stat_to_icl(void)
-{
-	return 0;
 }
 
 #define RESUME_TIMEDOUT_MS	1000
@@ -2524,51 +2520,6 @@ static int mp2650_set_option(int option)
 	return 0;
 }
 
-void mp2650_input_current_limit_default(void)
-{
-	int type = 0;
-	int current_limit = 0;
-	struct oplus_chg_chip *oplus_chip = oplus_chg_get_chg_struct();
-
-	if (!oplus_chip) {
-		chg_err("platform not probe, set icl=1500ma\n");
-		mp2650_input_current_limit_without_aicl(1500);
-		return;
-	}
-
-	if (oplus_chip->charger_type != POWER_SUPPLY_TYPE_UNKNOWN) {
-		mp2650_input_current_limit_without_aicl(500);
-		return;
-	}
-
-	chg_err("charger_type is unkown, set icl by forced type!");
-#ifdef CONFIG_OPLUS_CHARGER_MTK
-	type = 0;
-	current_limit = mt6375_force_get_port_stat_to_icl();
-	if (current_limit > 0)
-		mp2650_input_current_limit_without_aicl(current_limit);
-#else
-	type = opchg_get_charger_type();
-	switch (type) {
-	case POWER_SUPPLY_TYPE_UNKNOWN:
-	case POWER_SUPPLY_TYPE_USB:
-		current_limit = 500;
-		break;
-	case POWER_SUPPLY_TYPE_USB_CDP:
-		current_limit = 1500;
-		break;
-	case POWER_SUPPLY_TYPE_USB_DCP:
-	case POWER_SUPPLY_TYPE_USB_PD_SDP:
-		current_limit = 2000;
-		break;
-	default:
-		current_limit = 2000;
-		break;
-	}
-	mp2650_input_current_limit_without_aicl(current_limit);
-#endif
-}
-
 int mp2650_hardware_init(void)
 {
 	struct chip_mp2650 *chip = charger_ic;
@@ -2597,7 +2548,10 @@ int mp2650_hardware_init(void)
 
 	mp2650_set_chging_term_disable();
 
-	mp2650_input_current_limit_init();
+	if (!chip->support_icl_optimization ||
+	   (oplus_chg_get_boot_completed() ||
+	    oplus_is_power_off_charging(NULL)))
+		mp2650_input_current_limit_init();
 
 	mp2650_float_voltage_write(WPC_TERMINATION_VOLTAGE);
 
@@ -2641,9 +2595,9 @@ int mp2650_hardware_init(void)
 
 	mp2650_set_wdt_timer(REG09_MP2650_WTD_TIMER_40S);
 
-	if (chip->support_icl_optimization)
-		mp2650_input_current_limit_default();
-	else
+	if (!chip->support_icl_optimization ||
+	   (oplus_chg_get_boot_completed() ||
+	    oplus_is_power_off_charging(NULL)))
 		mp2650_input_current_limit_without_aicl(500);
 
 	return true;

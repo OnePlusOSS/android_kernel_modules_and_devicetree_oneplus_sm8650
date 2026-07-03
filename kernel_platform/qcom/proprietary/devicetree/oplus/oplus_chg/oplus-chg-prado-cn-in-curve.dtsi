@@ -793,6 +793,10 @@
 	oplus_spec,fv-mv = <4510 4510 4510 4510 4510 4510 4495 4130 4130>;
 	oplus_spec,sw-fv-mv = <4460 4460 4460 4460 4460 4460 4445 4080 4080>;
 	oplus_spec,sw-over-fv-mv = <4518 4518 4518 4518 4518 4518 4503 4138 4138>;
+	oplus_spec,wired-vbatdet-mv = <0 4210 4310 4410 4410 4410 4395 4030 0>;
+	oplus_spec,dec_step = <20>;
+	oplus_spec,dec-vol-cc-full-thr = <0 200 400 600 800 1000>;
+	oplus_spec,dec-vol-fv-full-mv = <0 20 40 40 60 60>;
 
 	oplus_spec,vbat_uv_thr_mv = <2750>;
 	oplus_spec,vbat_charging_uv_thr_mv = <2650>;

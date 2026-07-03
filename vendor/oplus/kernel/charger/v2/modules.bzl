@@ -243,6 +243,7 @@ def define_oplus_chg_v2_module():
         "v2/hal/oplus_virtual_batt_bal.c",
         "v2/hal/oplus_virtual_level_shift.c",
         "v2/hal/oplus_virtual_reverse_chg.c",
+        "v2/hal/oplus_virtual_boost.c",
         "v2/mms/oplus_mms.c",
         "v2/mms/oplus_msg_filter.c",
         "v2/mms/oplus_mms_gauge.c",
@@ -258,11 +259,14 @@ def define_oplus_chg_v2_module():
         "v2/strategy/oplus_strategy_ddrc.c",
         "v2/strategy/oplus_strategy_ddrc_v2.c",
         "v2/strategy/oplus_strategy_battery_smooth.c",
+        "v2/strategy/oplus_strategy_volt_fastchg_allow.c",
         "v2/strategy/oplus_strategy_pcc.c",
+        "v2/strategy/oplus_strategy_pcc_v2.c",
         "v2/monitor/oplus_monitor_core.c",
         "v2/monitor/oplus_chg_track.c",
         "v2/monitor/oplus_chg_exception.c",
-        "v2/plat_ufcs/plat_ufcs_notify.c"
+        "v2/plat_ufcs/plat_ufcs_notify.c",
+        "v2/oplus_dischg_boost.c"
     ]) + [
         ":oplus_chg_v2_ic_cfg"
     ]

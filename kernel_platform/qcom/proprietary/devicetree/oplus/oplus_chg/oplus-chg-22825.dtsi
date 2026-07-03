@@ -3,7 +3,7 @@
 
 #include "oplus-chg-8650.h.dtsi"
 #include "oplus-chg-22825-fw.dtsi"
-
+#include "oplus-chg-22825-pps.dtsi"
 /*
  * NOTICE:
  * sector 1: wired charging
@@ -237,6 +237,7 @@
 					OPLUS_IC_FUNC_GAUGE_GET_DEC_CV_SOH
 					OPLUS_IC_FUNC_GAUGE_SET_VCT
 					OPLUS_IC_FUNC_GAUGE_GET_VCT
+					OPLUS_IC_FUNC_GAUGE_GET_GAUGE_R_INFO
 				>;
 				virqs = <
 					OPLUS_IC_VIRQ_ERR
@@ -536,6 +537,7 @@
 		oplus,reserve_dis_soc = <3>;
 
 		oplus_spec,batt_full_time = <300>;
+		oplus_spec,support_gauge_r_track;
 	};
 
 	oplus_monitor: oplus,monitor {
@@ -875,6 +877,13 @@
 		};
 
 		third_ufcs_simple_strategy: third_ufcs_simple_strategy {
+			oplus,strategy_type = <PLC_STRATEGY_SIMPLE>;
+			oplus,strategy_data {
+				strategy_curr_ma = <1000 1500>;
+			};
+		};
+
+		pps_simple_strategy: pps_simple_strategy {
 			oplus,strategy_type = <PLC_STRATEGY_SIMPLE>;
 			oplus,strategy_data {
 				strategy_curr_ma = <1000 1500>;
@@ -1445,13 +1454,14 @@
 		compatible = "oplus,cpa";
 		/* format: <protocol_type power_w> */
 		oplus,protocol_list = <CHG_PROTOCOL_UFCS  33
-				       CHG_PROTOCOL_PD   18
 				       CHG_PROTOCOL_VOOC 100
-				       CHG_PROTOCOL_QC   18
-				       CHG_PROTOCOL_PPS  33>;
+				       CHG_PROTOCOL_PPS  33
+				       CHG_PROTOCOL_PD   18
+				       CHG_PROTOCOL_QC   18>;
 		oplus,default_protocol_list = <CHG_PROTOCOL_UFCS
 					       CHG_PROTOCOL_PD
-					       CHG_PROTOCOL_VOOC>;
+					       CHG_PROTOCOL_VOOC
+					       CHG_PROTOCOL_PPS>;
 	};
 
 	oplus_ufcs_virtual_cp: oplus,ufcs_virtual_cp {

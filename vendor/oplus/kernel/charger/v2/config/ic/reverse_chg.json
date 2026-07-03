@@ -41,37 +41,41 @@
                 "zh": "设置反向充电PDO"
             },
             "auto_debug_code": true,
-            "parameter_list": ["int", "int"],
+            "parameter_list": ["int", "int", "int", "int"],
             "parameter_desc": [
                 {
                     "range": "0-*",
                     "type": "in",
                     "desc": {
-                        "zh": "要设置的电压，单位mV"
+                        "zh": "要设置pdo0的电压，单位mV"
                     }
                 },
                 {
                     "range": "0-*",
                     "type": "in",
                     "desc": {
-                        "zh": "要设置的电流，单位mA"
+                        "zh": "要设置pdo0的电流，单位mA"
+                    }
+                },
+                {
+                    "range": "0-*",
+                    "type": "in",
+                    "desc": {
+                        "zh": "要设置pdo的电压，单位mV"
+                    }
+                },
+                {
+                    "range": "0-*",
+                    "type": "in",
+                    "desc": {
+                        "zh": "要设置pdo的电流，单位mA"
                     }
                 }
             ],
             "vict": {
                 "read": false,
-                "write": {
-                    "cmd": "vict -f {id} -S{0},{1} vic-*",
-                    "desc": {
-                        "zh": "设置pdo, {0}为电压，{1}为电流"
-                    }
-                },
-                "overwrite": {
-                    "cmd": "vict -f {id} -O {0},{1} vic-*",
-                    "desc": {
-                        "zh": "覆盖pdo, {0}为电压，{1}为电流"
-                    }
-                }
+                "write": false,
+                "overwrite": false
             }
         },
         {
@@ -382,5 +386,5 @@
         }
     ],
 
-    "version": "V1.1:12:4f7f3188543cbec0546dfa295f56c84fa3b023cd94be2b2854b9d8e4bb450f73"
+    "version": "V2.1:12:f7a944133e07e842d1a52bf9feef8c89101b2eb0a54bba1b7bffb69002e7b08b"
 }

@@ -38,6 +38,7 @@ enum oplus_mms_type {
 	OPLUS_MMS_TYPE_STATE_KEEP,
 	OPLUS_MMS_TYPE_REVERSE,
 	OPLUS_MMS_TYPE_PROTECTION,
+	OPLUS_MMS_TYPE_DISCHG_BOOST,
 };
 
 enum mms_msg_type {

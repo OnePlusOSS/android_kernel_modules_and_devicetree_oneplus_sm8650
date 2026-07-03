@@ -5,7 +5,7 @@
 #include "pineapple_overlay_common.dtsi"
 #include "waffle_overlay_common.dtsi"
 #include "oplus_chg/oplus-chg-22825-EVT1.dtsi"
-#include "oplus_chg/oplus-chg-22877-pps.dtsi"
+#include "oplus_chg/oplus-chg-22877-overlay.dtsi"
 #include "oplus_misc/oplus-misc-22877.dtsi"
 #include "sensor/waffle-sensor-22825.dtsi"
 #include "tp/waffle-oplus-tp-22825.dtsi"

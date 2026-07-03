@@ -501,7 +501,8 @@ static int oplus_chg_vrc_set_rvs_high_en(struct oplus_chg_ic_dev *ic_dev, int en
 	return err;
 }
 
-static int oplus_chg_vrc_set_reverse_src_pdo(struct oplus_chg_ic_dev *ic_dev, int vol_mv, int curr_ma)
+static int oplus_chg_vrc_set_reverse_src_pdo
+	(struct oplus_chg_ic_dev *ic_dev, int pdo0_vol_mv, int pdo0_curr_ma, int pdo1_vol_mv, int pdo1_curr_ma)
 {
 	struct oplus_virtual_reverse_chg_ic *vrc;
 	int i;
@@ -515,7 +516,8 @@ static int oplus_chg_vrc_set_reverse_src_pdo(struct oplus_chg_ic_dev *ic_dev, in
 
 	vrc = oplus_chg_ic_get_drvdata(ic_dev);
 	for (i = 0; i < vrc->child_num; i++) {
-		rc = oplus_chg_ic_func(vrc->child_list[i].ic_dev, OPLUS_IC_FUNC_SET_REVERSE_SRC_PDO, vol_mv, curr_ma);
+		rc = oplus_chg_ic_func(vrc->child_list[i].ic_dev, OPLUS_IC_FUNC_SET_REVERSE_SRC_PDO,
+			pdo0_vol_mv, pdo0_curr_ma, pdo1_vol_mv, pdo1_curr_ma);
 		if (rc < 0 && rc != -ENOTSUPP) {
 			chg_err("child ic[%d] pdo_set error, rc=%d\n", i, rc);
 			return rc;

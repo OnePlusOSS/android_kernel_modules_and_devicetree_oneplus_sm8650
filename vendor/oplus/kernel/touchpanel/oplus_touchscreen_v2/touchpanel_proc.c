@@ -5112,6 +5112,11 @@ static ssize_t proc_pocket_prevent_mode_write(struct file *file, const char __us
 		return count;
 	}
 
+	if (tp_status(ts) == SLEEP_MODE) {
+		TPD_INFO("%s: Not in resume over or gesture state\n", __func__);
+		return count;
+	}
+
 	tp_copy_from_user(buf, sizeof(buf), buffer, count, 4);
 
 	if (kstrtoint(buf, 10, &value)) {

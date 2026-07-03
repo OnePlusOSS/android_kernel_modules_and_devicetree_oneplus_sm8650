@@ -3702,7 +3702,7 @@ void syna_fw_version_update(void *chip_data)
 	struct touchpanel_data *ts = spi_get_drvdata(tcm_hcd->s_client);
 	char *fw_ver = NULL;
 
-        tcm_hcd->app_info.customer_config_id[9] = '\0';
+        tcm_hcd->app_info.customer_config_id[15] = '\0';
 
 	if (strlen(tcm_hcd->app_info.customer_config_id) == 0) {
 		return;
@@ -3778,7 +3778,7 @@ static fw_update_state copy_fw_to_buffer(struct syna_tcm_hcd *tcm_hcd, const str
 		TPD_INFO("failed to get oplus tp firmware.\n");
 		return FW_UPDATE_ERROR;
 	}
-	return FW_UPDATE_ERROR;
+	return FW_UPDATE_SUCCESS;
 
 exit:
 	if(tp_fw) {
@@ -5644,6 +5644,7 @@ static void syna_tcm_parse_dts(struct syna_tcm_hcd *tcm_hcd, struct spi_device *
 
 	tcm_hcd->irq_trigger_hdl_support = of_property_read_bool(np, "synaptics,irq_trigger_hdl_support");
 	tcm_hcd->pt17_pt18_test_support = of_property_read_bool(np, "pt17_pt18_test_support");
+	tcm_hcd->hw_rt_retry_support = of_property_read_bool(np, "hw_rt_retry_support");
 }
 
 static int syna_tcm_spi_probe(struct spi_device *spi)

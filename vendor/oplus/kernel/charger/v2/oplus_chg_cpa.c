@@ -290,7 +290,7 @@ static int oplus_cpa_protocol_wait(struct oplus_cpa *cpa, enum oplus_chg_protoco
 				chg_debug("timeout waiting for pd_ack\n");
 				rc = -ETIMEDOUT;
 			} else {
-				chg_info("exit pd wait. left time = %lu\n", left);
+				chg_info("exit pd wait. left time = %u\n", jiffies_to_msecs(left));
 			}
 		}
 	}
@@ -969,11 +969,11 @@ static void oplus_cpa_wired_offline_work(struct work_struct *work)
 	}
 
 	if (cpa->bc12_check_timeout_ms > 0) {
-		vote(cpa->req_lock_votable, BC12_VOTER, true, true, false);
 		cpa->bc12_completed = false;
 		complete_all(&cpa->bc12_completed_ack);
 		cancel_work_sync(&cpa->wait_bc12_completed_work);
 		reinit_completion(&cpa->bc12_completed_ack);
+		vote(cpa->req_lock_votable, BC12_VOTER, true, true, false);
 	}
 
 #if IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP)

@@ -611,6 +611,8 @@ static int limits[CONFIG_ITEMS_NR][2] = {
     {0, INT_MAX}
 };
 
+#define FULL_CONFIGS_NR (sizeof(full_configs) / sizeof(full_configs[0]))
+
 struct lock_torture_cfg full_configs[] = {
     {
         .cur_ops = &spin_lock_ops,
@@ -945,8 +947,10 @@ static ssize_t torture_configs_write(struct file *file, const char __user *buf,
 			p[i - 1] = val[i];
 		}
 	}
+	if (val[i - 1] <= -1 || val[i - 1] >= FULL_CONFIGS_NR)
+		return -EINVAL;
 	cxt.cfg.cur_ops = full_configs[val[i - 1]].cur_ops;
-        return count;
+	return count;
 }
 
 static int torture_configs_show(struct seq_file *m, void *v)

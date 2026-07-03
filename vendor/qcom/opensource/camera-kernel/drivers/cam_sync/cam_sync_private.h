@@ -144,6 +144,9 @@ struct sync_callback_info {
 	int status;
 	int32_t sync_obj;
 	ktime_t workq_scheduled_ts;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	struct kthread_work cb_dispatch_work_kthread;
+#endif
 	struct work_struct cb_dispatch_work;
 	struct list_head list;
 };
@@ -365,6 +368,9 @@ struct sync_device {
 	struct mutex table_lock;
 	int open_cnt;
 	struct dentry *dentry;
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+	struct kthread_worker *scheduler_worker;
+#endif
 	struct workqueue_struct *work_queue;
 	struct v4l2_fh *cam_sync_eventq;
 	spinlock_t cam_sync_eventq_lock;

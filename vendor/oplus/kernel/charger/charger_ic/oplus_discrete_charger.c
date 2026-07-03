@@ -2322,8 +2322,12 @@ int oplus_chg_get_charger_subtype(void)
 		return CHARGER_SUBTYPE_DEFAULT;
 
 	chg = &g_oplus_chip->pmic_spmi.smb5_chip->chg;
-	if (chg->pd_active)
-		return CHARGER_SUBTYPE_PD;
+	if (chg->pd_active) {
+		if (g_oplus_chip->pd_svooc || g_oplus_chip->charger_type == POWER_SUPPLY_TYPE_USB_PD_SDP)
+			return CHARGER_SUBTYPE_DEFAULT;
+		else
+			return CHARGER_SUBTYPE_PD;
+	}
 
 	return CHARGER_SUBTYPE_DEFAULT;
 }

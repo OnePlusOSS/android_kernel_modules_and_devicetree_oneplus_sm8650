@@ -583,7 +583,7 @@ static size_t _iommu_map_page_to_range(struct iommu_domain *domain,
 	return mapped;
 }
 
-static size_t _iommu_map_sg(struct iommu_domain *domain, u64 gpuaddr,
+static ssize_t _iommu_map_sg(struct iommu_domain *domain, u64 gpuaddr,
 		struct sg_table *sgt, int prot)
 {
 	/* Sign extend TTBR1 addresses all the way to avoid warning */
@@ -598,7 +598,8 @@ _kgsl_iommu_map(struct kgsl_mmu *mmu, struct iommu_domain *domain,
 		struct kgsl_memdesc *memdesc)
 {
 	int prot = _iommu_get_protection_flags(mmu, memdesc);
-	size_t mapped, padding;
+	ssize_t mapped;
+	size_t padding;
 	int ret = 0;
 
 	/*
@@ -621,8 +622,9 @@ _kgsl_iommu_map(struct kgsl_mmu *mmu, struct iommu_domain *domain,
 		sg_free_table(&sgt);
 	}
 
-	if (!mapped)
-		return -ENOMEM;
+	/* Check for errors or no pages mapped */
+	if (mapped <= 0)
+		return mapped ? mapped : -ENOMEM;
 
 	padding = kgsl_memdesc_footprint(memdesc) - mapped;
 
@@ -2262,8 +2264,7 @@ static int kgsl_iommu_get_gpuaddr(struct kgsl_pagetable *pagetable,
 
 	size = kgsl_memdesc_footprint(memdesc);
 
-	align = max_t(uint64_t, 1 << kgsl_memdesc_get_align(memdesc),
-			PAGE_SIZE);
+	align = kgsl_get_align(memdesc);
 
 	if (memdesc->flags & KGSL_MEMFLAGS_FORCE_32BIT) {
 		start = pagetable->compat_va_start;

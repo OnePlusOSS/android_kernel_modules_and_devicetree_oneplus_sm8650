@@ -65,17 +65,32 @@
 	};
 	//#endif /* OPLUS_FEATURE_THERMAL_HORAE */
 
-    dump_device_info {
-        compatible = "dump_device_info";
-        linux,contiguous-region = <&dump_device_info_mem>;
-    };
+        bootloader_log {
+            compatible = "bootloader_log";
+            linux,contiguous-region = <&bootloader_log_mem>;
+        };
+        dump_device_info {
+            compatible = "dump_device_info";
+            linux,contiguous-region = <&dump_device_info_mem>;
+        };
 };
 
 &reserved_memory {
+        /*
+        This size is from Core/Uefi/LAA/memmap.dtsi
+        reg = <0x0 0x81CE4000 0x0 0x00010000>;
+        MemLabel = "UEFI_Log";
+        so we reserve this for bootloader log
+        */
+        bootloader_log_mem: botloader_mem@0x81CE4000 {
+            reg = <0 0x81CE4000 0 0x00010000>;
+            label = "bootloader_log_mem";
+        };
         dump_device_info_mem: device_info_mem@0xA4F00000 {
                 reg = <0 0xA4F00000 0 0x00008000>;
                 label = "dump_device_info_mem";
         };
+
 };
 &pmk8550 {
 //#ifdef CONFIG_OPLUS_FEATURE_QCOM_PMICWD
@@ -107,11 +122,10 @@
 				feature-enable;
 			};
 		};
-                ram-12g {
-                        kcompressed {
-                                feature-enable;
-                        };
-                };
-
+		ram-12g {
+			kcompressed {
+				feature-enable;
+			};
+		};
 	};
 };

@@ -102,6 +102,26 @@ def define_oplus_local_modules():
     )
 
     define_oplus_ddk_module(
+        name = "oplus_ft3685g",
+        srcs = native.glob([
+            "**/*.h",
+            "chips/focal/ft3685g/fhp_core.c",
+        ]),
+        includes = ["."],
+        ko_deps = [
+            "//vendor/oplus/kernel/tp/hbp/hbp:oplus_hbp_core",
+        ],
+        local_defines = [
+                 "BUILD_BY_BAZEL",
+        ],
+        conditional_defines = {
+            "mtk":  ["CONFIG_TOUCHPANEL_MTK_PLATFORM", "CONFIG_DRM_MEDIATEK"],
+            "qcom":  ["CONFIG_QCOM_PANEL_EVENT_NOTIFIER"],
+        },
+
+    )
+
+    define_oplus_ddk_module(
         name = "oplus_bsp_tp_hbp_syna_s3910",
         srcs = native.glob([
             "**/*.h",
@@ -159,6 +179,7 @@ def define_oplus_local_modules():
         module_list = [
             "oplus_hbp_core",
             "oplus_ft3683g",
+            "oplus_ft3685g",
             "oplus_bsp_tp_hbp_syna_s3910",
             "oplus_bsp_tp_hbp_goodix_gt99x6"
         ],

@@ -659,9 +659,11 @@ static void oplus_high_reverse_err_info_check_work(struct work_struct *work)
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct oplus_monitor *chip =
 		container_of(dwork, struct oplus_monitor, high_reverse_err_info_check_work);
+	int err_source_pdo_volt;
+	int err_source_pdo_curr;
 
 	get_reverse_chg_pdo_info(
-		chip, &chip->err_source_pdo_volt, &chip->err_source_pdo_curr,
+		chip, &err_source_pdo_volt, &err_source_pdo_curr,
 		&chip->err_sink_req_volt, &chip->err_sink_req_curr);
 	oplus_chg_track_upload_high_reverse_err_info(chip);
 }
@@ -682,16 +684,12 @@ static void oplus_reverse_chg_info_check_work(struct work_struct *work)
 		chip->reverse_min_vbus : chip->wired_vbus_mv;
 	get_reverse_chg_pdo_info(
 		chip, &chip->source_pdo_volt, &chip->source_pdo_curr, &chip->sink_req_volt, &chip->sink_req_curr);
-	chip->max_source_cap_voltage =
-	chip->max_source_cap_voltage > chip->source_pdo_volt ?
-	chip->max_source_cap_voltage : chip->source_pdo_volt;
-	chip->max_source_cap_current = chip->max_source_cap_current > chip->source_pdo_curr ?
-		chip->max_source_cap_current : chip->source_pdo_curr;
-	chip->max_sink_request_voltage =
-	chip->max_sink_request_voltage > chip->sink_req_volt ?
-	chip->max_sink_request_voltage : chip->sink_req_volt;
-	chip->max_sink_request_current = chip->max_sink_request_current > chip->sink_req_curr ?
-		chip->max_sink_request_current : chip->sink_req_curr;
+	chip->max_source_cap =
+	(chip->max_source_cap > (chip->source_pdo_volt << 16 | chip->source_pdo_curr)) ?
+	chip->max_source_cap : (chip->source_pdo_volt << 16 | chip->source_pdo_curr);
+	chip->max_sink_request =
+	(chip->max_sink_request > (chip->sink_req_volt << 16 | chip->sink_req_curr)) ?
+	chip->max_sink_request : (chip->sink_req_volt << 16 | chip->sink_req_curr);
 	if (chip->reverse_state) {
 		schedule_delayed_work(&chip->reverse_chg_info_check_work, msecs_to_jiffies(5000));
 		return;
@@ -747,6 +745,10 @@ static void oplus_reverse_chg_info_init(struct oplus_monitor *chip)
 	chip->reverse_screen_on_time = 0;
 	chip->reverse_screen_off_time = 0;
 	chip->reverse_total_time = 0;
+	chip->max_source_cap = 0;
+	chip->max_sink_request = 0;
+	chip->err_source_pdo_volt = 0;
+	chip->err_source_pdo_curr = 0;
 	schedule_delayed_work(&chip->reverse_delay_init_work, msecs_to_jiffies(3000));
 }
 
@@ -795,13 +797,16 @@ static void oplus_monitor_reverse_chg_subs_callback(struct mms_subscribe *subs,
 			chip->high_reverse_err_flag = data.intval;
 			schedule_delayed_work(&chip->high_reverse_err_info_check_work, 0);
 			break;
-		case REVERSE_ITEM_HIGH_REVERSE_CHG_ENABLE:
-			oplus_mms_get_item_data(chip->reverse_topic, id, &data, false);
-			chip->high_reverse_enable = data.intval;
-			break;
 		case REVERSE_ITEM_HIGH_REVERSE_CHG_COUNT:
 			oplus_mms_get_item_data(chip->reverse_topic, id, &data, false);
 			chip->high_reverse_count = data.intval;
+			break;
+		case REVERSE_ITEM_LAST_HIGH_REVERSE_PDO:
+			oplus_mms_get_item_data(chip->reverse_topic, id, &data, false);
+			chip->err_source_pdo_volt = (data.intval & 0xFFFF0000) >> 16;
+			chip->err_source_pdo_curr = (data.intval & 0xFFFF);
+			chg_info("last_high_reverse_volt = %d, curr = %d\n",
+				chip->err_source_pdo_volt, chip->err_source_pdo_curr);
 			break;
 		default:
 			break;
@@ -1809,6 +1814,12 @@ static void oplus_monitor_comm_subs_callback(struct mms_subscribe *subs,
 			if (chip->uisoc_keep_2_err)
 				oplus_chg_track_upload_uisoc_keep_2_err_info(chip);
 			break;
+		case COMM_ITEM_UISOC_KEEP_3_ERROR:
+			oplus_mms_get_item_data(chip->comm_topic, id, &data, false);
+			chip->uisoc_keep_3_err = data.intval;
+			if (chip->uisoc_keep_3_err)
+				oplus_chg_track_upload_uisoc_keep_3_err_info(chip);
+			break;
 		case COMM_ITEM_RECHG_SOC_EN_STATUS:
 			oplus_mms_get_item_data(chip->comm_topic, id, &data, false);
 			chip->rechg_soc_en = RECHG_SOC_TO_ENABLE(data.intval);
@@ -2378,7 +2389,17 @@ static struct mms_item oplus_monitor_item[] = {
 			.item_id = ERR_ITEM_SEC_IC_MEM_INFO,
 			.str_data = true,
 		}
-	}
+	},
+	{
+		.desc = {
+			.item_id = ERR_ITEM_SHUTDOWN_VOL,
+			.str_data = true,
+			.up_thr_enable = false,
+			.down_thr_enable = false,
+			.dead_thr_enable = false,
+			.update = NULL,
+		}
+	},
 };
 
 static const struct oplus_mms_desc oplus_monitor_desc = {

@@ -7,6 +7,13 @@
 #ifndef _OPLUS_SA_SYSFS_H_
 #define _OPLUS_SA_SYSFS_H_
 
+enum {
+	OPT_STR_TYPE = 0,
+	OPT_STR_PID,
+	OPT_STR_VAL,
+	OPT_STR_MAX = 3,
+};
+
 extern int global_sched_assist_enabled;
 extern int global_sched_assist_scene;
 extern char global_ux_task[];

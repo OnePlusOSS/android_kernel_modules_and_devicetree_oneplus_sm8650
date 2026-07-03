@@ -27,6 +27,9 @@ extern void oplus_press_cali_data_clean(void);
 
 extern int pad_als_data_init(void);
 extern void pad_als_data_clean(void);
+#ifdef OPLUS_FEATURE_SENSOR_MAG_MATCH_NFC
+extern bool is_nfc_support(void);
+#endif
 
 struct sensor_info * g_chip = NULL;
 
@@ -35,11 +38,9 @@ static struct oplus_als_cali_data *gdata = NULL;
 static uint32_t g_ldo_enable;
 static bool g_fold_dev_supt = false;
 
-
 static char* als_rear_feature[] = {
 	"als-factor",
 };
-
 
 __attribute__((weak)) void oplus_device_dir_redirect(struct sensor_info * chip)
 {
@@ -168,6 +169,19 @@ static void parse_magnetic_sensor_dts(struct sensor_hw* hw, struct device_node *
 				rc = of_property_read_u32_array(ch_node,
 					"soft-mag-parameter-no-nfc", &hw->feature.parameter[0], value);
 			}
+#ifdef OPLUS_FEATURE_SENSOR_MAG_MATCH_NFC
+		} else if (!rc && distinguish_nfc == 2) {
+			bool supt_nfc = false;
+			supt_nfc = is_nfc_support();
+			if (supt_nfc == true) {
+				rc = of_property_read_u32_array(ch_node,
+					"soft-mag-parameter-nfc", &hw->feature.parameter[0], value);
+			} else {
+				rc = of_property_read_u32_array(ch_node,
+					"soft-mag-parameter-no-nfc", &hw->feature.parameter[0], value);
+			}
+			SENSOR_DEVINFO_DEBUG("distinguish_nfc %d", supt_nfc);
+#endif
 		} else if (rc) {
 			rc = of_property_read_u32_array(ch_node,
 				"soft-mag-parameter", &hw->feature.parameter[0], value);

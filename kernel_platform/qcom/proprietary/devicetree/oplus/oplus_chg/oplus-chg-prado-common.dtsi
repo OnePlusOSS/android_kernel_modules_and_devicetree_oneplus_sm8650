@@ -82,7 +82,7 @@
 			oplus_spec,usbtemp_cool_down_recover_ntc_high = <60>;
 			oplus_spec,usbtemp_cool_down_recover_gap_low = <6>;
 			oplus_spec,usbtemp_cool_down_recover_gap_high = <15>;
-			oplus_spec,usbtemp_otg_cc_boot_current_limit = <1300>;
+			oplus_spec,usbtemp_otg_cc_boot_current_limit = <1500>;
 
 			oplus_virtual_buck: oplus,virtual_buck {
 					compatible = "oplus,virtual_buck";
@@ -348,6 +348,7 @@
 					OPLUS_IC_FUNC_CP_GET_IIN_MAX
 					OPLUS_IC_FUNC_CP_WATCHDOG_RESET
 					OPLUS_IC_FUNC_CP_SET_SSTIMEOUT_UCP_ENABLE
+					OPLUS_IC_FUNC_CP_GET_ADC_ENABLE
 				>;
 				virqs = <
 					OPLUS_IC_VIRQ_ERR
@@ -436,9 +437,6 @@
 
 	oplus_chg_comm: oplus,comm {
 		compatible = "oplus,common-charge";
-		oplus_spec,dec_step = <20>;
-		oplus_spec,dec-vol-cc-full-thr = <0 200 400 600 800 1000>;
-		oplus_spec,dec-vol-fv-full-mv = <0 20 40 40 60 60>;
 
 		oplus_spec,batt-them-thr = <(-100) 0 50 120 160 350 450 530>;
 		oplus_spec,removed_bat_decidegc = <390>; /*-39 degree*/
@@ -447,9 +445,8 @@
 		oplus_spec,non-standard-sw-fv-mv = <3930>;
 		oplus_spec,non-standard-fv-mv = <3980>;
 		oplus_spec,non-standard-hw-fv-inc-mv = <18>;
-		oplus_spec,non-standard-sw-over-fv-mv = <3990>;
+		oplus_spec,non-standard-sw-over-fv-mv = <3988>;
 		oplus_spec,non-standard-vbatdet-mv = <3680>;
-		oplus_spec,wired-vbatdet-mv = <0 4210 4310 4410 4410 4410 4395 4030 0>;
 		oplus_spec,fcc-gear-shake-mv = <400 400 400 300 300 180 180 180 180>;
 		oplus_spec,vbatt-ov-thr-mv = <4600>;
 		oplus_spec,sw_check_full_cnt = <12>;
@@ -490,8 +487,8 @@
 		track,wired_fast_chg_scheme = <2>;
 
 		track,gauge_status_ctrl;
-		track,nominal_qmax1 = <6579>;
-		track,nominal_fcc1 = <5828>;
+		track,nominal_qmax1 = <9000>;
+		track,nominal_fcc1 = <8760>;
 		track,external_gauge_num = <1>;
 
 		track,gauge_max_cell_vol = <4600>;
@@ -537,8 +534,8 @@
 						405 440 CP_CURR_LIMIT_7BIT_2_0A  3 2>;
 		oplus,plc_strategy-data = <&buck_simple_strategy &cp_2t1_simple_strategy &cp_1t1_simple_strategy>;
 		oplus,plc_strategy-names = "default", "svooc", "vooc";
-		oplus,cp_cooldown_limit_percent_75 = <CP_CURR_LIMIT_7BIT_8_0A>;
- 		oplus,cp_cooldown_limit_percent_85 = <CP_CURR_LIMIT_7BIT_4_0A>;
+		oplus,cp_cooldown_limit_percent_75 = <CP_CURR_LIMIT_7BIT_4_0A>;
+ 		oplus,cp_cooldown_limit_percent_85 = <CP_CURR_LIMIT_7BIT_2_0A>;
 
 		oplus_virtual_vphy: oplus,virtual_vphy {
 			compatible = "oplus,virtual_vphy";
@@ -1339,6 +1336,12 @@
 		qcom,pre-scaling = <1 1>;
 		qcom,adc-tm-type = <1>;
 		qcom,scale-fn-type = <OPLUS_ADC_SCALE_HW_CALIB_THERM_100K_PULLUP>;
+	};
+
+	pmiv0104_vbat_sns_qbg  {
+		reg = <PMIV0104_ADC5_GEN3_VBAT_SNS_QBG>;
+		label = "pmiv0104_vbat_sns_qbg";
+		qcom,pre-scaling = <1 3>;
 	};
 };
 

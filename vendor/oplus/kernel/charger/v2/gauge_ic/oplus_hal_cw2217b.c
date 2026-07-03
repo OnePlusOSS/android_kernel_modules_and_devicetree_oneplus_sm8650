@@ -169,7 +169,7 @@ static int battery_spec_obtaining(struct cw_battery *cw_bat);
 static int battery_type_check(struct cw_battery *cw_bat);
 static int cw2217_parse_dt(struct cw_battery *cw_bat)
 {
-	struct device_node *node = cw_bat->dev->of_node;
+	struct device_node *node = oplus_get_node_by_type(cw_bat->dev->of_node);
 	int rc = 0;
 	int length = 0;
 	char config_profile_name[128] = {0};
@@ -882,7 +882,7 @@ static int oplus_get_iio_channel(struct cw_battery *cw_bat, const char *propname
 static int battery_spec_obtaining(struct cw_battery *cw_bat)
 {
 	int ret = 0;
-	struct device_node *node = cw_bat->dev->of_node;
+	struct device_node *node = oplus_get_node_by_type(cw_bat->dev->of_node);
 
 	ret = of_property_read_u32(node, "oplus,batt_num", &cw_bat->batt_num);
 	if (ret < 0) {
@@ -946,7 +946,7 @@ static int battery_type_check(struct cw_battery *cw_bat)
 	int ret = 0;
 	int value = 0;
 	int length = 0, i = 0;
-	struct device_node *node = cw_bat->dev->of_node;
+	struct device_node *node = oplus_get_node_by_type(cw_bat->dev->of_node);
 
 	if (cw_bat->batid_voltage_range[0][0] == 0) {
 		length = of_property_count_elems_of_size(node, "batid_voltage_range", sizeof(u32));

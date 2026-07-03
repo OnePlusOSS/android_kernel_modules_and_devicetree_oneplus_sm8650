@@ -32,6 +32,9 @@
 #include "sa_audio.h"
 #endif
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
+#include "sa_ddl.h"
+#endif
 
 extern unsigned int sysctl_sched_latency;
 
@@ -268,7 +271,7 @@ bool should_ux_task_skip_cpu(struct task_struct *task, unsigned int dst_cpu)
 		if (test_bit(IM_FLAG_CAMERA_HAL, &im_flag))
 			return false;
 
-		orq = (struct oplus_rq *) cpu_rq(dst_cpu)->android_oem_data1;
+		orq = get_oplus_rq(cpu_rq(dst_cpu));
 		if (orq_has_ux_tasks(orq)) {
 			reason = 2;
 			goto skip;
@@ -311,7 +314,7 @@ int get_topology_cluster_id(int cpu)
 static inline bool select_target_cpu_fastpath(struct task_struct *task, int target_cpu)
 {
 	struct rq *orig_rq = cpu_rq(target_cpu);
-	struct oplus_rq *orig_orq = (struct oplus_rq *)orig_rq->android_oem_data1;
+	struct oplus_rq *orig_orq = get_oplus_rq(orig_rq);
 	bool latency_sensitive = false;
 
 	if (global_lowend_plat_opt && global_less_prime_cpu_arch) {
@@ -540,7 +543,7 @@ retry:
 
 	for_each_cpu(cpu, &search_cpus) {
 		rq = cpu_rq(cpu);
-		orq = (struct oplus_rq *)rq->android_oem_data1;
+		orq = get_oplus_rq(rq);
 
 		/* fit status to check if taks util fits cpu capacity */
 		if (global_lowend_plat_opt && global_less_prime_cpu_arch) {
@@ -758,7 +761,7 @@ int is_audio_scene(void)
 extern void set_next_entity(struct cfs_rq *cfs_rq, struct sched_entity *se);
 void oplus_replace_next_task_fair(struct rq *rq, struct task_struct **p, struct sched_entity **se, bool *repick, bool simple)
 {
-	struct oplus_rq *orq = (struct oplus_rq *) rq->android_oem_data1;
+	struct oplus_rq *orq = get_oplus_rq(rq);
 	struct rb_node *node;
 	unsigned long irqflag;
 
@@ -871,7 +874,7 @@ void resched_timer_init(void)
 
 	for_each_possible_cpu(i) {
 		rq = cpu_rq(i);
-		orq = (struct oplus_rq *) rq->android_oem_data1;
+		orq = get_oplus_rq(rq);
 		orq->cpu = i;
 		hrtimer_init(orq->resched_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 		orq->resched_timer->function = &no_preempt_resched;
@@ -953,6 +956,12 @@ inline void oplus_check_preempt_wakeup(struct rq *rq, struct task_struct *p, boo
 #endif
 		}
 #endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
+		if (global_sched_ddl_enabled)
+			oplus_ddl_check_preempt(rq, p, curr, preempt, nopreempt);
+#endif
+
 		return;
 	}
 
@@ -968,7 +977,7 @@ inline void oplus_check_preempt_wakeup(struct rq *rq, struct task_struct *p, boo
 	}
 
 	/* both of wake_task and curr_task are ux */
-	orq = (struct oplus_rq *) rq->android_oem_data1;
+	orq = get_oplus_rq(rq);
 	spin_lock_irqsave(orq->ux_list_lock, irqflag);
 	smp_mb__after_spinlock();
 	if (!IS_ERR_OR_NULL(ots) && !oplus_rbnode_empty(&ots->ux_entry)) {
@@ -1153,6 +1162,27 @@ EXPORT_SYMBOL(dec_ld_stats);
 
 #endif /* CONFIG_OPLUS_FEATURE_SCHED_SPREAD */
 
+/* implement vender hook in driver/android/fair.c */
+void android_rvh_place_entity_handler(void *unused, struct cfs_rq *cfs_rq, struct sched_entity *se, int initial, u64 *vruntime)
+{
+#ifdef CONFIG_OPLUS_SCHED_GROUP_OPT
+	unsigned long thresh = sysctl_sched_latency;
+
+	if (entity_is_task(se))
+		return;
+
+	if (se->my_q && se->my_q->idle > 0)
+		return;
+
+	if (initial)
+		return;
+
+	if (sched_feat(GENTLE_FAIR_SLEEPERS))
+		thresh >>= 2;
+
+	*vruntime += thresh;
+#endif
+}
 
 void android_rvh_check_preempt_tick_handler(void *unused, struct task_struct *task,
 			unsigned long *ideal_runtime, bool *skip_preempt,
@@ -1184,7 +1214,7 @@ void android_rvh_check_preempt_tick_handler(void *unused, struct task_struct *ta
 	}
 
 	rq = task_rq(task);
-	orq = (struct oplus_rq *) rq->android_oem_data1;
+	orq = get_oplus_rq(rq);
 
 #if IS_ENABLED(CONFIG_OPLUS_FEATURE_AUDIO_OPT)
 	if (is_audio_scene() && test_bit(IM_FLAG_AUDIO_CAMERA_HAL, &ots->im_flag))
@@ -1213,23 +1243,33 @@ void android_rvh_check_preempt_tick_handler(void *unused, struct task_struct *ta
 	spin_unlock_irqrestore(orq->ux_list_lock, irqflag);
 }
 
-#ifdef CONFIG_LOCKING_PROTECT
+
 void android_rvh_enqueue_entity_handler(void *unused, struct cfs_rq *cfs, struct sched_entity *se)
 {
 	struct task_struct *p = entity_is_task(se) ? task_of(se) : NULL;
 	struct rq *rq = rq_of(cfs);
 
+#ifdef CONFIG_LOCKING_PROTECT
 	LOCKING_CALL_OP(enqueue_entity, rq, p);
+#endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
+	oplus_enqueue_ddl_node(rq, p);
+#endif
 }
 
 void android_rvh_dequeue_entity_handler(void *unused, struct cfs_rq *cfs, struct sched_entity *se)
 {
 	struct task_struct *p = entity_is_task(se) ? task_of(se) : NULL;
 	struct rq *rq = rq_of(cfs);
-
+#ifdef CONFIG_LOCKING_PROTECT
 	LOCKING_CALL_OP(dequeue_entity, rq, p);
-}
 #endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
+	oplus_dequeue_ddl_node(rq, p);
+#endif
+}
 
 void android_rvh_check_preempt_wakeup_handler(void *unused, struct rq *rq, struct task_struct *p, bool *preempt, bool *nopreempt,
 	int wake_flags, struct sched_entity *se, struct sched_entity *pse, int next_buddy_marked, unsigned int granularity)
@@ -1251,6 +1291,11 @@ void android_rvh_replace_next_task_fair_handler(void *unused,
 #ifdef CONFIG_LOCKING_PROTECT
 	if (*repick != true)
 		LOCKING_CALL_OP(replace_next_task_fair, rq, p, se, repick, simple);
+#endif
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_SCHED_DDL)
+	if (*repick != true && global_sched_ddl_enabled)
+		oplus_replace_next_task_ddl(rq, p, se, repick, simple);
 #endif
 
 	/*

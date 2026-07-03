@@ -316,10 +316,14 @@ static int hbp_sync_with_daemon(struct hbp_core *hbp, int id, hbp_panel_event ev
 
 	hbp_sync_with_daemon_error(&hbp->devices[id]->monitor_data, event);
 
+	/* Set ACK_WAITQ before waking up daemon to avoid race condition:
+	 * If daemon is woken up and sets ACK_WAKEUP before we set ACK_WAITQ,
+	 * the wait condition will never be satisfied.
+	 */
+	hbp->state_ack = ACK_WAITQ;
 	hbp->state_st = STATE_WAKEUP;
 	wake_up_interruptible(&hbp->state_event);
 
-	hbp->state_ack = ACK_WAITQ;
 	ret = wait_event_timeout(hbp->ack_event,
 				 (hbp->state_ack == ACK_WAKEUP),
 				 msecs_to_jiffies(DAEMON_ACK_TIMEOUT));

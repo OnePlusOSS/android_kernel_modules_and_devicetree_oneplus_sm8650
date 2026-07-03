@@ -1030,15 +1030,21 @@ static int sc8547_voocphy_set_adc_enable(struct oplus_voocphy_manager *chip,
 
 static int sc8547_set_adc_enable(struct sc8547d_device *chip, bool enable)
 {
+	int ret = 0;
+
 	if (!chip) {
 		chg_err("Failed\n");
 		return -1;
 	}
 
 	if (enable)
-		return sc8547_update_bits(chip->client, SC8547_REG_11, SC8547_ADC_EN_MASK, SC8547_ADC_EN_MASK);
+		ret = sc8547_update_bits(chip->client, SC8547_REG_11, SC8547_ADC_EN_MASK, SC8547_ADC_EN_MASK);
 	else
-		return sc8547_write_byte(chip->client, SC8547_REG_11, 0x00);
+		ret = sc8547_write_byte(chip->client, SC8547_REG_11, 0x00);
+
+	chg_debug("enable = %d. ret = %d\n", enable, ret);
+
+	return ret;
 }
 
 static void sc8547_voocphy_send_handshake(struct oplus_voocphy_manager *chip)
@@ -1057,7 +1063,7 @@ static int sc8547d_voocphy_set_sstimeout_ucp_enable(struct oplus_voocphy_manager
 		chg_err("sc8547d chip is NULL\n");
 		return -ENODEV;
 	}
-	if (!chip->fcl_support)
+	if (!chip->fcl_support && !chip->svooc_pcc_strategy)
 		return -EINVAL;
 
 	rc = sc8547d_cp_set_sstimeout_ucp_enable(dev->cp_ic, enable);
@@ -2673,6 +2679,7 @@ static void sc8547d_cp_regdump_work(struct work_struct *work)
 	int i;
 	size_t index = 0;
 	u8 data;
+	int rc;
 
 	buf = kzalloc(ERR_MSG_BUF, GFP_KERNEL);
 	if (buf == NULL)
@@ -2680,7 +2687,11 @@ static void sc8547d_cp_regdump_work(struct work_struct *work)
 
 	for (i = 0; i < SC8547D_CP_STATUS_REG_MAX; i++) {
 		data = 0;
-		sc8547d_read_data(chip, g_sc8547d_cp_status_reg[i], &data, 1);
+		rc = sc8547d_read_data(chip, g_sc8547d_cp_status_reg[i], &data, 1);
+		if (rc < 0) {
+			chg_err("can't read 0x%02x buf, rc=%d\n", g_sc8547d_cp_status_reg[i], rc);
+			continue;
+		}
 		index += snprintf(buf + index, ERR_MSG_BUF, "0x%02x=%02x,",
 			g_sc8547d_cp_status_reg[i], data);
 	}
@@ -3226,8 +3237,11 @@ static int sc8547d_cp_get_work_status(struct oplus_chg_ic_dev *ic_dev, bool *sta
 	return 0;
 }
 
-static int sc8547d_cp_adc_enable(struct oplus_chg_ic_dev *ic_dev, bool en)
+
+static int sc8547d_cp_get_adc_enable(struct  oplus_chg_ic_dev *ic_dev, bool *status)
 {
+	int ret = 0;
+	u8 data;
 	struct sc8547d_device *chip;
 
 	if (ic_dev == NULL) {
@@ -3235,10 +3249,39 @@ static int sc8547d_cp_adc_enable(struct oplus_chg_ic_dev *ic_dev, bool en)
 		return -ENODEV;
 	}
 	chip = oplus_chg_ic_get_priv_data(ic_dev);
+	if (!chip) {
+		chg_err("Failed\n");
+		return -ENODEV;
+	}
 
-	return sc8547_set_adc_enable(chip, en);
+	ret = sc8547_read_byte(chip->client, SC8547_REG_11, &data);
+	if (ret < 0) {
+		chg_err("read SC8547D_REG_11 failed, ret = %d\n", ret);
+		return ret;
+	}
 
-	return 0;
+	*status = (data >> 7) ? true : false;
+
+	return ret;
+}
+
+static int sc8547d_cp_adc_enable(struct oplus_chg_ic_dev *ic_dev, bool en)
+{
+	struct sc8547d_device *chip;
+	int ret = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_priv_data(ic_dev);
+
+	chg_debug("en = %d \n", en);
+	ret = sc8547_set_adc_enable(chip, en);
+	if (ret < 0)
+		chg_err("adc enable config failed\n");
+
+	return ret;
 }
 
 static int sc8547d_cp_watchdog_reset(struct oplus_chg_ic_dev *ic_dev)
@@ -3333,6 +3376,9 @@ static void *sc8547d_cp_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_chg
 		break;
 	case OPLUS_IC_FUNC_CP_SET_ADC_ENABLE:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_ADC_ENABLE, sc8547d_cp_adc_enable);
+		break;
+	case OPLUS_IC_FUNC_CP_GET_ADC_ENABLE:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_GET_ADC_ENABLE, sc8547d_cp_get_adc_enable);
 		break;
 	case OPLUS_IC_FUNC_CP_SET_UCP_DISABLE:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_UCP_DISABLE, sc8547d_cp_set_ucp_disable);

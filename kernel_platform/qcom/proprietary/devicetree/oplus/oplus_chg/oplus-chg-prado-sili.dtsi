@@ -28,7 +28,7 @@
 	deep_spec,support;
 	deep_spec,uv_thr = <2750>;
 	deep_spec,count_thr = <50>;
-	deep_spec,vbat_soc = <20>;
+	deep_spec,vbat_soc = <80>;
 	deep_spec,count_step = <0 10 0
 				350 12 1
 				450 15 2
@@ -49,14 +49,14 @@
 	deep_spec,ddbc_curve {
 			oplus,temp_type = <OPLUS_STRATEGY_USE_BATT_TEMP>;
 			oplus,temp_range = <(-100) 0 200>;
-			deep_spec,ddbc_temp_cold = <500 3310 5
-						   10000 3260 2>;
-			deep_spec,ddbc_temp_cool = <500 3310 5
-						   10000 3260 2>;
-			deep_spec,ddbc_temp_normal = <500 3310 5
-						   10000 3260 2>;
-			deep_spec,ddbc_temp_warm = <500 3310 5
-						   10000 3260 2>;
+			deep_spec,ddbc_temp_cold = <500 3250 5
+						   10000 3200 2>;
+			deep_spec,ddbc_temp_cool = <500 3250 5
+						   10000 3200 2>;
+			deep_spec,ddbc_temp_normal = <500 3250 5
+						   10000 3200 2>;
+			deep_spec,ddbc_temp_warm = <500 3250 5
+						   10000 3200 2>;
 	};
 	ddrc_strategy {
 		oplus,temp_type = <OPLUS_STRATEGY_USE_BATT_TEMP>;

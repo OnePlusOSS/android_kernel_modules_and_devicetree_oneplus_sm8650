@@ -6544,6 +6544,7 @@ int oplus_panel_vid_cmdp_handle(void *dsi_panel, enum dsi_cmd_set_type type)
 	case DSI_CMD_UIR_OFF_LOADING_EFFECT_MODE1:
 	case DSI_CMD_UIR_OFF_LOADING_EFFECT_MODE2:
 	case DSI_CMD_UIR_OFF_LOADING_EFFECT_MODE3:
+	case DSI_CMD_LHBM_PRESSED_ICON_ON:
 		dsi_cmd_set_type_status = 0;
 		panel->oplus_priv.dsi_cmd_need_to_package = false;
 	break;

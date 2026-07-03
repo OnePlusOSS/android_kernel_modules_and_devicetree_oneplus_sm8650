@@ -65,6 +65,8 @@ struct spi_bus {
 #else
 	struct spi_geni_qcom_ctrl_data delay_params;
 #endif
+	wait_queue_head_t spi_wait;
+	int irq_need_dev_resume_time; /*control setting of wait resume time*/
 };
 
 extern int hw_interface_init(void);

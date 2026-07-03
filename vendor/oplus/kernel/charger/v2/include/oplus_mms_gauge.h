@@ -200,6 +200,7 @@ int oplus_gauge_get_batt_capacity_mah(struct oplus_mms *topic);
 
 int oplus_gauge_get_dod0(struct oplus_mms *mms, int index, int *val);
 int oplus_gauge_get_dod0_passed_q(struct oplus_mms *mms, int index, int *val);
+int oplus_gauge_get_car_c(struct oplus_mms *mms, int index, int *val);
 int oplus_gauge_get_qmax(struct oplus_mms *mms, int index, int *val);
 int oplus_gauge_get_qmax_passed_q(struct oplus_mms *mms, int index, int *val);
 int oplus_gauge_get_volt(struct oplus_mms *mms, int index, int *val);

@@ -695,8 +695,7 @@ int32_t oplus_cam_actuator_lock(struct cam_actuator_ctrl_t *a_ctrl)
 		{
 			a_ctrl->io_master_info.cci_client->sid = (0x32 >> 1);
 		}
-		else if(strstr(a_ctrl->actuator_name, "dw9800"))
-		{
+		else if(strstr(a_ctrl->actuator_name, "dw9800")){
 			a_ctrl->io_master_info.cci_client->sid = (DW9800_SLAVE_ADDR >> 1);
 		}
 		else
@@ -769,8 +768,7 @@ int32_t oplus_cam_actuator_lock(struct cam_actuator_ctrl_t *a_ctrl)
 			rc = oplus_cam_actuator_ram_read_word(a_ctrl, 0xB020,&data);
 			CAM_ERR(CAM_ACTUATOR, "SDS get reg: 0xB020, data = 0x%x rc= %d", data,rc);
 		}
-		else if (strstr(a_ctrl->actuator_name, "dw9800"))
-		{
+		else if (strstr(a_ctrl->actuator_name, "dw9800")){
 			uint32_t temp_value = 0;
 			rc = oplus_cam_actuator_ram_write(a_ctrl, 0x02, 0x01);
 			CAM_DBG(CAM_ACTUATOR, "SDS set reg: 0x02, data: 0x01, rc = %d", rc);
@@ -784,16 +782,16 @@ int32_t oplus_cam_actuator_lock(struct cam_actuator_ctrl_t *a_ctrl)
 			CAM_DBG(CAM_ACTUATOR, "SDS set reg: 0x07, data: 0x05, rc = %d", rc);
 			msleep(1);
 			rc = oplus_cam_actuator_ram_read(a_ctrl, 0x05, &temp_value);
-			CAM_DBG(CAM_ACTUATOR, "SDS read addr 0x05 = %d rc=%d", temp_value,rc);
+			CAM_DBG(CAM_ACTUATOR, "SDS read addr 0x05 = %d rc=%d", temp_value, rc);
 			temp_value = 1023;
 			rc = oplus_cam_actuator_ram_write(a_ctrl, 0x03, (temp_value >> 8) & 0x3);
-			CAM_DBG(CAM_ACTUATOR, "SDS set reg: 0x03, data: 0x%x, rc = %d",(temp_value >> 8) & 0x3, rc);
+			CAM_DBG(CAM_ACTUATOR, "SDS set reg: 0x03, data: 0x%x, rc = %d", (temp_value >> 8) & 0x3, rc);
 			rc = oplus_cam_actuator_ram_write(a_ctrl, 0x04, (temp_value & 0xFF));
-			CAM_DBG(CAM_ACTUATOR, "SDS set reg: 0x04, data: 0x%x, rc = %d",(temp_value & 0xFF), rc);
+			CAM_DBG(CAM_ACTUATOR, "SDS set reg: 0x04, data: 0x%x, rc = %d", (temp_value & 0xFF), rc);
 			rc = oplus_cam_actuator_ram_read(a_ctrl, 0x03, &temp_value);
-			CAM_DBG(CAM_ACTUATOR, "SDS dw9800 lock position ++ rc= %d read add 0x03= 0x%x", rc,temp_value);
+			CAM_DBG(CAM_ACTUATOR, "SDS dw9800 lock position ++ rc= %d read add 0x03= 0x%x", rc, temp_value);
 			rc = oplus_cam_actuator_ram_read(a_ctrl, 0x04, &temp_value);
-			CAM_DBG(CAM_ACTUATOR, "SDS dw9800 lock position ++ rc= %d read add 0x04= 0x%x", rc,temp_value);
+			CAM_DBG(CAM_ACTUATOR, "SDS dw9800 lock position ++ rc= %d read add 0x04= 0x%x", rc, temp_value);
 		}
 		else
 		{

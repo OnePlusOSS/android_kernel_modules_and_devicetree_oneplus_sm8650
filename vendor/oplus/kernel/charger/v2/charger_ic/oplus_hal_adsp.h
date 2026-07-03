@@ -116,6 +116,7 @@
 #define UFCS_EXIT_MODE_NOTIFY		0X7e
 #define PD_CONNECT_HARD_RESET		0x7f
 #define GAUGE_INITED			0X90
+#define PD_PPS_CHECK_COMPLETED		0x91
 #endif
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
@@ -384,6 +385,7 @@ enum usb_property_id {
 	USB_REVERSE_CHG_SET_VOLT,
 	USB_REVERSE_CHG_SET_CURRENT,
 	USB_RVS_HIGH_MODE_EN,
+	USB_SET_WIRED_USB_STATUS,
 #endif /*OPLUS_FEATURE_CHG_BASIC*/
 	USB_PROP_MAX,
 };
@@ -688,6 +690,8 @@ struct battery_chg_dev {
 	struct oplus_mms		*err_topic;
 	struct oplus_mms		*plc_topic;
 	struct mms_subscribe		*plc_subs;
+	struct oplus_mms		*wired_topic;
+	struct mms_subscribe		*wired_subs;
 	struct votable			*chg_disable_votable;
 	struct mutex			chg_en_lock;
 	bool 				    chg_en;
