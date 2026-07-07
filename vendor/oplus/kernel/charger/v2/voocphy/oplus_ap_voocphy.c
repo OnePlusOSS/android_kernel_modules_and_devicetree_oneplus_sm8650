@@ -939,6 +939,19 @@ static bool oplus_voocphy_set_fastchg_state(struct oplus_voocphy_manager *chip,
 	return true;
 }
 
+static void oplus_voocphy_reset_vbus_adjust_var(struct oplus_voocphy_manager *chip)
+{
+	if (!chip) {
+		voocphy_info("oplus_voocphy_reset_vbus_adjust_var chip null!\n");
+		return;
+	}
+
+	chip->vbus_adjust_done = false;
+	chip->in_vbus_adjust_trans = false;
+	chip->vbus_adjust_hold_cnt = 0;
+	chip->last_vooc_vbus_status = VOOC_VBUS_UNKNOW;
+}
+
 static int oplus_voocphy_reset_variables(struct oplus_voocphy_manager *chip)
 {
 	int status = VOOCPHY_SUCCESS;
@@ -949,10 +962,7 @@ static int oplus_voocphy_reset_variables(struct oplus_voocphy_manager *chip)
 		return VOOCPHY_EFATAL;
 	}
 
-	chip->vbus_adjust_done = false;
-	chip->in_vbus_adjust_trans = false;
-	chip->vbus_adjust_hold_cnt = 0;
-	chip->last_vooc_vbus_status = VOOC_VBUS_UNKNOW;
+	oplus_voocphy_reset_vbus_adjust_var(chip);
 
 	chip->allow_current_pcc_ctrl = false;
 	chip->current_pcc = 0;
@@ -2947,76 +2957,89 @@ static void oplus_voocphy_eis_switch_charger_state(struct oplus_voocphy_manager 
 		(eis_status == EIS_STATUS_DISABLE)) {
 		voocphy_info("<EIS> disable charger input, fastchg_start[%d]\n",
 			chip->fastchg_start);
+		oplus_voocphy_reset_vbus_adjust_var(chip);
 		if (chip->fastchg_start)
 			oplus_chglib_suspend_charger(true);
 		chip->eis_status = EIS_STATUS_DISABLE;
 	}
 }
 
-static int oplus_voocphy_handle_eis_process(struct oplus_voocphy_manager *chip)
+static int oplus_voocphy_eis_process_high_current(struct oplus_voocphy_manager *chip)
 {
-	int status = VOOCPHY_SUCCESS;
-	int eis_status = EIS_STATUS_DISABLE;
-
-	eis_status = oplus_chglib_get_eis_status(chip->dev);
-	if (eis_status == EIS_STATUS_HIGH_CURRENT) {
-		if (chip->eis_vbus > EIS_ADAPTER_VBUS_VOLT_MAX)
-			oplus_voocphy_write_mesg_mask(TX0_DET_BIT4_MASK,
+	if (chip->eis_vbus > EIS_ADAPTER_VBUS_VOLT_MAX)
+		oplus_voocphy_write_mesg_mask(TX0_DET_BIT4_MASK,
 						&chip->voocphy_tx_buff[0], BIT_ACTIVE);
-		else
-			oplus_voocphy_write_mesg_mask(TX0_DET_BIT5_MASK,
+	else
+		oplus_voocphy_write_mesg_mask(TX0_DET_BIT5_MASK,
 						&chip->voocphy_tx_buff[0], BIT_ACTIVE);
 
-		if (chip->copycat_vooc_support) {
-			if (chip->eis_vbus <= EIS_ADAPTER_VBUS_VOLT_MIN) {
-				chip->eis_copycat_detect_cnt++;
-				if (chip->eis_copycat_detect_cnt > SVOOC_MAX_IS_VBUS_OK_CMD_CNT) {
-					chip->adapter_is_vbus_ok_count = SVOOC_MAX_IS_VBUS_OK_CMD_CNT;
-					voocphy_info("<EIS>adapter is copycat\n");
-					return VOOCPHY_EUNSUPPORTED;
-				}
-			} else {
-				chip->eis_copycat_detect_cnt = 0;
+	if (chip->copycat_vooc_support) {
+		if (chip->eis_vbus <= EIS_ADAPTER_VBUS_VOLT_MIN) {
+			chip->eis_copycat_detect_cnt++;
+			if (chip->eis_copycat_detect_cnt > SVOOC_MAX_IS_VBUS_OK_CMD_CNT) {
+				chip->adapter_is_vbus_ok_count = SVOOC_MAX_IS_VBUS_OK_CMD_CNT;
+				voocphy_info("<EIS>adapter is copycat\n");
+				return VOOCPHY_EUNSUPPORTED;
 			}
-
-			if (chip->adapter_is_vbus_ok_count < 3)
-				chip->adapter_is_vbus_ok_count++;
-		}
-
-		chip->eis_status = EIS_STATUS_HIGH_CURRENT;
-		voocphy_info("<EIS> eis_high_status, vbus[%d]\n", chip->eis_vbus);
-	} else {
-		status = oplus_voocphy_vbus_vbatt_detect(chip);
-		voocphy_info("<EIS> eis_status[%d], chip->eis_status[%d], vbus_status[%d]\n",
-			eis_status, chip->eis_status, status);
-
-		if (chip->vooc_vbus_status == VOOC_VBUS_HIGH) {
-			oplus_voocphy_write_mesg_mask(TX0_DET_BIT4_MASK,
-						&chip->voocphy_tx_buff[0], BIT_ACTIVE);
-		} else if (chip->vooc_vbus_status == VOOC_VBUS_LOW) {
-			oplus_voocphy_write_mesg_mask(TX0_DET_BIT5_MASK,
-						&chip->voocphy_tx_buff[0], BIT_ACTIVE);
 		} else {
-			if (eis_status == EIS_STATUS_DISABLE) {
-				oplus_voocphy_write_mesg_mask(TX0_DET_BIT4_MASK,
-							&chip->voocphy_tx_buff[0], BIT_ACTIVE);
-
-				voocphy_info("<EIS> exit for eis_status[%d]\n", eis_status);
-				chip->eis_status = EIS_STATUS_DISABLE;
-				oplus_chglib_suspend_charger(true);
-				if (chip->copycat_vooc_support == true)
-					chip->adapter_is_vbus_ok_count++;
-				return VOOCPHY_SUCCESS;
-			} else {
-				oplus_voocphy_write_mesg_mask(TX0_DET_BIT5_MASK,
-							&chip->voocphy_tx_buff[0], BIT_ACTIVE);
-			}
+			chip->eis_copycat_detect_cnt = 0;
 		}
 
-		oplus_voocphy_eis_switch_charger_state(chip, eis_status);
+		if (chip->adapter_is_vbus_ok_count < 3)
+			chip->adapter_is_vbus_ok_count++;
 	}
 
+	chip->eis_status = EIS_STATUS_HIGH_CURRENT;
+	voocphy_info("<EIS> eis_high_status, vbus[%d]\n", chip->eis_vbus);
+	return VOOCPHY_SUCCESS;
+}
+
+static int oplus_voocphy_eis_process_other_status(struct oplus_voocphy_manager *chip,
+						  int eis_status)
+{
+	int status = VOOCPHY_SUCCESS;
+
+	status = oplus_voocphy_vbus_vbatt_detect(chip);
+	voocphy_info("<EIS> eis_status[%d], chip->eis_status[%d], vbus_status[%d]\n",
+		eis_status, chip->eis_status, status);
+
+	if (chip->vooc_vbus_status == VOOC_VBUS_HIGH) {
+		oplus_voocphy_write_mesg_mask(TX0_DET_BIT4_MASK,
+					&chip->voocphy_tx_buff[0], BIT_ACTIVE);
+	} else if (chip->vooc_vbus_status == VOOC_VBUS_LOW) {
+		oplus_voocphy_write_mesg_mask(TX0_DET_BIT5_MASK,
+					&chip->voocphy_tx_buff[0], BIT_ACTIVE);
+	} else {
+		if (eis_status == EIS_STATUS_DISABLE) {
+			oplus_voocphy_write_mesg_mask(TX0_DET_BIT4_MASK,
+						&chip->voocphy_tx_buff[0], BIT_ACTIVE);
+
+			voocphy_info("<EIS> exit for eis_status[%d]\n", eis_status);
+			oplus_voocphy_reset_vbus_adjust_var(chip);
+			chip->eis_status = EIS_STATUS_DISABLE;
+			oplus_chglib_suspend_charger(true);
+			if (chip->copycat_vooc_support == true)
+				chip->adapter_is_vbus_ok_count++;
+			return VOOCPHY_SUCCESS;
+		} else {
+			oplus_voocphy_write_mesg_mask(TX0_DET_BIT5_MASK,
+						&chip->voocphy_tx_buff[0], BIT_ACTIVE);
+		}
+	}
+
+	oplus_voocphy_eis_switch_charger_state(chip, eis_status);
 	return status;
+}
+
+static int oplus_voocphy_handle_eis_process(struct oplus_voocphy_manager *chip)
+{
+	int eis_status;
+
+	oplus_voocphy_reset_vbus_adjust_var(chip);
+	eis_status = oplus_chglib_get_eis_status(chip->dev);
+	if (eis_status == EIS_STATUS_HIGH_CURRENT)
+		return oplus_voocphy_eis_process_high_current(chip);
+	return oplus_voocphy_eis_process_other_status(chip, eis_status);
 }
 
 static int oplus_voocphy_handle_is_vbus_ok_cmd(struct oplus_voocphy_manager *chip)
@@ -7388,10 +7411,7 @@ static int oplus_voocphy_variables_init(struct oplus_voocphy_manager *chip)
 {
 	int status = VOOCPHY_SUCCESS;
 
-	chip->vbus_adjust_done = false;
-	chip->in_vbus_adjust_trans = false;
-	chip->vbus_adjust_hold_cnt = 0;
-	chip->last_vooc_vbus_status = VOOC_VBUS_UNKNOW;
+	oplus_voocphy_reset_vbus_adjust_var(chip);
 
 	chip->voocphy_rx_buff = 0;
 	chip->voocphy_tx_buff[0] = 0;

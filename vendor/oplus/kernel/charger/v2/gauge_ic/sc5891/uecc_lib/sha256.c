@@ -94,7 +94,7 @@ static void sha256_transform(struct sha256_ctx_t *s, const uint8_t *buf)
 	s->h[7] += h;
 } /* sha256_transform */
 
-void sha256_init(struct sha256_ctx_t *s)
+static void sha256_init(struct sha256_ctx_t *s)
 {
 	s->len = 0;
 

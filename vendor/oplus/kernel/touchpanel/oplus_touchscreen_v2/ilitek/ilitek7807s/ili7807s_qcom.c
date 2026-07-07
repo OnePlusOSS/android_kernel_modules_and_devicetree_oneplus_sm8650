@@ -1493,7 +1493,7 @@ void ili_report_ap_mode(u8 *buf, int len)
 		ILI_DBG("original x = %d, y = %d p = %d\n", xop, yop, touch_major);
 	}
 
-	if (ilits->chip->support_driver_ver > DRIVER_VER_2080) {
+	if (ilits->ts->ili_use_new_driver_version && ilits->chip->support_driver_ver == DRIVER_VER_2090) {
 		ilits->normal_mode = buf[ilits->tp_data_len - ILI_MODE_BYTE] & 0x01;
 		ilits->glove_mode = (buf[ilits->tp_data_len - ILI_MODE_BYTE] & 0x04) >> 2;
 		ilits->water_flag = (buf[ilits->tp_data_len - ILI_WATER_FLAG_BYTE] & 0x10) >> 4;
@@ -1524,7 +1524,7 @@ void ili_report_ap_mode(u8 *buf, int len)
 	}
 
 	ilitek_tddi_touch_send_debug_data(buf, len);
-	if (ilits->chip->support_driver_ver > DRIVER_VER_2080 && ilits->position_high_resolution == ON) {
+	if (ilits->ts->ili_use_new_driver_version && ilits->chip->support_driver_ver == DRIVER_VER_2090 && ilits->position_high_resolution == ON) {
 		if (((buf[len - ILI_THR_BASELIE_BTYE]&0x04) >> 2) == 1) {
 			if (ili_set_tp_data_len(DATA_FORMAT_DEBUG, false, NULL) < 0) {
 				ILI_ERR("Failed to switch debug mode\n");
@@ -1630,7 +1630,7 @@ void ili_debug_mode_report_point(u8 *buf, int len)
 			ILI_DBG("original x = %d, y = %d p = %d\n", xop, yop, p[i]);
 		}
 	}
-	if ((ilits->chip->support_driver_ver > DRIVER_VER_2080) && ilits->switch_for_report) {
+	if (ilits->ts->ili_use_new_driver_version && ilits->chip->support_driver_ver == DRIVER_VER_2090 && ilits->switch_for_report) {
 		ilitek_get_rawdata();
 		if (ili_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL) < 0) {
 			ILI_ERR("Failed to switch demo mode\n");
@@ -1640,7 +1640,7 @@ void ili_debug_mode_report_point(u8 *buf, int len)
 
 void ili_report_debug_mode(u8 *buf, int len)
 {
-	if (ilits->chip->support_driver_ver > DRIVER_VER_2080) {
+	if (ilits->ts->ili_use_new_driver_version && ilits->chip->support_driver_ver == DRIVER_VER_2090) {
 		ilits->normal_mode = buf[ilits->tp_data_len - ILI_MODE_BYTE] & 0x01;
 		ilits->glove_mode = (buf[ilits->tp_data_len - ILI_MODE_BYTE] & 0x04) >> 2;
 		ilits->water_flag = (buf[ilits->tp_data_len - ILI_WATER_FLAG_BYTE] & 0x10) >> 4;

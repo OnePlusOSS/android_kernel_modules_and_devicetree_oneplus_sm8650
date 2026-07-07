@@ -51,6 +51,7 @@
 #define BC12_RE_CHECK_MS		msecs_to_jiffies(50)
 #define BC12_HW_DET_CNT_MAX		10
 #define PLUGOUT_VBUS_TH_MV		3000
+#define BC12_COMPLETE_COMP_CHECK_MS	1000
 
 #define POWER_SUPPLY_TYPE_USB_HVDCP	13
 #define REG_MAX 0x0b
@@ -129,6 +130,7 @@ struct sgm41515_chip {
 	struct votable *wired_icl_votable;
 	struct work_struct rerun_votable_work;
 	struct tcpc_device *tcpc;
+	struct completion bc12_complete_comp;
 };
 
 enum {
@@ -773,7 +775,7 @@ static void sgm41515_rerun_votable_work(struct work_struct *work)
 		rerun_election(chip->wired_icl_votable, true);
 }
 
-#define OPLUS_BC12_RETRY_CNT 	1
+#define OPLUS_BC12_RETRY_CNT 	2
 static bool sgm41515_bc12_try_retry(struct sgm41515_chip *chip)
 {
 	if (chip->bc12_retried < OPLUS_BC12_RETRY_CNT) {
@@ -793,6 +795,7 @@ static void sgm41515_bc12_complete_check(struct sgm41515_chip *chip, int charger
 	}
 
 	if (chip->bc12_complete) {
+		complete_all(&chip->bc12_complete_comp);
 		schedule_work(&chip->rerun_votable_work);
 
 #ifdef CONFIG_OPLUS_CHARGER_MTK
@@ -1044,6 +1047,7 @@ static void sgm41515_plug_out_event_handle(struct sgm41515_chip *chip)
 	sgm41515_set_wdt_timer(chip, REG05_SGM41515_WATCHDOG_TIMER_DISABLE);
 	oplus_chg_ic_virq_trigger(chip->ic_dev, OPLUS_IC_VIRQ_PLUGIN);
 	chip->bc12_complete = false;
+	reinit_completion(&chip->bc12_complete_comp);
 	chip->bc12_retried = 0;
 	chip->bc12_delay_cnt = 0;
 	chip->charge_type = POWER_SUPPLY_TYPE_UNKNOWN;
@@ -1058,6 +1062,7 @@ static void sgm41515_no_plug_event_handle(struct sgm41515_chip *chip)
 {
 	chg_err("prev_pg & now_pg is false\n");
 	chip->bc12_complete = false;
+	reinit_completion(&chip->bc12_complete_comp);
 	chip->bc12_retried = 0;
 	chip->bc12_delay_cnt = 0;
 }
@@ -1786,8 +1791,8 @@ static int sgm41515_suspend_charger(struct sgm41515_chip *chip)
 
 	atomic_set(&chip->is_suspended, 1);
 
-	rc = sgm41515_disable_charging(chip);
-	rc = sgm41515_input_current_limit_without_aicl(chip, 100);
+	rc |= sgm41515_disable_charging(chip);
+	rc |= sgm41515_enable_hiz_mode(chip, true);
 
 	return rc;
 }
@@ -1803,7 +1808,8 @@ static int sgm41515_unsuspend_charger(struct sgm41515_chip *chip)
 		return 0;
 
 	atomic_set(&chip->is_suspended, 0);
-	rc = sgm41515_enable_charging(chip);
+	rc |= sgm41515_enable_charging(chip);
+	rc |= sgm41515_enable_hiz_mode(chip, false);
 
 	return rc;
 }
@@ -1826,6 +1832,8 @@ static int sgm41515_input_suspend(struct oplus_chg_ic_dev *ic_dev, bool suspend)
 		return 0;
 
 	if (suspend) {
+		if (!wait_for_completion_timeout(&chip->bc12_complete_comp, msecs_to_jiffies(BC12_COMPLETE_COMP_CHECK_MS)))
+			chg_err("bc12 completion timeout, proceed suspend anyway\n");
 		rc = sgm41515_suspend_charger(chip);
 	} else {
 		rc = sgm41515_unsuspend_charger(chip);
@@ -2459,6 +2467,7 @@ static int sgm41515_rerun_bc12(struct oplus_chg_ic_dev *ic_dev)
 	chip->bc12_retry = true;
 	chip->auto_bc12 = false;
 	chip->bc12_complete = false;
+	reinit_completion(&chip->bc12_complete_comp);
 	rc = sgm41515_enable_hiz_mode(chip, false);
 	if (rc < 0) {
 		chg_err("can't disable hiz mode, rc=%d\n", rc);
@@ -3787,6 +3796,12 @@ static void sgm41515_work_init(struct sgm41515_chip *chip)
 	INIT_DELAYED_WORK(&chip->vbus_check_work, sgm41515_vbus_check_work);
 }
 
+static void sgm41515_completion_init(struct sgm41515_chip *chip)
+{
+	init_completion(&chip->bc12_complete_comp);
+	reinit_completion(&chip->bc12_complete_comp);
+}
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
 static int sgm41515_driver_probe(struct i2c_client *client)
 #else
@@ -3815,6 +3830,7 @@ static int sgm41515_driver_probe(struct i2c_client *client,
 	mutex_init(&chip->dpdm_lock);
 	mutex_init(&chip->pinctrl_lock);
 	sgm41515_work_init(chip);
+	sgm41515_completion_init(chip);
 
 	chip->dpdm_reg = devm_regulator_get_optional(chip->dev, "dpdm");
 	if (IS_ERR(chip->dpdm_reg)) {

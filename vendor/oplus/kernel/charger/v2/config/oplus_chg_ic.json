@@ -1385,14 +1385,14 @@
                     "desc": {
                         "zh": "CP 供电异常"
                     },
-                    "str": "err_powe_ng"
+                    "str": "err_cp_power_ng"
                 },
                 {
                     "lable": "TRACK_CP_ERR_VOUT_REVERSE",
                     "desc": {
                         "zh": "CP 反充电压异常"
                     },
-                    "str": "err_vout_reverse"
+                    "str": "err_cp_vout_reverse"
                 }
             ]
         },

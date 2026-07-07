@@ -2282,13 +2282,9 @@ static int oplus_wired_ccdetect_enable(struct oplus_mms_wired *chip, bool en)
 
 	if (!oplus_wired_ccdetect_is_support())
 		return 0;
-	if (!!chip->reverse_topic) {
-		rc = oplus_chg_ic_func(chip->buck_ic, OPLUS_IC_FUNC_SET_TYPEC_MODE,
-			en ? TYPEC_PORT_ROLE_DRP : TYPEC_PORT_ROLE_SNK);
-	} else {
-		rc = oplus_chg_ic_func(chip->buck_ic, OPLUS_IC_FUNC_SET_TYPEC_MODE,
-			en ? TYPEC_PORT_ROLE_TRY_SNK : TYPEC_PORT_ROLE_SNK);
-	}
+
+	rc = oplus_chg_ic_func(chip->buck_ic, OPLUS_IC_FUNC_SET_TYPEC_MODE,
+		en ? TYPEC_PORT_ROLE_TRY_SNK : TYPEC_PORT_ROLE_SNK);
 	if (rc < 0)
 		chg_err("%s ccdetect error, rc=%d\n",
 			en ? "enable" : "disable", rc);
@@ -6748,6 +6744,7 @@ static int oplus_mms_wired_topic_init(struct oplus_mms_wired *chip)
 			mms_cfg.update_interval = 0;
 	}
 
+	chip->wired_online = oplus_wired_is_present();
 	chip->wired_topic = devm_oplus_mms_register(chip->dev, &oplus_mms_wired_desc, &mms_cfg);
 	if (IS_ERR(chip->wired_topic)) {
 		chg_err("Couldn't register wired topic\n");
