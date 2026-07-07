@@ -931,20 +931,27 @@ void dp_rx_monitor_callback(ol_osif_vdev_handle context,
 
 /**
  * dp_is_rx_wake_lock_needed() - check if wake lock is needed
+ * @dp_intf: dp interface
  * @nbuf: pointer to sk_buff
+ * @is_arp_req: ARP request packet
  *
  * RX wake lock is needed for:
- * 1) Unicast data packet OR
- * 2) Local ARP data packet
+ * 1) Local ARP data packet
+ * 2) Unicast data packet
  *
  * Return: true if wake lock is needed or false otherwise.
  */
-static bool dp_is_rx_wake_lock_needed(qdf_nbuf_t nbuf)
+static bool dp_is_rx_wake_lock_needed(struct wlan_dp_intf *dp_intf,
+				      qdf_nbuf_t nbuf, bool is_arp_req)
 {
-	if ((!qdf_nbuf_pkt_type_is_mcast(nbuf) &&
-	     !qdf_nbuf_pkt_type_is_bcast(nbuf)) ||
-	    qdf_nbuf_is_arp_local(nbuf))
+	/* Take wake lock for local ARP request packet */
+	if (qdf_unlikely(is_arp_req)) {
+		if (qdf_nbuf_is_arp_local(nbuf, dp_intf->ipv4_addr))
+			return true;
+	} else if (qdf_likely(!qdf_nbuf_pkt_type_is_mcast(nbuf) &&
+			      !qdf_nbuf_pkt_type_is_bcast(nbuf))) {
 		return true;
+	}
 
 	return false;
 }
@@ -1661,6 +1668,7 @@ QDF_STATUS dp_rx_packet_cbk(void *dp_link_context,
 	struct qdf_mac_addr *mac_addr, *dest_mac_addr;
 	bool wake_lock = false;
 	bool track_arp = false;
+	bool is_arp_req;
 	enum qdf_proto_subtype subtype = QDF_PROTO_INVALID;
 	bool is_eapol, send_over_nl;
 	bool is_dhcp;
@@ -1687,6 +1695,7 @@ QDF_STATUS dp_rx_packet_cbk(void *dp_link_context,
 		nbuf = next;
 		next = qdf_nbuf_next(nbuf);
 		qdf_nbuf_set_next(nbuf, NULL);
+		is_arp_req = false;
 		is_eapol = false;
 		is_dhcp = false;
 		send_over_nl = false;
@@ -1699,6 +1708,8 @@ QDF_STATUS dp_rx_packet_cbk(void *dp_link_context,
 					rx_arp_rsp_count;
 				dp_debug("ARP packet received");
 				track_arp = true;
+			} else if (qdf_nbuf_data_is_arp_req(nbuf)) {
+				is_arp_req = true;
 			}
 		} else if (qdf_nbuf_is_ipv4_eapol_pkt(nbuf)) {
 			subtype = qdf_nbuf_get_eapol_subtype(nbuf);
@@ -1804,7 +1815,9 @@ QDF_STATUS dp_rx_packet_cbk(void *dp_link_context,
 		if (!dp_is_current_high_throughput(dp_ctx) &&
 		    dp_ctx->dp_cfg.rx_wakelock_timeout &&
 		    dp_link->conn_info.is_authenticated)
-			wake_lock = dp_is_rx_wake_lock_needed(nbuf);
+			wake_lock = dp_is_rx_wake_lock_needed(dp_intf,
+							      nbuf,
+							      is_arp_req);
 
 		if (wake_lock) {
 			cds_host_diag_log_work(&dp_ctx->rx_wake_lock,

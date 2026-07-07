@@ -499,14 +499,18 @@ static int ufcs_pr_handle_falling_adjust(struct oplus_ufcs *chip)
 		pr_data->adjust = false;
 		delay_ms = UFCS_PR_FAST_DELAY_MS;
 		if (chip->target_curr_ma != pr_data->target_current_ma) {
-			if (pr_data->falling_cc_adjust)
+			if (pr_data->falling_cc_adjust) {
+				ufcs_pr_set_pdo(chip, pr_data->adapter_vbus_mv, true);
 				ufcs_pr_set_pdo(chip, pr_data->adapter_vbus_mv, false);
+			}
 			pr_data->adjust = false;
 			ufcs_pr_set_state(chip, UFCS_PR_IDLE);
 			delay_ms = UFCS_PR_FAST_DELAY_MS;
 		} else if (pr_data->adapter_ibus_ma - UFCS_PR_FALLING_IBUS_TOLERANCE <= chip->target_curr_ma) {
-			if (pr_data->falling_cc_adjust)
+			if (pr_data->falling_cc_adjust) {
+				ufcs_pr_set_pdo(chip, pr_data->adapter_vbus_mv, true);
 				ufcs_pr_set_pdo(chip, pr_data->adapter_vbus_mv, false);
+			}
 			pr_data->adjust = false;
 			ufcs_pr_set_state(chip, UFCS_PR_CC);
 			pr_data->adjust_rising_cnt = 0;

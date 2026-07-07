@@ -142,12 +142,13 @@ static int sc5891_ic_get_romid(struct sc5891_device *chip, uint64_t *id);
 static void sc5891_pinctrl_avoid(struct sc5891_device *chip, bool locked)
 {
 	int rc = 0;
+	int i;
 	if (chip->sc5891_fault_mitigation == 1) {
 		if (locked) {
 			mutex_lock(&chip->pinctrl_lock);
 			pinctrl_select_state(chip->pinctrl, chip->pinctrl_default);
 			mutex_unlock(&chip->pinctrl_lock);
-			for (int i = 0; i < SC5891_PINCTRL_AVOID_RETRY_MAX; i++) {
+			for (i = 0; i < SC5891_PINCTRL_AVOID_RETRY_MAX; i++) {
 				rc = sc5891_ic_get_romid(chip, &chip->romid.value);
 				if (rc < 0) {
 					chg_err("get romid failed\n");

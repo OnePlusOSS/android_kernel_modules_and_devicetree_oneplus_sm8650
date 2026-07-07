@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -24,6 +24,7 @@
 #include "wlan_pmo_tgt_api.h"
 #include "wlan_pmo_main.h"
 #include "wlan_pmo_obj_mgmt_public_struct.h"
+#include "wlan_dp_ucfg_api.h"
 
 static QDF_STATUS pmo_core_cache_arp_in_vdev_priv(
 			struct pmo_arp_req *arp_req,
@@ -65,6 +66,8 @@ static QDF_STATUS pmo_core_cache_arp_in_vdev_priv(
 	qdf_mem_copy(&vdev_ctx->vdev_arp_req, request,
 		     sizeof(vdev_ctx->vdev_arp_req));
 	qdf_spin_unlock_bh(&vdev_ctx->pmo_vdev_lock);
+
+	ucfg_dp_set_ipv4_addr(vdev, request->host_ipv4_addr);
 
 	pmo_debug("cached arp offload; addr:" QDF_IPV4_ADDR_STR ", enable:%d",
 		  QDF_IPV4_ADDR_ARRAY(request->host_ipv4_addr),
