@@ -643,6 +643,37 @@ static int sc8517_set_chg_auto_mode(struct oplus_voocphy_manager *chip, bool ena
 	return ret;
 }
 
+static int sc8517_set_vac2v2x_uvp(struct oplus_voocphy_manager *chip, bool disable)
+{
+	int ret = 0;
+	u8 data = 0;
+
+	if (!chip) {
+		chg_err("chip is null\n");
+		return -1;
+	}
+
+	chg_info("disable = %d\n", disable);
+
+	if (disable)
+		ret |= sc8517_update_bits(chip->client, SC8517_REG_7D,
+				 SC8517_CHG_DIS_VAC2V2X_UV_MASK,
+				 SC8517_CHG_DIS_VAC2V2X_UV_DIS << SC8517_CHG_DIS_VAC2V2X_UV_SHIFT);
+	else
+		ret |= sc8517_update_bits(chip->client, SC8517_REG_7D,
+				 SC8517_CHG_DIS_VAC2V2X_UV_MASK,
+				 SC8517_CHG_DIS_VAC2V2X_UV_EN << SC8517_CHG_DIS_VAC2V2X_UV_SHIFT);
+
+	if (ret < 0) {
+		chg_err("failed to %s set vac2v2x uvp\n", disable ? "disable" : "enable");
+	} else {
+		sc8517_read_byte(chip->client, SC8517_REG_7D, &data);
+		chg_info("SC8517_REG_7D  0x%x\n", data);
+	}
+
+	return ret;
+}
+
 static void sc8517_set_pd_svooc_config(struct oplus_voocphy_manager *chip, bool enable)
 {
 	if (!chip) {
@@ -1158,6 +1189,7 @@ static struct oplus_voocphy_operations oplus_sc8517_ops = {
 	.check_cp_int_happened	= sc8517_check_cp_int_happened,
 	.upload_cp_error	= sc8517_track_upload_cp_err_info,
 	.get_cp_error_type	= sc8517_get_cp_error_type,
+	.cp_set_vac2v2x_uvp	= sc8517_set_vac2v2x_uvp,
 };
 
 static irqreturn_t sc8517_interrupt_handler(int irq, void *dev_id)
@@ -1781,6 +1813,7 @@ static int sc8517_charger_probe(struct i2c_client *client,
 
 	sc8517_dump_registers(voocphy);
 	register_voocphy_devinfo();
+	sc8517_set_vac2v2x_uvp(voocphy, false);
 	chg_info("sc8517(%s) probe successfully\n", chip->dev->of_node->name);
 
 	return 0;
@@ -1808,6 +1841,9 @@ static void sc8517_charger_shutdown(struct i2c_client *client)
 	sc8517_write_byte(client, SC8517_REG_08, 0xA6);
 	/* Masked Pulse_filtered, RX_Start,Tx_Done,bit soft intflag */
 	sc8517_write_byte(client, SC8517_REG_29, 0x05);
+
+	sc8517_update_bits(client, SC8517_REG_7D, SC8517_CHG_DIS_VAC2V2X_UV_MASK,
+			    SC8517_CHG_DIS_VAC2V2X_UV_EN << SC8517_CHG_DIS_VAC2V2X_UV_SHIFT);
 
 	return;
 }

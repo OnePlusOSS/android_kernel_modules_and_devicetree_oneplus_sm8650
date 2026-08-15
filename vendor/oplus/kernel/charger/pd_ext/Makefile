@@ -12,6 +12,7 @@ obj-$(CONFIG_TCPC_RT1711H)		+= tcpc_rt1711h.o
 obj-$(CONFIG_TCPC_SGM7220)		+= tcpc_sgm7220.o
 obj-$(CONFIG_TCPC_AW35616)		+= tcpc_aw35616.o
 obj-$(CONFIG_TCPC_UPM7610)		+= tcpc_upm7610.o
+obj-$(CONFIG_TCPC_CPS8851)		+= tcpc_cps8851.o
 
 tcpc_class-objs := tcpci_core.o tcpci_typec.o tcpci_timer.o tcpm.o tcpci.o tcpci_alert.o
 

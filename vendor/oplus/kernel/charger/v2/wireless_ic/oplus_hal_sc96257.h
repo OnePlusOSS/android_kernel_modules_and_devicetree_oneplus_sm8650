@@ -187,6 +187,7 @@ enum {
 #define AP_CMD_TX_PING_OCP_CHANGE	BIT(26)
 #define AP_CMD_TX_PING_OVP_CHANGE	BIT(27)
 #define AP_CMD_TX_OPEN_LOOP		BIT(28)
+#define AP_CMD_TX_ENABLE_WLSPEN		BIT(29)
 
 /***************mode**************/
 /*sys*/
@@ -270,6 +271,8 @@ enum {
 #define WP_IRQ_TX_READY			BIT(26)
 #define WP_IRQ_TX_AC_PRESENT		BIT(27)
 #define WP_IRQ_TX_VAC_PRESENT		BIT(28)
+#define WP_IRQ_TX_BLE_MAC_ADDR		BIT(30)
+#define WP_IRQ_TX_WLSPEN_CHG_STATUS	BIT(31)
 
 /**************ept reason*************/
 enum ept_reason_e {

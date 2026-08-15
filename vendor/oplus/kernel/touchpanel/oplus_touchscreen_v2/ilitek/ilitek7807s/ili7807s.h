@@ -175,7 +175,7 @@ extern bool ili_debug_en;
 #define CORE_VER_1600               0x01060000
 #define CORE_VER_1700               0x01070000
 #define CORE_VER_2100               0x02010000
-#define DRIVER_VER_2080             0x02000800
+#define DRIVER_VER_2090             0x02000900
 #define MAX_HEX_FILE_SIZE           (256*K)
 #define ILI_FILE_HEADER             256
 #define DLM_START_ADDRESS           0x20610

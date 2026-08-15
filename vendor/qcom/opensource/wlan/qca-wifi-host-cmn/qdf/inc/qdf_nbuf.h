@@ -4643,6 +4643,7 @@ bool qdf_nbuf_is_ipv4_v6_pure_tcp_ack(qdf_nbuf_t buf)
 /**
  * qdf_nbuf_is_arp_local() - check if it is local or no local arp
  * @buf: Network buffer
+ * @local_ip: local IP address
  *
  * This func. checks whether packet is local or no local arp.
  *
@@ -4650,9 +4651,9 @@ bool qdf_nbuf_is_ipv4_v6_pure_tcp_ack(qdf_nbuf_t buf)
  *         FALSE if not
  */
 static inline
-bool qdf_nbuf_is_arp_local(qdf_nbuf_t buf)
+bool qdf_nbuf_is_arp_local(qdf_nbuf_t buf, uint8_t *local_ip)
 {
-	return __qdf_nbuf_is_arp_local(buf);
+	return __qdf_nbuf_is_arp_local(buf, local_ip);
 }
 
 /**

@@ -332,7 +332,7 @@ int oplus_chg_wls_rx_set_trx_enable(struct oplus_chg_ic_dev *rx_ic, bool en)
 	return rc;
 }
 
-int oplus_chg_wls_rx_set_trx_start(struct oplus_chg_ic_dev *rx_ic, bool start)
+int oplus_chg_wls_rx_set_trx_start(struct oplus_chg_ic_dev *rx_ic, enum oplus_chg_wls_tx_start_type start)
 {
 	int rc;
 
@@ -679,6 +679,70 @@ int oplus_chg_wls_rx_set_silent(struct oplus_chg_ic_dev *rx_ic)
 	rc = oplus_chg_ic_func(rx_ic, OPLUS_IC_FUNC_RX_SET_SILENT);
 	if (rc < 0 && rc != -ENOTSUPP)
 		chg_err("can't set silent, rc=%d\n", rc);
+
+	return rc;
+}
+
+int oplus_chg_wls_rx_get_ble_mac_addr(struct oplus_chg_ic_dev *rx_ic, u64 *mac_addr)
+{
+	int rc;
+
+	if (rx_ic == NULL) {
+		chg_err("rx_ic is NULL\n");
+		return -ENODEV;
+	}
+
+	rc = oplus_chg_ic_func(rx_ic, OPLUS_IC_FUNC_RX_GET_BLE_MAC_ADDR, mac_addr);
+	if (rc < 0 && rc != -ENOTSUPP)
+		chg_err("can't get mac_addr, rc=%d\n", rc);
+
+	return rc;
+}
+
+int oplus_chg_wls_rx_get_wlspen_id(struct oplus_chg_ic_dev *rx_ic, u8 *wlspen_id)
+{
+	int rc;
+
+	if (rx_ic == NULL) {
+		chg_err("rx_ic is NULL\n");
+		return -ENODEV;
+	}
+
+	rc = oplus_chg_ic_func(rx_ic, OPLUS_IC_FUNC_RX_GET_WLSPEN_ID, wlspen_id);
+	if (rc < 0 && rc != -ENOTSUPP)
+		chg_err("can't get wlspen_id, rc=%d\n", rc);
+
+	return rc;
+}
+
+int oplus_chg_wls_rx_get_wlspen_chg_status(struct oplus_chg_ic_dev *rx_ic, u8 *chg_status)
+{
+	int rc;
+
+	if (rx_ic == NULL) {
+		chg_err("rx_ic is NULL\n");
+		return -ENODEV;
+	}
+
+	rc = oplus_chg_ic_func(rx_ic, OPLUS_IC_FUNC_RX_GET_WLSPEN_CHG_STATUS, chg_status);
+	if (rc < 0 && rc != -ENOTSUPP)
+		chg_err("can't get chg_status, rc=%d\n", rc);
+
+	return rc;
+}
+
+int oplus_chg_wls_rx_get_ac_ov_flag(struct oplus_chg_ic_dev *rx_ic, int *ac_ov_flag)
+{
+	int rc;
+
+	if (rx_ic == NULL) {
+		chg_err("rx_ic is NULL\n");
+		return -ENODEV;
+	}
+
+	rc = oplus_chg_ic_func(rx_ic, OPLUS_IC_FUNC_RX_GET_AC_OV_FLAG, ac_ov_flag);
+	if (rc < 0 && rc != -ENOTSUPP)
+		chg_err("can't get ac_ov_flag, rc=%d\n", rc);
 
 	return rc;
 }

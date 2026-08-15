@@ -114,24 +114,11 @@ static void oplus_tcpc_complete_work(struct work_struct *data)
 static __init int tcpc_class_complete_init(void)
 {
 #ifdef OPLUS_FEATURE_CHG_BASIC
+//#ifdef CONFIG_QGKI
 	struct tcpc_device *tcpc_dev;
-#ifdef CONFIG_OPLUS_CHARGER_MTK
-	return 0;
-#else /* CONFIG_OPLUS_CHARGER_MTK */
 #ifndef OPLUS_CHG_SEPARATE_MUSE_TCPC
-#if (IS_ENABLED(CONFIG_OPLUS_CHG) && IS_ENABLED(CONFIG_OPLUS_CHG_V2))
-	struct device_node *node;
-
-	node = of_find_node_by_path("/soc/oplus_chg_core");
-	if (node == NULL)
-		return 0;
-	if (!of_property_read_bool(node, "oplus,chg_framework_v2"))
-		return 0;
-#else /* CONFIG_OPLUS_CHG_V2 */
 	return 0;
-#endif /* CONFIG_OPLUS_CHG_V2 */
-#endif /* OPLUS_CHG_SEPARATE_MUSE_TCPC */
-#endif /* CONFIG_OPLUS_CHARGER_MTK */
+#endif
 	pr_info("%s\n", __func__);
 	tcpc_dev = tcpc_dev_get_by_name("type_c_port0");
 
@@ -146,6 +133,7 @@ static __init int tcpc_class_complete_init(void)
 		class_for_each_device(tcpc_class, NULL, NULL,
 			__tcpc_class_complete_work);
 	}
+//#endif /* CONFIG_QGKI */
 #endif /* OPLUS_FEATURE_CHG_BASIC */
 	return 0;
 }

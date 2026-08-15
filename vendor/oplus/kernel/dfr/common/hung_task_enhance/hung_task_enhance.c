@@ -22,20 +22,6 @@
 #include <linux/sched/signal.h>
 #include <linux/version.h>
 #include <linux/string.h>
-#include <linux/sched.h>
-#include <linux/printk.h>
-#include <linux/uaccess.h>
-#include <linux/errno.h>
-#include <linux/proc_fs.h>
-#include <linux/seq_file.h>
-#include <linux/backing-dev.h>
-#include <linux/writeback.h>
-#include <linux/kallsyms.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
-#include <../drivers/soc/qcom/debug_symbol.h>
-#else
-#include <linux/android_debug_symbols.h>
-#endif
 
 #include "hung_task_enhance.h"
 #include "oplus_signal.h"
@@ -102,18 +88,6 @@ static long get_timestamp_ms(void)
 }
 #endif
 
-static struct proc_dir_entry *g_proc_oplus_hung_task_enhance;
-static bool g_hungtask_enhance_autosuspend_detect = true;
-//static bool g_hungtask_enhance_autosuspend_inject = false;
-//extern bool g_fs_writeback_autosuspend_inject;
-//extern bool get_g_fs_writeback_autosuspend_inject(void);
-//extern void set_g_fs_writeback_autosuspend_inject(bool);
-//extern void wb_wait_for_completion(struct wb_completion *done);
-
-static bool (*__get_g_fs_writeback_autosuspend_inject)(void);
-static void (*__set_g_fs_writeback_autosuspend_inject)(bool);
-static void (*__wb_wait_for_completion)(struct wb_completion *done);
-
 /* key process:zygote system_server surfaceflinger init vendor_init */
 static bool is_usersapce_key_process(struct task_struct *t)
 {
@@ -137,34 +111,9 @@ static bool is_usersapce_key_process(struct task_struct *t)
 		return true;
 	}
 #endif
-    //pr_err("autosuspend debug detect:%d, comm:%s\n", g_hungtask_enhance_autosuspend_detect, t->comm);
-    if ((g_hungtask_enhance_autosuspend_detect == true) && (!strcmp(t->comm, "autosuspend"))) {
-        /* wb_wait_for_completion */
-        unsigned long entries[32];
-        int nr_entries = stack_trace_save_tsk(t, entries, ARRAY_SIZE(entries), 0);
-		//pr_err("autosuspend debug nr_entries: %d, point: %lu\n", nr_entries, (unsigned long)__wb_wait_for_completion);
-#if 0
-        for (int i = 0; i < nr_entries; i++) {
-		    //pr_err("autosuspend debug entire: %lu\n", entries[i]);
-            if (entries[i] == (unsigned long)__wb_wait_for_completion) {
-				//pr_err("autosuspend debug return\n");
-                return true;
-            }
-        }
-#else
-		for (int i = 0; i < nr_entries; i++) {
-			char symname[KSYM_NAME_LEN];
-			sprint_symbol(symname, entries[i]); 
-			//pr_err("autosuspend debug symbol: %s\n", symname);
-			if (strstr(symname, "wb_wait_for_completion")) {
-				//pr_err("autosuspend debug return\n");
-				return true;
-			}
-}
-#endif
-	}
 	return false;
 }
+
 
 static bool is_ignore_process(struct task_struct *t)
 {
@@ -447,174 +396,6 @@ void io_block_panic(void *ignore, void *extra)
 }
 EXPORT_SYMBOL(io_block_panic);
 
-static ssize_t hungtask_autosuspend_detect_write(struct file *filp,
-	const char __user *ubuf, size_t cnt, loff_t *data)
-{
-	char buf[64];
-	int val = 0;
-	int ret = 0;
-
-	if (cnt >= sizeof(buf)) {
-		return -EINVAL;
-	}
-	if (copy_from_user(&buf, ubuf, cnt)) {
-		return -EFAULT;
-	}
-	buf[cnt] = 0;
-	ret = kstrtoint(buf, 0, (int *)&val);
-	if (ret < 0) {
-		return ret;
-	}
-
-	if (!!val) {
-		pr_info("hungtask autosuspend enable");
-		g_hungtask_enhance_autosuspend_detect = true;
-	}
-	else if (!val) {
-		pr_info("hungtask autosuspend disable");
-		g_hungtask_enhance_autosuspend_detect = false;
-	}
-
-	return cnt;
-}
-
-static int hungtask_autosuspend_detect_show(struct seq_file *s, void *data)
-{
-	if (g_hungtask_enhance_autosuspend_detect == true)
-		seq_printf(s, "%s\n", "true");
-	else if (g_hungtask_enhance_autosuspend_detect == false)
-		seq_printf(s, "%s\n", "false");
-	else
-		seq_printf(s, "%s\n", "other");
-
-	return 0;
-}
-
-static int hungtask_autosuspend_detect_open(struct inode *inodp, struct file *filp)
-{
-	return single_open(filp, hungtask_autosuspend_detect_show, inodp);
-}
-
-static struct proc_ops hungtask_autosuspend_detect_fops = {
-	.proc_open = hungtask_autosuspend_detect_open,
-	.proc_read = seq_read,
-	.proc_write = hungtask_autosuspend_detect_write,
-	.proc_lseek = seq_lseek,
-	.proc_release = single_release,
-};
-
-static ssize_t hungtask_autosuspend_inject_write(struct file *filp,
-	const char __user *ubuf, size_t cnt, loff_t *data)
-{
-	char buf[64];
-	int val = 0;
-	int ret = 0;
-
-	if (cnt >= sizeof(buf)) {
-		return -EINVAL;
-	}
-	if (copy_from_user(&buf, ubuf, cnt)) {
-		return -EFAULT;
-	}
-	buf[cnt] = 0;
-	ret = kstrtoint(buf, 0, (int *)&val);
-	if (ret < 0) {
-		return ret;
-	}
-
-	if (!!val) {
-		pr_info("hungtask autosuspend enable");
-//		g_hungtask_enhance_autosuspend_inject = true;
-//		g_fs_writeback_autosuspend_inject = true;
-		if(__set_g_fs_writeback_autosuspend_inject != NULL)
-			__set_g_fs_writeback_autosuspend_inject(true);
-	}
-	else if (!val) {
-		pr_info("hungtask autosuspend disable");
-//		g_hungtask_enhance_autosuspend_inject = false;
-//		g_fs_writeback_autosuspend_inject = false;
-		if(__set_g_fs_writeback_autosuspend_inject != NULL)
-			__set_g_fs_writeback_autosuspend_inject(false);
-	}
-
-	return cnt;
-}
-
-static int hungtask_autosuspend_inject_show(struct seq_file *s, void *data)
-{
-    bool var = true;
-	
-	if(__get_g_fs_writeback_autosuspend_inject != NULL)
-		var = __get_g_fs_writeback_autosuspend_inject();
-/*
-	if (g_hungtask_enhance_autosuspend_inject == true)
-		seq_printf(s, "enhance:%s\n", "true");
-	else if (g_hungtask_enhance_autosuspend_inject == false)
-		seq_printf(s, "enhance:%s\n", "false");
-*/
-	if (var == true)
-		seq_printf(s, "fs:%s\n", "true");
-	else if (var == false)
-		seq_printf(s, "fs:%s\n", "false");
-
-	return 0;
-}
-
-static int hungtask_autosuspend_inject_open(struct inode *inodp, struct file *filp)
-{
-	return single_open(filp, hungtask_autosuspend_inject_show, inodp);
-}
-
-static struct proc_ops hungtask_autosuspend_inject_fops = {
-	.proc_open = hungtask_autosuspend_inject_open,
-	.proc_read = seq_read,
-	.proc_write = hungtask_autosuspend_inject_write,
-	.proc_lseek = seq_lseek,
-	.proc_release = single_release,
-};
-
-static int __init hung_task_autosuspend_init(void)
-{
-	struct proc_dir_entry *p_entry;
-
-	g_proc_oplus_hung_task_enhance = proc_mkdir("oplus_hungtask_enhance", NULL);
-	if (!g_proc_oplus_hung_task_enhance)
-		goto proc_create_err;
-
-	p_entry = proc_create_data("autosuspend_detect", 0664, g_proc_oplus_hung_task_enhance, &hungtask_autosuspend_detect_fops, NULL);
-	if (!p_entry)
-		goto proc_create_err;
-
-	p_entry = proc_create_data("autosuspend_inject", 0664, g_proc_oplus_hung_task_enhance, &hungtask_autosuspend_inject_fops, NULL);
-	if (!p_entry)
-		goto proc_create_err;
-
-	g_hungtask_enhance_autosuspend_detect = true;
-//	g_hungtask_enhance_autosuspend_inject = false;
-	
-	__get_g_fs_writeback_autosuspend_inject = DEBUG_SYMBOL_LOOKUP(get_g_fs_writeback_autosuspend_inject);
-	if(!__get_g_fs_writeback_autosuspend_inject)
-		pr_err("__get_g_fs_writeback_autosuspend_inject is NULL");
-
-	__set_g_fs_writeback_autosuspend_inject = DEBUG_SYMBOL_LOOKUP(set_g_fs_writeback_autosuspend_inject);
-	if(!__set_g_fs_writeback_autosuspend_inject)
-		pr_err("__set_g_fs_writeback_autosuspend_inject is NULL");
-
-	__wb_wait_for_completion = DEBUG_SYMBOL_LOOKUP(wb_wait_for_completion);
-	if(!__wb_wait_for_completion)
-		pr_err("__wb_wait_for_completion is NULL");
-
-	return 0;
-
-proc_create_err:
-	pr_err("hungtask enhance proc node create failed\n");
-	remove_proc_entry("oplus_hungtask_enhance", NULL);
-	g_hungtask_enhance_autosuspend_detect = false;
-//	g_hungtask_enhance_autosuspend_inject = false;
-
-	return -ENOENT;
-}
-
 static int __init hung_task_enhance_init(void)
 {
 	int ret;
@@ -649,7 +430,6 @@ static int __init hung_task_enhance_init(void)
 #if IS_ENABLED (CONFIG_OPLUS_BSP_DFR_USERSPACE_BACKTRACE)
 	dump_userspace_init("ubt,hung_task");
 #endif /* CONFIG_OPLUS_BSP_DFR_USERSPACE_BACKTRACE */
-	hung_task_autosuspend_init();
 	return 0;
 }
 late_initcall(hung_task_enhance_init);

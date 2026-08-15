@@ -603,8 +603,8 @@
 				];
 
 				qcom,mdss-dsi-lhbm-pressed-icon-on-command = [
-					39 00 00 40 00 00 04 FF 5A A5 00
-					15 00 00 00 00 00 02 BA 03
+					39 00 00 50 00 00 04 FF 5A A5 00
+					15 00 00 10 00 00 02 BA 03
 				];
 				qcom,mdss-dsi-lhbm-pressed-icon-off-command = [
 					39 00 00 40 00 00 04 FF 5A A5 00

@@ -1443,7 +1443,7 @@ void clear_all_inherit_type(struct task_struct *p)
 int get_max_inherit_gran(struct task_struct *p)
 {
 	if (global_lowend_plat_opt && test_inherit_ux(p, INHERIT_UX_BINDER))
-		return MAX_INHERIT_GRAN * 2;
+		return MAX_INHERIT_GRAN * 6;
 
 	return MAX_INHERIT_GRAN;
 }

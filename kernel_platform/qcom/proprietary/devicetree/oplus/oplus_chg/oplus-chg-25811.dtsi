@@ -34,3 +34,8 @@
 &oplus_virtual_gauge {
 	oplus,batt_capacity_mah = <9000>;
 };
+
+&oplus_monitor {
+	track,nominal_qmax1 = <9092>;
+	track,nominal_fcc1 = <8487>;
+};

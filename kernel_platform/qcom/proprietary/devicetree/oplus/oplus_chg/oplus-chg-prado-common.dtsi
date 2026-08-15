@@ -487,8 +487,6 @@
 		track,wired_fast_chg_scheme = <2>;
 
 		track,gauge_status_ctrl;
-		track,nominal_qmax1 = <9000>;
-		track,nominal_fcc1 = <8760>;
 		track,external_gauge_num = <1>;
 
 		track,gauge_max_cell_vol = <4600>;

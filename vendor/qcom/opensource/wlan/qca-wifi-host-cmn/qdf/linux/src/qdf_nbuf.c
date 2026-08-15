@@ -2691,43 +2691,25 @@ bool __qdf_nbuf_is_mcast_replay(qdf_nbuf_t nbuf)
 	return false;
 }
 
-bool __qdf_nbuf_is_arp_local(struct sk_buff *skb)
+bool __qdf_nbuf_is_arp_local(struct sk_buff *skb, uint8_t *local_ip)
 {
 	struct arphdr *arp;
-	struct in_ifaddr **ifap = NULL;
-	struct in_ifaddr *ifa = NULL;
-	struct in_device *in_dev;
 	unsigned char *arp_ptr;
-	__be32 tip;
 
 	arp = (struct arphdr *)skb->data;
-	if (arp->ar_op == htons(ARPOP_REQUEST)) {
-		/* if fail to acquire rtnl lock, assume it's local arp */
-		if (!rtnl_trylock())
+	if (arp->ar_op == htons(ARPOP_REQUEST) && local_ip) {
+		arp_ptr = (unsigned char *)(arp + 1);
+		arp_ptr += (QDF_IPV4_ADDR_SIZE + ETH_ALEN + ETH_ALEN);
+
+		qdf_debug("ARP packet: local IP: " QDF_IPV4_ADDR_STR
+			  " dest IP:" QDF_IPV4_ADDR_STR,
+			  QDF_IPV4_ADDR_ARRAY(local_ip),
+			  QDF_IPV4_ADDR_ARRAY(arp_ptr));
+
+		if (qdf_mem_cmp(arp_ptr, local_ip, QDF_IPV4_ADDR_SIZE))
+			return false;
+		else
 			return true;
-
-		in_dev = __in_dev_get_rtnl(skb->dev);
-		if (in_dev) {
-			for (ifap = &in_dev->ifa_list; (ifa = *ifap) != NULL;
-				ifap = &ifa->ifa_next) {
-				if (!strcmp(skb->dev->name, ifa->ifa_label))
-					break;
-			}
-		}
-
-		if (ifa && ifa->ifa_local) {
-			arp_ptr = (unsigned char *)(arp + 1);
-			arp_ptr += (skb->dev->addr_len + 4 +
-					skb->dev->addr_len);
-			memcpy(&tip, arp_ptr, 4);
-			qdf_debug("ARP packet: local IP: %x dest IP: %x",
-				  ifa->ifa_local, tip);
-			if (ifa->ifa_local == tip) {
-				rtnl_unlock();
-				return true;
-			}
-		}
-		rtnl_unlock();
 	}
 
 	return false;

@@ -1045,6 +1045,11 @@ static void oplus_smart_chg_bcc_set_buffer(int *buffer)
 	    return;
 	}
 
+	if (!g_smart_chg) {
+		chg_err("g_smart_chg is NULL\n");
+		return;
+	}
+
 	g_smart_chg->voocphy_bcc_fastchg_ing = oplus_voocphy_get_fastchg_ing();
 	if (g_smart_chg->voocphy_bcc_fastchg_ing ||
 		(oplus_vooc_get_fastchg_ing() && oplus_vooc_get_fast_chg_type() != BCC_TYPE_IS_VOOC)){
@@ -1062,6 +1067,11 @@ static void oplus_smart_chg_bcc_set_buffer(int *buffer)
 	}
 
 	gauge_topic = g_smart_chg->gauge_topic;
+	if (!gauge_topic) {
+		chg_err("gauge_topic is NULL, skip bcc buffer set\n");
+		return;
+	}
+
 	oplus_gauge_get_gauge_type(gauge_topic, 0, &gauge_type);
 
 	if ((DEVICE_ZY0603 == gauge_type) || (DEVICE_ZY0602 == gauge_type)) {

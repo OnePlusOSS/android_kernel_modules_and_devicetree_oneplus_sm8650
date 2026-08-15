@@ -601,6 +601,95 @@ static int oplus_dischg_vb_boost_get_cv(struct oplus_chg_ic_dev *ic_dev, int *cv
 	return rc;
 }
 
+static int oplus_dischg_vb_boost_set_fam_en(struct oplus_chg_ic_dev *ic_dev, bool en)
+{
+	struct oplus_virtual_boost_ic *vb;
+	int i;
+	int rc = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL\n");
+		return -ENODEV;
+	}
+
+	vb = oplus_chg_ic_get_drvdata(ic_dev);
+	for (i = 0; i < vb->child_num; i++) {
+		if (!func_is_support(&vb->child_list[i],
+				     OPLUS_IC_FUNC_BOOST_SET_FAM_EN)) {
+			rc = (rc == 0) ? -ENOTSUPP : rc;
+			continue;
+		}
+		rc = oplus_chg_ic_func(vb->child_list[i].ic_dev,
+			OPLUS_IC_FUNC_BOOST_SET_FAM_EN, en);
+		if (rc < 0)
+			chg_err("child ic[%d] set_fam_en error, rc=%d\n", i, rc);
+		break;
+	}
+
+	return rc;
+}
+
+static int oplus_dischg_vb_boost_is_suspend(struct oplus_chg_ic_dev *ic_dev, bool *suspend)
+{
+	struct oplus_virtual_boost_ic *vb;
+	int i;
+	int rc = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL\n");
+		return -ENODEV;
+	}
+
+	if (suspend == NULL) {
+		chg_err("suspend pointer is NULL\n");
+		return -EINVAL;
+	}
+
+	vb = oplus_chg_ic_get_drvdata(ic_dev);
+	for (i = 0; i < vb->child_num; i++) {
+		if (!func_is_support(&vb->child_list[i],
+				     OPLUS_IC_FUNC_BOOST_IS_SUSPEND)) {
+			rc = (rc == 0) ? -ENOTSUPP : rc;
+			continue;
+		}
+		rc = oplus_chg_ic_func(vb->child_list[i].ic_dev,
+			OPLUS_IC_FUNC_BOOST_IS_SUSPEND, suspend);
+		if (rc < 0)
+			chg_err("child ic[%d] is_suspend error, rc=%d\n", i, rc);
+		break;
+	}
+
+	return rc;
+}
+
+static int oplus_dischg_vb_boost_set_suspend_resume_cv(struct oplus_chg_ic_dev *ic_dev, int suspend_cv, int resume_cv)
+{
+	struct oplus_virtual_boost_ic *vb;
+	int i;
+	int rc = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL\n");
+		return -ENODEV;
+	}
+
+	vb = oplus_chg_ic_get_drvdata(ic_dev);
+	for (i = 0; i < vb->child_num; i++) {
+		if (!func_is_support(&vb->child_list[i],
+				     OPLUS_IC_FUNC_BOOST_SET_SUSPEND_RESUME_CV)) {
+			rc = (rc == 0) ? -ENOTSUPP : rc;
+			continue;
+		}
+		rc = oplus_chg_ic_func(vb->child_list[i].ic_dev,
+			OPLUS_IC_FUNC_BOOST_SET_SUSPEND_RESUME_CV, suspend_cv, resume_cv);
+		if (rc < 0)
+			chg_err("child ic[%d] set suspend/resume cv error, rc=%d\n", i, rc);
+		break;
+	}
+
+	return rc;
+}
+
 static void *oplus_dischg_vb_get_func(struct oplus_chg_ic_dev *ic_dev,
 				   enum oplus_chg_ic_func func_id)
 {
@@ -656,6 +745,18 @@ static void *oplus_dischg_vb_get_func(struct oplus_chg_ic_dev *ic_dev,
 	case OPLUS_IC_FUNC_BOOST_GET_CV:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_BOOST_GET_CV,
 				oplus_dischg_vb_boost_get_cv);
+		break;
+	case OPLUS_IC_FUNC_BOOST_SET_FAM_EN:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_BOOST_SET_FAM_EN,
+				oplus_dischg_vb_boost_set_fam_en);
+		break;
+	case OPLUS_IC_FUNC_BOOST_IS_SUSPEND:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_BOOST_IS_SUSPEND,
+				oplus_dischg_vb_boost_is_suspend);
+		break;
+	case OPLUS_IC_FUNC_BOOST_SET_SUSPEND_RESUME_CV:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_BOOST_SET_SUSPEND_RESUME_CV,
+				oplus_dischg_vb_boost_set_suspend_resume_cv);
 		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);

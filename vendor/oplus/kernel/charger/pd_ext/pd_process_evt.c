@@ -426,7 +426,13 @@ out:
 
 bool pd_process_tx_failed(struct pd_port *pd_port)
 {
+	uint32_t chip_pid;
+	int rc;
 	struct tcpc_device __maybe_unused *tcpc = pd_port->tcpc;
+
+	if (tcpc == NULL) {
+		return false;
+	}
 
 	if (pd_check_pe_state_ready(pd_port) ||
 		pd_check_pe_during_hard_reset(pd_port)) {
@@ -434,6 +440,9 @@ bool pd_process_tx_failed(struct pd_port *pd_port)
 		return false;
 	}
 
+	rc = tcpci_get_chip_pid(tcpc, &chip_pid);
+	if (!rc && chip_pid == HUSB311C_PID)
+		pd_set_rx_enable(pd_port, PD_RX_CAP_PE_READY_DFP);
 	pe_transit_soft_reset_state(pd_port);
 	return true;
 }

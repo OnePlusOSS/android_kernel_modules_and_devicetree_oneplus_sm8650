@@ -126,6 +126,7 @@
 #define VOOCPHY_NEED_CHANGE_CUR_MAXCNT		5
 #define COPYCAT_ADAPTER_CUR_JUDGMENT_CNT	10
 #define VOOC20_NON_EXPECT_CMD_COUNTS		3
+#define VOOC_45W_MODEL_VER			(0x1c)
 
 int voocphy_log_level = 3;
 #define voocphy_info(fmt, ...)	\
@@ -2038,9 +2039,9 @@ int oplus_voocphy_reset_variables(struct oplus_voocphy_manager *chip)
 	chip->code_id_local = 0xFFFF;
 	chip->code_id_temp_h = 0;
 	chip->code_id_temp_l = 0;
-	if (chip->fastchg_reactive == false) {
+	if (chip->fastchg_reactive == false)
 		chip->adapter_model_ver = 0;
-	}
+	chip->twice_request_current_enable = false;
 	chip->adapter_model_count = 0;
 	chip->ask_batt_sys = 0;
 	chip->current_expect = chip->current_default;
@@ -2766,12 +2767,15 @@ int oplus_voocphy_handle_ask_bat_model_process_cmd(struct oplus_voocphy_manager 
 #define NORMAL_VBUS_MIN		2000
 #define NORMAL_VBAT_MIN 	2000
 #define VBUS_VBATT_ERR_NUM	3
+#define CP_VBAT_VALID_MIN	2000
 int oplus_voocphy_vbus_vbatt_detect(struct oplus_voocphy_manager *chip)
 {
 	int status = VOOCPHY_SUCCESS;
 	int vbus_vbatt = 0;
 	u8 vbus_status = 0;
 	static int vbus_vbatt_detect_err_count = 0;
+	int vbat_mv = 0;
+
 	if (!chip) {
 		voocphy_info("chip null\n");
 		return VOOCPHY_EFATAL;
@@ -2808,10 +2812,15 @@ int oplus_voocphy_vbus_vbatt_detect(struct oplus_voocphy_manager *chip)
 	} else {
 		chip->vbus = chip->cp_vbus;
 
-		if (chip->adapter_type == ADAPTER_SVOOC)
-			vbus_vbatt = chip->vbus - chip->gauge_vbatt * 2;
+		if (chip->vbus_adjust_new_method && chip->cp_vbat > CP_VBAT_VALID_MIN)
+			vbat_mv = chip->cp_vbat;
 		else
-			vbus_vbatt = chip->vbus -chip->gauge_vbatt;
+			vbat_mv = chip->gauge_vbatt;
+
+		if (chip->adapter_type == ADAPTER_SVOOC)
+			vbus_vbatt = chip->vbus - vbat_mv * 2;
+		else
+			vbus_vbatt = chip->vbus - vbat_mv;
 
 		if (vbus_vbatt < chip->voocphy_vbus_low) {
 			chip->vooc_vbus_status = VOOC_VBUS_LOW;
@@ -3422,6 +3431,39 @@ int oplus_voocphy_handle_ask_ap_status(struct oplus_voocphy_manager *chip)
 	return status;
 }
 
+static int oplus_voocphy_handle_ask_fastchg_ornot(struct oplus_voocphy_manager *chip)
+{
+	int status = VOOCPHY_SUCCESS;
+
+	if (!chip) {
+		voocphy_info("oplus_voocphy_manager is null\n");
+		return VOOCPHY_EFATAL;
+	}
+
+	status = oplus_voocphy_handle_ask_fastchg_ornot_cmd(chip);
+	if (chip->adapter_model_ver == VOOC_45W_MODEL_VER)
+		chip->twice_request_current_enable = true;
+
+	return status;
+}
+
+static int oplus_voocphy_handle_get_batt_vol(struct oplus_voocphy_manager *chip)
+{
+	int status = VOOCPHY_SUCCESS;
+
+	if (!chip) {
+		voocphy_info("oplus_voocphy_manager is null\n");
+		return VOOCPHY_EFATAL;
+	}
+
+	status = oplus_voocphy_handle_get_batt_vol_cmd(chip);
+	if (chip->twice_request_current_enable) {
+		chip->twice_request_current_enable = false;
+		chip->ap_need_change_current = VOOCPHY_NEED_CHANGE_CUR_MAXCNT;
+	}
+
+	return status;
+}
 
 int oplus_voocphy_reply_adapter_mesg(struct oplus_voocphy_manager *chip)
 {
@@ -3453,7 +3495,7 @@ int oplus_voocphy_reply_adapter_mesg(struct oplus_voocphy_manager *chip)
 	//handle the adaper request mesg
 	switch (chip->fastchg_adapter_ask_cmd) {
 	case VOOC_CMD_ASK_FASTCHG_ORNOT:
-		status = oplus_voocphy_handle_ask_fastchg_ornot_cmd(chip);
+		status = oplus_voocphy_handle_ask_fastchg_ornot(chip);
 		break;
 	case VOOC_CMD_IDENTIFICATION:
 		status = oplus_voocphy_handle_identification_cmd(chip);
@@ -3480,7 +3522,7 @@ int oplus_voocphy_reply_adapter_mesg(struct oplus_voocphy_manager *chip)
 		status = oplus_voocphy_handle_ask_current_level_cmd(chip);
 		break;
 	case VOOC_CMD_GET_BATT_VOL:
-		status = oplus_voocphy_handle_get_batt_vol_cmd(chip);
+		status = oplus_voocphy_handle_get_batt_vol(chip);
 		break;
 	case VOOC_CMD_NULL:
 	case VOOC_CMD_RECEVICE_DATA_0E:
@@ -8459,6 +8501,9 @@ int oplus_voocphy_parse_batt_curves(struct oplus_voocphy_manager *chip)
 		}
 	}
 	chip->workaround_for_100w = of_property_read_bool(node, "oplus,workaround_for_100w");
+
+	chip->vbus_adjust_new_method = of_property_read_bool(node, "oplus,vbus_adjust_new_method");
+	voocphy_info("vbus_adjust_new_method:%d\n", chip->vbus_adjust_new_method);
 
 	return 0;
 }

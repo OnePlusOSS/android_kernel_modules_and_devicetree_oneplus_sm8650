@@ -36,6 +36,7 @@
 #include <linux/notifier.h>
 #include <linux/fb.h>
 #include <linux/random.h>
+#include <linux/pm_wakeup.h>
 #ifndef CONFIG_DISABLE_OPLUS_FUNCTION
 #include <soc/oplus/system/boot_mode.h>
 #include <soc/oplus/device_info.h>
@@ -124,6 +125,7 @@ struct oplus_dischg_boost {
 
 	struct delayed_work dischg_boost_init_work;
 	struct delayed_work boost_cv_dynamic_curr_work;
+	struct delayed_work pending_ops_work;
 
 	struct oplus_boost_config config;
 	struct votable *wired_curr_votable;
@@ -136,6 +138,15 @@ struct oplus_dischg_boost {
 	struct work_struct plugin_work;
 	struct delayed_work set_automode_work;
 
+	/* Pending operations to be executed on resume */
+	bool otg_mode_pending;
+	bool otg_mode_pending_value;
+	bool fam_en_pending;
+	bool fam_en_pending_value;
+
+	/* Wakelock for critical I2C operations */
+	struct wakeup_source *i2c_wake_lock;
+
 	int vbat_mv;
 	int bat_soc;
 	int cv_now_mv;
@@ -144,6 +155,27 @@ struct oplus_dischg_boost {
 	int cv_mv;
 	int cv_mode_cnt;
 };
+
+/* Helper function to check if boost IC is suspended through IC function interface */
+static bool oplus_boost_is_ic_suspended(struct oplus_dischg_boost *chip)
+{
+	bool suspended = false;
+	int rc;
+
+	if (!chip || !chip->boost_ic)
+		return false;
+
+	/* Check suspend state through IC function interface (works for sc83107, sc8527, etc.) */
+	rc = oplus_chg_ic_func(chip->boost_ic, OPLUS_IC_FUNC_BOOST_IS_SUSPEND, &suspended);
+	if (rc < 0) {
+		/* If function is not supported, assume not suspended */
+		if (rc != -ENOTSUPP)
+			chg_err("Failed to get boost IC suspend state, rc=%d\n", rc);
+		return false;
+	}
+
+	return suspended;
+}
 
 __maybe_unused static struct votable *
 oplus_boost_get_curr_votable(struct oplus_dischg_boost *chip)
@@ -239,6 +271,21 @@ static int oplus_boost_enable_otg_mode(struct oplus_dischg_boost *chip, bool en)
 }
 
 __maybe_unused
+static int oplus_boost_enable_fam_en(struct oplus_dischg_boost *chip, bool en)
+{
+	int rc;
+
+	if (chip->boost_ic == NULL) {
+		chg_err("boost_ic is NULL\n");
+		return -ENODEV;
+	}
+
+	rc = oplus_chg_ic_func(chip->boost_ic, OPLUS_IC_FUNC_BOOST_SET_FAM_EN, en);
+
+	return rc;
+}
+
+__maybe_unused
 static int oplus_boost_set_work_mode(struct oplus_dischg_boost *chip, bool mode)
 {
 	int rc;
@@ -317,6 +364,30 @@ static int oplus_boost_get_in_cv_mode(struct oplus_dischg_boost *chip, bool *cv_
 	rc = oplus_chg_ic_func(chip->boost_ic, OPLUS_IC_FUNC_BOOST_GET_IN_CV_MODE, cv_mode);
 
 	return rc;
+}
+
+bool oplus_boost_get_cv_mode(struct oplus_mms *topic)
+{
+	struct oplus_dischg_boost *chip;
+	int rc;
+	bool cv_mode = false;
+
+	if (topic == NULL) {
+		chg_err("topic is NULL\n");
+		return false;
+	}
+	chip = oplus_mms_get_drvdata(topic);
+	if (!chip)
+		return false;
+
+	rc = oplus_boost_get_in_cv_mode(chip, &cv_mode);
+	if (rc < 0) {
+		chg_err("get cv mode, err\n");
+		return false;
+	} else {
+		chg_info("get cv mode is %d\n", cv_mode);
+		return cv_mode;
+	}
 }
 
 int oplus_boost_cv_mv_show(struct oplus_mms *topic)
@@ -466,10 +537,48 @@ void oplus_boost_set_otg_mode(struct oplus_mms *topic, bool en)
 	if (!chip)
 		return;
 
+	/* If boost IC is suspended, cache the request and execute on resume */
+	if (oplus_boost_is_ic_suspended(chip)) {
+		chg_info("boost IC suspended, cache otg mode=%d, will set on resume\n", en);
+		chip->otg_mode_pending = true;
+		chip->otg_mode_pending_value = en;
+		return;
+	}
+
 	chg_info("set otg mode = %d\n", en);
 	rc = oplus_boost_enable_otg_mode(chip, en);
 	if (rc < 0)
 		chg_err("set otg mode error, rc = %d\n", rc);
+
+	return;
+}
+
+void oplus_boost_set_fam_en(struct oplus_mms *topic, bool en)
+{
+	struct oplus_dischg_boost *chip;
+	int rc;
+	chg_info("set fam_en = %d\n", en);
+
+	if (topic == NULL) {
+		chg_err("topic is NULL\n");
+		return;
+	}
+	chip = oplus_mms_get_drvdata(topic);
+	if (!chip)
+		return;
+
+	/* If boost IC is suspended, cache the request and execute on resume */
+	if (oplus_boost_is_ic_suspended(chip)) {
+		chg_info("boost IC suspended, cache fam_en=%d, will set on resume\n", en);
+		chip->fam_en_pending = true;
+		chip->fam_en_pending_value = en;
+		return;
+	}
+
+	chg_info("set fam_en = %d\n", en);
+	rc = oplus_boost_enable_fam_en(chip, en);
+	if (rc < 0)
+		chg_err("set fam_en error, rc = %d\n", rc);
 
 	return;
 }
@@ -498,6 +607,14 @@ static void oplus_boost_cv_dynamic_curr_work(struct work_struct *work)
 	static int retry_count = 0;
 	const int max_retry = 3;
 	bool chg_online = chip->wls_online || chip->wired_online;
+
+	/* Skip I2C operations if boost IC is suspended */
+	if (oplus_boost_is_ic_suspended(chip)) {
+		chg_info("boost IC suspended, skip cv dynamic curr work, reschedule later\n");
+		if (chg_online)
+			schedule_delayed_work(&chip->boost_cv_dynamic_curr_work, msecs_to_jiffies(CV_MODE_CHECK_MS));
+		return;
+	}
 
 	fcc_votable = oplus_boost_get_curr_votable(chip);
 	if (!fcc_votable) {
@@ -584,6 +701,10 @@ static void oplus_boost_set_automode_work(struct work_struct *work)
 	static int last_automode_disable = -1;
 	int automode_disable = 0;
 
+	/* Work mode switching based on SOC is critical, use wakelock to prevent suspend during I2C operations */
+	if (chip->i2c_wake_lock)
+		__pm_wakeup_event(chip->i2c_wake_lock, 500);
+
 	oplus_mms_get_item_data(chip->gauge_topic, GAUGE_ITEM_SOC, &data, false);
 	chip->bat_soc = data.intval;
 	if (chip->bat_soc >= config->auto_mode_soc_thr)
@@ -591,6 +712,12 @@ static void oplus_boost_set_automode_work(struct work_struct *work)
 	else
 		automode_disable = 0;
 	if (last_automode_disable != automode_disable) {
+		/* Check if boost IC is suspended before executing vote */
+		if (oplus_boost_is_ic_suspended(chip)) {
+			/* If suspended, wait a few milliseconds for resume */
+			chg_info("boost IC suspended, wait 5ms before setting work mode\n");
+			msleep(5);
+		}
 		if (is_work_mode_votable_available(chip)) {
 			vote(chip->work_mode_votable, BOOST_SOC_VOTER, automode_disable, automode_disable, false);
 		} else {
@@ -599,6 +726,8 @@ static void oplus_boost_set_automode_work(struct work_struct *work)
 		last_automode_disable = automode_disable;
 		chg_info("set_automode, soc:%d work_mode=%d\n", chip->bat_soc, automode_disable);
 	}
+
+	/* Schedule next periodic check */
 	schedule_delayed_work(&chip->set_automode_work, msecs_to_jiffies(10 * 1000));
 }
 
@@ -607,6 +736,10 @@ static void oplus_boost_plugin_work(struct work_struct *work)
 	struct oplus_dischg_boost *chip =
 		container_of(work, struct oplus_dischg_boost, plugin_work);
 	struct oplus_boost_config *config = &chip->config;
+
+	/* Plugin work is critical, use wakelock to prevent suspend during I2C operations */
+	if (chip->i2c_wake_lock)
+		__pm_wakeup_event(chip->i2c_wake_lock, 500);
 
 	if (chip->wls_online || chip->wired_online) {
 		oplus_boost_set_cv_mv(chip, config->plugin_cv_mv);
@@ -966,6 +1099,7 @@ static void oplus_dischg_boost_init_work(struct work_struct *work)
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct oplus_dischg_boost *chip = container_of(dwork,
 		struct oplus_dischg_boost, dischg_boost_init_work);
+	struct oplus_boost_config *config = &chip->config;
 	struct device_node *node = chip->dev->of_node;
 	static int retry = OPLUS_CHG_IC_INIT_RETRY_MAX;
 	int rc;
@@ -983,6 +1117,10 @@ static void oplus_dischg_boost_init_work(struct work_struct *work)
 		retry = 0;
 		return;
 	}
+
+	/* Init work is critical, use wakelock to prevent suspend during I2C operations */
+	if (chip->i2c_wake_lock)
+		__pm_wakeup_event(chip->i2c_wake_lock, 500);
 
 	rc = oplus_chg_ic_func(chip->boost_ic, OPLUS_IC_FUNC_INIT);
 	if (rc == -EAGAIN) {
@@ -1002,6 +1140,17 @@ static void oplus_dischg_boost_init_work(struct work_struct *work)
 		return;
 	}
 	retry = 0;
+	oplus_boost_set_cv_mv(chip, config->init_cv_mv);
+
+	/* Set suspend/resume CV configuration to sc83107 via IC interface */
+	if (chip->boost_ic) {
+		int rc = oplus_chg_ic_func(chip->boost_ic, OPLUS_IC_FUNC_BOOST_SET_SUSPEND_RESUME_CV,
+			config->suspend_cv_mv, config->resume_cv_mv);
+		if (rc < 0)
+			chg_err("set suspend/resume cv config failed, rc=%d\n", rc);
+		else
+			chg_info("set suspend_cv=%d, resume_cv=%d\n", config->suspend_cv_mv, config->resume_cv_mv);
+	}
 
 	chg_info("dischg boost OPLUS_IC_FUNC_INIT success\n");
 }
@@ -1092,23 +1241,50 @@ static int oplus_dischg_boost_topic_init(struct oplus_dischg_boost *chip)
 	return 0;
 }
 
+static void oplus_boost_pending_ops_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct oplus_dischg_boost *chip = container_of(dwork,
+		struct oplus_dischg_boost, pending_ops_work);
+	int rc;
+
+	/* Use wakelock to prevent suspend during I2C operations */
+	if (chip->i2c_wake_lock)
+		__pm_wakeup_event(chip->i2c_wake_lock, 500);
+
+	/* Execute pending operations that were cached during suspend */
+	if (chip->otg_mode_pending) {
+		chg_info("executing pending otg mode=%d on resume\n", chip->otg_mode_pending_value);
+		rc = oplus_boost_enable_otg_mode(chip, chip->otg_mode_pending_value);
+		if (rc < 0)
+			chg_err("set pending otg mode error, rc = %d\n", rc);
+		chip->otg_mode_pending = false;
+	}
+
+	if (chip->fam_en_pending) {
+		chg_info("executing pending fam_en=%d on resume\n", chip->fam_en_pending_value);
+		rc = oplus_boost_enable_fam_en(chip, chip->fam_en_pending_value);
+		if (rc < 0)
+			chg_err("set pending fam_en error, rc = %d\n", rc);
+		chip->fam_en_pending = false;
+	}
+}
+
 static int oplus_boost_pm_resume(struct device *dev)
 {
 	struct oplus_dischg_boost *chip = dev_get_drvdata(dev);
-	struct oplus_boost_config *config = &chip->config;
 
-	oplus_boost_set_cv_mv(chip, config->resume_cv_mv);
-	chg_info("pm resume, set cv=%d\n", config->resume_cv_mv);
+	/* CV setting is now handled in sc83107_resume */
+	/* Schedule pending operations to execute after 1s delay */
+	if (chip->otg_mode_pending || chip->fam_en_pending)
+		schedule_delayed_work(&chip->pending_ops_work, msecs_to_jiffies(1000));
+
 	return 0;
 }
 
 static int oplus_boost_pm_suspend(struct device *dev)
 {
-	struct oplus_dischg_boost *chip = dev_get_drvdata(dev);
-	struct oplus_boost_config *config = &chip->config;
-
-	oplus_boost_set_cv_mv(chip, config->suspend_cv_mv);
-	chg_err("pm suspend, set cv=%d\n", config->suspend_cv_mv);
+	/* CV setting is now handled in sc83107_suspend */
 	return 0;
 }
 
@@ -1136,6 +1312,16 @@ static int oplus_boost_probe(struct platform_device *pdev)
 	INIT_DELAYED_WORK(&chip->set_automode_work, oplus_boost_set_automode_work);
 	INIT_DELAYED_WORK(&chip->dischg_boost_init_work, oplus_dischg_boost_init_work);
 	INIT_DELAYED_WORK(&chip->boost_cv_dynamic_curr_work, oplus_boost_cv_dynamic_curr_work);
+	INIT_DELAYED_WORK(&chip->pending_ops_work, oplus_boost_pending_ops_work);
+
+	/* Initialize pending operation flags */
+	chip->otg_mode_pending = false;
+	chip->fam_en_pending = false;
+
+	/* Initialize wakelock for critical I2C operations */
+	chip->i2c_wake_lock = wakeup_source_register(chip->dev, "dischg_boost_i2c_wakeup");
+	if (!chip->i2c_wake_lock)
+		chg_err("Failed to register wakelock\n");
 
 	schedule_delayed_work(&chip->dischg_boost_init_work, 0);
 

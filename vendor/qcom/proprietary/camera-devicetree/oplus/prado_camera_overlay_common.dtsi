@@ -17,6 +17,12 @@
 };
 
 &soc {
+	qcom,cam-sync {
+		compatible = "qcom,cam-sync";
+		enable-kthread-worker-ux;
+		status = "ok";
+	};
+
 	led_flash_rear_wide: qcom,camera-flash0 {
 		cell-index = <0>;
 		compatible = "qcom,camera-flash";

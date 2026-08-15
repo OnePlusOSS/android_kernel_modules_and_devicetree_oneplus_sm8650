@@ -2895,3 +2895,16 @@ void ucfg_dp_set_mon_conf_flags(struct wlan_objmgr_psoc *psoc, uint32_t flags)
 	if (QDF_IS_STATUS_ERROR(status))
 		dp_err("Failed to set flag %d status %d", flags, status);
 }
+
+void ucfg_dp_set_ipv4_addr(struct wlan_objmgr_vdev *vdev, uint8_t *ip_addr)
+{
+	struct wlan_dp_link *dp_link = dp_get_vdev_priv_obj(vdev);
+
+	if (!dp_link) {
+		dp_err("Unable to get DP link");
+		return;
+	}
+
+	qdf_mem_copy(&dp_link->dp_intf->ipv4_addr, ip_addr,
+		     QDF_IPV4_ADDR_SIZE);
+}

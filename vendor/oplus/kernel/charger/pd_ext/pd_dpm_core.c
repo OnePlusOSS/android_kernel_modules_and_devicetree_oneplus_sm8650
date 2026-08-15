@@ -524,10 +524,17 @@ int pd_dpm_update_tcp_request(struct pd_port *pd_port,
 	uint8_t charging_policy = pd_port->dpm_charging_policy;
 	struct pd_port_power_caps *src_cap = &pd_port->pe_data.remote_src_cap;
 	struct tcpc_device __maybe_unused *tcpc = pd_port->tcpc;
+	int rc;
+	uint32_t chip_pid;
 
 	memset(&req_info, 0, sizeof(struct dpm_rdo_info_t));
 
 	DPM_INFO("Policy=0x%X\n", charging_policy);
+
+	rc = tcpci_get_chip_pid(pd_port->tcpc, &chip_pid);
+
+        if ((!rc && chip_pid == CPS_PID) && charging_policy == DPM_CHARGING_POLICY_MAX_POWER_LVIC)
+		return TCP_DPM_RET_DENIED_NOT_READY;
 
 #ifdef CONFIG_USB_PD_REV30_PPS_SINK
 	if ((charging_policy & DPM_CHARGING_POLICY_MASK)
@@ -669,6 +676,8 @@ void pd_dpm_snk_standby_power(struct pd_port *pd_port)
 
 	uint8_t type = 0;
 	int ma = -1;
+	int rc;
+	uint32_t chip_pid;
 	int standby_curr = 2500000 / max(pd_port->request_v,
 					 pd_port->request_v_new);
 
@@ -721,6 +730,12 @@ void pd_dpm_snk_standby_power(struct pd_port *pd_port)
 		type = TCP_VBUS_CTRL_STANDBY;
 	}
 #endif
+
+	rc = tcpci_get_chip_pid(pd_port->tcpc, &chip_pid);
+	if ((!rc && chip_pid == HUSB311C_PID) && pd_port->request_v_new == pd_port->request_v) {
+		ma = standby_curr;
+		type = TCP_VBUS_CTRL_STANDBY;
+	}
 
 	if (ma >= 0)
 		tcpci_sink_vbus(pd_port->tcpc, type, pd_port->request_v_new, 0);

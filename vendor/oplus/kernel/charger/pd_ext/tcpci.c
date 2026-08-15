@@ -688,6 +688,7 @@ int tcpci_notify_sourcecap_done(struct tcpc_device *tcpc, struct power_caps *inf
 	return tcpc_check_notify_time(tcpc, &tcp_noti, TCP_NOTIFY_IDX_MISC,
 					TCP_NOTIFY_PD_SOURCECAP_DONE);
 }
+EXPORT_SYMBOL(tcpci_notify_sourcecap_done);
 #endif
 
 

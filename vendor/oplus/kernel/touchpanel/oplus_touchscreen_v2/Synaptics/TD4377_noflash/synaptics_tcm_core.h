@@ -138,6 +138,8 @@ enum touch_report_code {
 	TOUCH_GET_WATER_MODE = 202,
 	TOUCH_GESTURE_SINGLE_TAP   = 203,
 	TOUCH_REPORT_GLOVE_DETECTED = 204,
+	TOUCH_REPORT_IFP_INFO = 219,
+	TOUCH_REPORT_IFP_DEBUG_INFO = 220,
 };
 
 enum module_type {
@@ -233,6 +235,7 @@ enum dynamic_config_id {
 	DC_HEADSET_MODE_ENABLED = 0xD1,
 	DC_FREQUENCE_HOPPING = 0xD2,
 	DC_SET_REPORT_FRE = 0x11,
+	DC_FW_SUPPORT_DATA_RECOED   = 0xF7,
 	DC_GLOVE_MODE_ENABLED = 0x0D,
 	DC_GLOVE_MODE_STATE = 0xF5,
 	DC_GESTURE_MASK   = 0xFE,
@@ -546,15 +549,18 @@ struct syna_tcm_hcd {
 	unsigned int app_status;
 	unsigned int max_touch_num;
 	unsigned int hdl_finished_flag;
+	unsigned int hw_reset_retry;
 	uint8_t  touch_direction;
 
 	bool tp_fw_update_headfile;
 	bool tp_fw_update_first;
 	bool tp_fw_update_parse;
+	bool lpwg_fw_support_flag;
 	int tp_irq_state;
 	int zeroflash_init_done;
 	int check_uboot_failed_count;
 	int request_fw_image_id;
+	int gesture_fw_finished_flag;
 
 	struct completion config_complete;
 	struct mutex reset_mutex;
@@ -599,6 +605,9 @@ struct syna_tcm_hcd {
 	bool health_monitor_v2_support;
 	bool pt17_pt18_test_support;
 	bool hw_rt_retry_support;
+	bool differ_read_every_frame;
+	bool tp_data_record_support;
+	unsigned short fw_data_record_support;
 };
 
 struct device_hcd {
@@ -654,6 +663,30 @@ struct zeroflash_image_header {
 	unsigned char magic_value[4];
 	unsigned char num_of_areas[4];
 };
+
+struct touch_data_frame_message {
+	unsigned short MaxDelta:16;
+	unsigned short frameCnt:4;
+	unsigned short lgmFlg:1;
+	unsigned short curFrequency:2;
+	unsigned short gloveFlg:1;
+	unsigned short gameMode:1;
+	unsigned short gripFlg:1;
+	unsigned short bendintFlg:1;
+	unsigned short baseFlg:1;
+	unsigned short groundFlg:1;
+	unsigned short palmFlg:1;
+	unsigned short moistureFlg:1;
+	unsigned short chargerFlg:1;
+	unsigned short powerIm:16;
+
+	unsigned short deltaOrBaseline:15;
+	unsigned short baselineErrorFlg:1;
+
+	unsigned short fingerThreshold:9;
+	unsigned short dozeThreshold:7;
+	unsigned short gestureDetected:16;
+} __packed;
 
 struct rmi_f35_query {
 	unsigned char version:4;

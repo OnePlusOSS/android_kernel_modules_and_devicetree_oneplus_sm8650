@@ -47,6 +47,9 @@
 #include "../monitor/oplus_chg_track.h"
 #include "test-kit.h"
 #include "oplus_hal_cw2217b.h"
+#if IS_ENABLED(CONFIG_HORAE_FLASH_LED_THERMAL)
+#include <soc/oplus/horae_flash_led_temp.h>
+#endif
 
 struct cw_battery *g_cw_bat = NULL;
 struct gauge_track_info_reg {
@@ -89,6 +92,9 @@ void __attribute__((weak)) oplus_vooc_get_fastchg_started_pfunc(int (*pfunc)(voi
 void __attribute__((weak)) oplus_vooc_get_fastchg_ing_pfunc(int (*pfunc)(void));
 #endif /*IS_ENABLED(CONFIG_OPLUS_ADSP_CHARGER)*/
 #endif
+
+static int oplus_get_iio_channel(struct cw_battery *cw_bat, const char *propname,
+                        struct iio_channel **chan);
 
 /* CW2217 iic read function */
 static int cw_read(struct i2c_client *client, unsigned char reg, unsigned char buf[])
@@ -215,6 +221,18 @@ static int cw2217_parse_dt(struct cw_battery *cw_bat)
 		chg_err("parse config_profile_data failed, rc=%d\n", rc);
 		return rc;
 	}
+
+	rc = oplus_get_iio_channel(cw_bat, "sub_board_therm", &cw_bat->sub_board_temp_chan);
+	if (IS_ERR_OR_NULL(cw_bat->sub_board_temp_chan)) {
+		chg_info("couldn't get sub_board_temp_chan\n");
+		cw_bat->sub_board_temp_chan = NULL;
+	}
+
+	rc = read_signed_data_from_node(node, "subboard_ntc_para", (s32 *)cw_bat->chg_ntc_temp_table,
+		CHG_NTC_TEMP_COUNT);
+	if (rc < 0)
+		chg_err("get ntc para fail\n");
+
 	return NUM_0;
 }
 
@@ -625,7 +643,9 @@ static int update_flag_and_soc_intterrupt_value(struct cw_battery *cw_bat)
 
 	while (CW_TRUE) {
 		msleep(CW_SLEEP_100MS);
-		cw_read(cw_bat->client, REG_IC_STATE, &reg_val);
+		ret = cw_read(cw_bat->client, REG_IC_STATE, &reg_val);
+		if (ret < NUM_0)
+			return ret;
 		if (IC_READY_MARK == (reg_val & IC_READY_MARK))
 			break;
 		count++;
@@ -669,8 +689,6 @@ CW_EXECUTE_CMD_RETRY:
 		cw_bat->debug_force_cw_err = false;
 	}
 	memset(cw_bat->track_info, 0, sizeof(cw_bat->track_info));
-	if (i >= SIZE_OF_PROFILE)
-		i = SIZE_OF_PROFILE - 1;
 	index = scnprintf(cw_bat->track_info, CW_INFO_LEN, "$$init_type@@%d$$index@@0x%x$$profile@@0x%x$$reg_val@@0x%x"
 			"$$retry_times@@%d", init_type, reg_index, cw_bat->cw_config_profile[i], reg_val, retry_times);
 	for (i = 0; i < ARRAY_SIZE(cw_standard); i++) {
@@ -815,6 +833,63 @@ static int cw2217_get_battery_cc(void)
 	return g_cw_bat->cycle;
 }
 
+#define SUBBOARD_NTC_TEMP_DEFAULT 250
+#if IS_ENABLED(CONFIG_HORAE_FLASH_LED_THERMAL)
+static int oplus_ntc_convert(int volt, struct cw_battery *cw_bat)
+{
+	int i;
+	int size;
+
+	size = ARRAY_SIZE(cw_bat->chg_ntc_temp_table) - 1;
+
+	for (i = 1; i <= size; (i = i + 2)) {
+		if (i >= size || cw_bat->chg_ntc_temp_table[i] <= volt)
+			break;
+	}
+	if (i >= size)
+		i = size;
+	i = i - 1;
+
+	return cw_bat->chg_ntc_temp_table[i] * 100;
+}
+
+static int oplus_get_subboard_temp(struct cw_battery *cw_bat)
+{
+	int rc = NUM_0;
+	int ret = NUM_0;
+	int volt = 0;
+	int temp = 0;
+
+	if (!cw_bat->sub_board_temp_chan) {
+		rc = oplus_get_iio_channel(cw_bat, "sub_board_therm", &cw_bat->sub_board_temp_chan);
+		if (rc < 0 && !cw_bat->sub_board_temp_chan) {
+			chg_err("sub_board_temp get failed\n");
+			return SUBBOARD_NTC_TEMP_DEFAULT;
+		}
+	}
+
+	ret = oplus_set_ntc_switch_lock(SUBBOARD, true);
+	if (ret) {
+		mdelay(10);
+		rc = iio_read_channel_processed(cw_bat->sub_board_temp_chan, &volt);
+		if (rc < 0) {
+			temp = NTC_TEMP_DEFAULT;
+			chg_err("read batt_btb_err\n");
+		} else {
+			ret = oplus_set_ntc_switch_lock(SUBBOARD, false);
+			volt = volt / 1000;
+			temp = oplus_ntc_convert(volt, cw_bat);
+		}
+	} else {
+		temp = NTC_TEMP_DEFAULT;
+		chg_info("ntc switch fail\n");
+	}
+	temp /= 100;
+
+	return temp;
+}
+#endif
+
 static int cw2217_get_battery_temperature(void)
 {
         int ret = NUM_0;
@@ -825,7 +900,20 @@ static int cw2217_get_battery_temperature(void)
 
 static int cw2217_get_batt_remaining_capacity(void)
 {
-	return g_cw_bat->ui_soc * g_cw_bat->rated_capacity / g_cw_bat->cw_ui_full;
+	int ic_soc_accurate = 0;
+	int fcc = 0;
+	int rm = 0;
+
+	if (!g_cw_bat) {
+		chg_err("g_cw_bat is NULL");
+		return 0;
+	}
+
+	ic_soc_accurate = g_cw_bat->ic_soc_h * CW_SOC_MAGIC_BASE + g_cw_bat->ic_soc_l;
+	fcc = g_cw_bat->soh * g_cw_bat->rated_capacity / SOH_INIT_VALUE;
+	rm = ic_soc_accurate * fcc / CW_SOC_MAGIC_BASE / CW_SOC_MAGIC_100;
+
+	return rm;
 }
 
 static int cw2217_get_battery_soc(void)
@@ -921,7 +1009,8 @@ static int battery_spec_obtaining(struct cw_battery *cw_bat)
 
 static int get_batt_id_chan_value(struct cw_battery *cw_bat)
 {
-        int ret = NUM_0, value = NUM_0;
+	int ret = NUM_0;
+	int value = NUM_0;
 
 	if (!cw_bat->batt_id_chan) {
 		ret = oplus_get_iio_channel(cw_bat, "batt_id_chan", &cw_bat->batt_id_chan);
@@ -931,13 +1020,21 @@ static int get_batt_id_chan_value(struct cw_battery *cw_bat)
 		}
 	}
 
-	ret = iio_read_channel_processed(cw_bat->batt_id_chan, &value);
+	if (cw_bat->ntc_switch_support) {
+		pinctrl_select_state(cw_bat->pinctrl, cw_bat->ntc_switch2_high);
+		msleep(10);
+		ret = iio_read_channel_processed(cw_bat->batt_id_chan, &value);
+		pinctrl_select_state(cw_bat->pinctrl, cw_bat->ntc_switch2_low);
+	} else {
+		ret = iio_read_channel_processed(cw_bat->batt_id_chan, &value);
+	}
+
 	if (ret < 0) {
 		chg_err("fail to read usb_temp1 adc rc = %d\n", ret);
 		return ret;
 	}
 
-        return value;
+	return value;
 }
 
 static int battery_type_check(struct cw_battery *cw_bat)
@@ -960,12 +1057,16 @@ static int battery_type_check(struct cw_battery *cw_bat)
 								length);
 	}
 
-        value = get_batt_id_chan_value(cw_bat);
-	if (value <= 0) {
+	value = get_batt_id_chan_value(cw_bat);
+	if (value == -EPROBE_DEFER) {
+		chg_err("[OPLUS_CHG][%s]: IIO channel not ready, deferring probe\n", __func__);
+		return value;
+	} else if (value <= 0) {
 		chg_err("[OPLUS_CHG][%s]: iio_read_channel_processed  get error\n", __func__);
 		value = NTC_DEFAULT_VOLT_VALUE_MV;
 		return battery_type;
 	}
+
 	value = value / THERMAL_TEMP_UNIT;
 	for (i = 0; i < BATTID_ARR_LEN; i++) {
 		if (value >= cw_bat->batid_voltage_range[i][0] && value <= cw_bat->batid_voltage_range[i][1]) {
@@ -1525,6 +1626,30 @@ static int oplus_cw2217_get_dec_cv_soh(struct oplus_chg_ic_dev *ic_dev, int *dec
 	return 0;
 }
 
+static int oplus_cw2217_get_subboard_temp(struct oplus_chg_ic_dev *ic_dev, int *temp)
+{
+	struct cw_battery *chip;
+
+	if (!ic_dev || !temp) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+
+	if (!chip) {
+		chg_err("chip is NULL");
+		return 0;
+	}
+
+#if IS_ENABLED(CONFIG_HORAE_FLASH_LED_THERMAL)
+	*temp = oplus_get_subboard_temp(chip);
+#else
+	*temp = SUBBOARD_NTC_TEMP_DEFAULT;
+#endif
+	return 0;
+}
+
 static void *oplus_chg_get_func(
 			struct oplus_chg_ic_dev *ic_dev, enum oplus_chg_ic_func func_id)
 {
@@ -1645,6 +1770,10 @@ static void *oplus_chg_get_func(
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_DEC_CV_SOH,
 		                                oplus_cw2217_get_dec_cv_soh);
 		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_SUBBOARD_TEMP:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_SUBBOARD_TEMP,
+			oplus_cw2217_get_subboard_temp);
+		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);
 		func = NULL;
@@ -1738,13 +1867,13 @@ static int cw2217_device_init(struct cw_battery *cw_bat)
 	}
 	if (ret) {
 		chg_err("%s : cw2217 init fail!\n", __func__);
-		return ret;
+		return -EPROBE_DEFER;
 	}
 
 	ret = cw_init_data(cw_bat);
 	if (ret) {
 		chg_err("%s : cw2217 init data fail!\n", __func__);
-		return ret;
+		return -EPROBE_DEFER;
 	}
 
 	cw_bat->cwfg_workqueue = create_singlethread_workqueue("cwfg_gauge");
@@ -1753,6 +1882,46 @@ static int cw2217_device_init(struct cw_battery *cw_bat)
 
 	return ret;
 }
+
+static int oplus_v2_ntc_switch2_gpio_init(struct cw_battery *cw_bat)
+{
+	if (!cw_bat) {
+		chg_err("[OPLUS_CHG][%s]: ntc_switch not ready!\n", __func__);
+		return -EINVAL;
+	}
+
+	cw_bat->pinctrl = devm_pinctrl_get(cw_bat->dev);
+	if (IS_ERR_OR_NULL(cw_bat->pinctrl)) {
+		chg_err("get ntc_switch_gpio pinctrl fail\n");
+		goto err;
+	}
+
+	cw_bat->ntc_switch2_high =
+			pinctrl_lookup_state(cw_bat->pinctrl,
+			"ntc_switch2_high");
+	if (IS_ERR_OR_NULL(cw_bat->ntc_switch2_high)) {
+		chg_err("get ntc_switch2_high fail\n");
+		goto err;
+	}
+
+	cw_bat->ntc_switch2_low =
+			pinctrl_lookup_state(cw_bat->pinctrl,
+			"ntc_switch2_low");
+	if (IS_ERR_OR_NULL(cw_bat->ntc_switch2_low)) {
+		chg_err("get ntc_switch2_low fail\n");
+		goto err;
+	}
+
+	pinctrl_select_state(cw_bat->pinctrl, cw_bat->ntc_switch2_high);
+	chg_info("[%s]: ntc_switch2 is ready!\n", __func__);
+
+	cw_bat->ntc_switch_support = true;
+	return 0;
+err:
+	cw_bat->ntc_switch_support = false;
+	return 0;
+}
+
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0))
 static int cw2217_probe(struct i2c_client *client)
@@ -1775,6 +1944,8 @@ static int cw2217_probe(struct i2c_client *client, const struct i2c_device_id *i
 	cw_bat->client = client;
         g_cw_bat = cw_bat;
 
+	oplus_v2_ntc_switch2_gpio_init(cw_bat);
+
 #if IS_ENABLED(CONFIG_OPLUS_FEATURE_CHG_DEBUG_KIT)
 	cw_bat->regmap = devm_regmap_init_i2c(client, &cw2217b_regmap_config);
 	if (!cw_bat->regmap) {
@@ -1785,8 +1956,8 @@ static int cw2217_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	ret = cw2217_device_init(cw_bat);
 	if (ret) {
-		chg_err("%s : cw2217_device_init fail!\n", __func__);
-		return ret;
+		chg_err("%s : cw2217_device_init fail! ret = %d\n", __func__, ret);
+		goto error;
 	}
         chg_err("cw2217 driver probe success!\n");
 
@@ -1807,6 +1978,11 @@ static int cw2217_probe(struct i2c_client *client, const struct i2c_device_id *i
 	return NUM_0;
 
 error:
+	cancel_delayed_work_sync(&cw_bat->cw_track_update_work);
+	if (cw_bat->cwfg_workqueue) {
+		cancel_delayed_work_sync(&cw_bat->battery_delay_work);
+		destroy_workqueue(cw_bat->cwfg_workqueue);
+	}
 #if IS_ENABLED(CONFIG_OPLUS_FEATURE_CHG_DEBUG_KIT)
 regmap_init_err:
 #endif
@@ -1820,7 +1996,11 @@ static void cw2217_remove(struct i2c_client *client)
 static int cw2217_remove(struct i2c_client *client)
 #endif
 {
+	struct cw_battery *cw_bat = i2c_get_clientdata(client);
+
 	chg_err("\n");
+	if (!IS_ERR_OR_NULL(cw_bat->sub_board_temp_chan))
+		iio_channel_release(cw_bat->sub_board_temp_chan);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	return NUM_0;
 #endif

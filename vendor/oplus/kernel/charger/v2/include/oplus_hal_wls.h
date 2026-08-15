@@ -29,7 +29,7 @@ int oplus_chg_wls_rx_get_rx_mode(struct oplus_chg_ic_dev *rx_ic, enum oplus_chg_
 int oplus_chg_wls_rx_set_rx_mode(struct oplus_chg_ic_dev *rx_ic, enum oplus_chg_wls_rx_mode rx_mode);
 int oplus_chg_wls_rx_set_dcdc_enable(struct oplus_chg_ic_dev *rx_ic, bool en);
 int oplus_chg_wls_rx_set_trx_enable(struct oplus_chg_ic_dev *rx_ic, bool en);
-int oplus_chg_wls_rx_set_trx_start(struct oplus_chg_ic_dev *rx_ic, bool start);
+int oplus_chg_wls_rx_set_trx_start(struct oplus_chg_ic_dev *rx_ic, enum oplus_chg_wls_tx_start_type start);
 int oplus_chg_wls_rx_get_trx_status(struct oplus_chg_ic_dev *rx_ic, u8 *status);
 int oplus_chg_wls_rx_get_trx_err(struct oplus_chg_ic_dev *rx_ic, u32 *err);
 int oplus_chg_wls_get_headroom(struct oplus_chg_ic_dev *rx_ic, int *val);
@@ -51,6 +51,10 @@ int oplus_chg_wls_rx_set_comu(struct oplus_chg_ic_dev *rx_ic, int coum);
 int oplus_chg_wls_rx_get_tx_id(struct oplus_chg_ic_dev *rx_ic, int *tx_id);
 int oplus_chg_wls_rx_set_silent(struct oplus_chg_ic_dev *rx_ic);
 int oplus_chg_wls_rx_send_epp_match_q(struct oplus_chg_ic_dev *rx_ic, u8 data[]);
+int oplus_chg_wls_rx_get_ble_mac_addr(struct oplus_chg_ic_dev *rx_ic, u64 *mac_addr);
+int oplus_chg_wls_rx_get_wlspen_id(struct oplus_chg_ic_dev *rx_ic, u8 *wlspen_id);
+int oplus_chg_wls_rx_get_wlspen_chg_status(struct oplus_chg_ic_dev *rx_ic, u8 *chg_status);
+int oplus_chg_wls_rx_get_ac_ov_flag(struct oplus_chg_ic_dev *rx_ic, int *ac_ov_flag);
 
 /*wls nor APIs*/
 int oplus_chg_wls_nor_set_input_enable(struct oplus_chg_ic_dev *nor_ic, bool en);

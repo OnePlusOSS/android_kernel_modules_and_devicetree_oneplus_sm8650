@@ -731,7 +731,7 @@ static ssize_t mem_cgroup_force_shrink_anon_percent(struct kernfs_open_file *of,
 
 	if (nr_need_reclaim > 0) {
 		ret = force_shrink_batch(memcg, nr_need_reclaim, &nr_reclaimed,
-						batch, false, false);
+						batch, true, false);
 	}
 #ifdef CONFIG_CONT_PTE_HUGEPAGE_64K_ZRAM
 out:

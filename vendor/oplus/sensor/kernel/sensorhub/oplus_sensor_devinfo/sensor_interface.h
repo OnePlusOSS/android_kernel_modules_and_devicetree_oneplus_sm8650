@@ -102,6 +102,7 @@ enum {
 #endif
 	LCM_PWM_TURBO = 0x14,
 	LCM_ADFR_MIN_FPS = 0x15,
+	OPLUS_POWER_STATUS = 0x16,
 	MAX_INFO_TYPE,
 };
 
@@ -117,6 +118,14 @@ enum oplus_adfr_auto_min_fps_value {
 enum {
 	LCM_DC_OFF = 0,
 	LCM_DC_ON  = 1
+};
+
+enum {
+	OPLUS_POWER_OFF = 0,
+	OPLUS_DOZE,
+	OPLUS_POWER_ON,
+	OPLUS_DOZE_SUSPEND,
+	OPLUS_DOZE_AND_DOZE_SUSPEND_SWITCH,
 };
 
 struct fifo_frame{

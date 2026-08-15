@@ -688,12 +688,10 @@ static int oplus_ufcs_protocol_rcv_msg(struct oplus_ufcs_protocol *chip)
 
 	if ((chip->state != STATE_IDLE) && (chip->state != STATE_WAIT_MSG)) {
 		chip->ack_received = 1;
-		if (rf->data_rdy) {
-			rf->ack_int_read_delay = true;
+		if (rf->data_rdy)
 			ufcs_err("ack interrupt read delayed! need to read msg!\n");
-		} else {
+		else
 			return 0;
-		}
 	}
 	chip->ops->ufcs_ic_rcv_msg(chip);
 
@@ -726,7 +724,10 @@ static int oplus_ufcs_protocol_rcv_msg(struct oplus_ufcs_protocol *chip)
 		ufcs_err("head err[0x%x, 0x%x]\n", rcv->header, chip->rcv_buffer[i++]);
 		goto error;
 	}
-	ufcs_info("head ok[0x%x, 0x%x, 0x%x]\n", rcv->header, rcv->command, rcv->len);
+	if (!(rf->sent_cmp && rf->data_rdy))
+		wait_event_interruptible_timeout(chip->msg_state_wait, chip->state == STATE_WAIT_MSG,
+		msecs_to_jiffies(MSG_STATE_WAIT_TIME));
+	ufcs_info("msg_state=%d, head ok[0x%x, 0x%x, 0x%x]\n", chip->state, rcv->header, rcv->command, rcv->len);
 	return 0;
 
 error:
@@ -886,14 +887,13 @@ static int oplus_ufcs_protocol_wait_for_msg(callback func, void *buffer, int msg
 	rf = &chip->flag.rcv_error;
 	oplus_ufcs_protocol_set_state(STATE_WAIT_MSG);
 
-	if (((rf->sent_cmp) && (rf->data_rdy)) || (rf->ack_int_read_delay)) {
-		rf->ack_int_read_delay = false;
+	if (rf->sent_cmp && rf->data_rdy) {
 		oplus_ufcs_protocol_clr_flag_reg();
 		goto msg_parse;
 	}
 
-	rf->ack_int_read_delay = false;
 	reinit_completion(&chip->rcv_cmp);
+	wake_up_interruptible(&chip->msg_state_wait);
 	rc = wait_for_completion_timeout(&chip->rcv_cmp, msecs_to_jiffies(msg_time));
 	if (!rc) {
 		ufcs_err("wait for msg = 0x%02x, timeout!\n", expected_msg);
@@ -3018,6 +3018,7 @@ static int oplus_ufcs_protocol_driver_probe(struct platform_device *pdev)
 		rc = -ENOMEM;
 		goto kthread_worker_err;
 	}
+	init_waitqueue_head(&chip_ic->msg_state_wait);
 	oplus_ufcs_sched_set_fifo(chip_ic);
 	mutex_init(&chip_ic->chip_lock);
 	init_completion(&chip_ic->rcv_cmp);

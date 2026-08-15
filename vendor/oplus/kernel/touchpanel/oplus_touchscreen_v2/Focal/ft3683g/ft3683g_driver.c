@@ -2553,6 +2553,12 @@ static int fts_mode_switch(void *chip_data, work_mode mode, int flag)
 
 	case MODE_SLEEP:
 		TPD_INFO("MODE_SLEEP, write 0xA5=3");
+		if (ts_data->fod_info.fp_down) {
+			TPD_INFO("fingerprint auto up");
+			ts_data->ts->view_area_touched = 0;
+			ts_data->fod_info.event_type = 0;
+			ts_data->fod_info.fp_down = 0;
+		}
 		ret = fts_write_reg(FTS_REG_POWER_MODE, 0x03);
 
 		if (ret < 0) {
@@ -2642,6 +2648,49 @@ static int fts_mode_switch(void *chip_data, work_mode mode, int flag)
 	return 0;
 mode_err:
 	return ret;
+}
+
+static void fts_report_rate(void *chip_data, int value)
+{
+	struct chip_data_ft3683g *ts_data = (struct chip_data_ft3683g *)chip_data;
+	int ret = 0;
+	int regvalue = 0;
+
+	TPD_INFO("fts_report_rate_ctrl to  value: %d", value);
+	if (ts_data == NULL) {
+		return;
+	}
+
+	if (ts_data->ts->is_suspended) {
+		return;
+	}
+
+	switch(value) {
+	case REPORT_FPS_125HZ:
+		regvalue = FTS_120HZ_REPORT_RATE;
+		break;
+	case REPORT_FPS_144HZ:
+		regvalue = FTS_144HZ_REPORT_RATE;
+		break;
+	case REPORT_FPS_180HZ:
+		regvalue = FTS_180HZ_REPORT_RATE;
+		break;
+	case REPORT_FPS_240HZ:
+		regvalue = FTS_240HZ_REPORT_RATE;
+		break;
+	case REPORT_FPS_288Hz:
+		regvalue = FTS_288HZ_REPORT_RATE;
+		break;
+	default:
+		TPD_INFO("%s:default report rate = %d \n", __func__, value);
+		return;
+	}
+	TPD_INFO("fts_report_rate_ctrl to  regvalue: %x", regvalue);
+	ret = fts_write_reg(FTS_REG_REPORT_RATE, regvalue);
+	if (ret < 0) {
+		TPD_INFO("write FTS_REG_REPORT_RATE fail");
+		return;
+	}
 }
 
 static int fts_send_temperature(void *chip_data, int temp, bool normal_mode);
@@ -4490,6 +4539,7 @@ static struct oplus_touchpanel_operations fts_ops = {
 	.set_high_frame_rate        = fts_set_high_frame_rate,
 	.rate_white_list_ctrl       = fts_rate_white_list_ctrl,
 	.edge_limit_switch_write    = fts_edge_limit_switch_write,
+	.report_rate                = fts_report_rate,
 	.diaphragm_touch_lv_set     = fts_diaphragm_touch_lv_set,
 	.get_water_mode             = fts_get_water_mode,
 	.get_glove_mode             = fts_get_glove_mode,

@@ -630,6 +630,27 @@ int set_chg_auto_mode(struct oplus_chg_ic_dev *vooc_ic, bool enable)
 	return rc;
 }
 
+int set_chg_vac2v2x_uvp(struct oplus_chg_ic_dev *vooc_ic, bool disable)
+{
+	int rc;
+
+	if (vooc_ic == NULL) {
+		chg_err("vooc_ic is NULL\n");
+		return -ENODEV;
+	}
+
+	rc = oplus_chg_ic_func(vooc_ic,
+			       OPLUS_IC_FUNC_VOOCPHY_SET_VAC2V2X_UVP,
+			       disable);
+	if (rc == -ENOTSUPP)
+		return 0;
+	else if (rc < 0)
+		chg_info("failed to %s vac2v2x uvp, rc=%d\n",
+			 disable ? "disable" : "enable", rc);
+
+	return rc;
+}
+
 int oplus_vooc_get_curve_curr(struct oplus_chg_ic_dev *vooc_ic, int *curr)
 {
 	int rc;

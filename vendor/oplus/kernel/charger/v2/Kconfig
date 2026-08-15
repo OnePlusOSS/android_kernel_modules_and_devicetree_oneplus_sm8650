@@ -135,6 +135,12 @@ config OPLUS_GAUGE_NFG8011B
 	help
 	  Say Y here to declare GAUGE NFG8011B support
 
+config OPLUS_GAUGE_BQ28Z610_RA
+	bool "GAUGE BQ28Z610 RA support"
+	default n
+	help
+	  Say Y here to declare GAUGE BQ28Z610 RA support
+
 config OPLUS_GAUGE_CW2217B
 	bool "GAUGE CW2217B support"
 	help

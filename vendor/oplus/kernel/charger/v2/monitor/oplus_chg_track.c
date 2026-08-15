@@ -51,6 +51,7 @@
 #include "oplus_chg_pps.h"
 #include <oplus_chg_mutual.h>
 #include <oplus_reverse_chg.h>
+#include <oplus_dischg_boost.h>
 
 #define OPLUS_CHG_TRACK_MUL_BREAK_CNT			10
 #define OPLUS_CHG_TRACK_WAIT_TIME_MS			3000
@@ -193,6 +194,7 @@
 #define TRACK_FASTCHG_LOW_TEMP				0
 #define TRACK_PROTOCOL_SWITCH_COUNT			3
 #define TRACK_COOL_DOWN_TOO_SMALL			3
+#define TRACK_COOL_DOWN_TOO_SMALL_SINGLE_CELL		5
 
 #define TRACK_HIDL_DATA_LEN			512
 #define TRACK_HIDL_BCC_INFO_COUNT		8
@@ -794,6 +796,8 @@ struct oplus_chg_track_status {
 	int batt_max_vol;
 	int batt_max_curr;
 	int chg_max_vol;
+	int chg_start_vol;
+	int chg_start_cur;
 	int chg_start_time;
 	int chg_end_time;
 	int chg_soc50_time;
@@ -1003,6 +1007,7 @@ struct oplus_chg_track {
 	oplus_chg_track_trigger plugout_state_trigger;
 	oplus_chg_track_trigger dual_chan_err_load_trigger;
 	oplus_chg_track_trigger usb_lpd_load_trigger;
+	oplus_chg_track_trigger cycle_current_derating_trigger;
 	struct delayed_work uisoc_load_trigger_work;
 	struct delayed_work soc_trigger_work;
 	struct delayed_work uisoc_trigger_work;
@@ -1286,6 +1291,7 @@ static struct flag_reason_table track_flag_reason_table[] = {
 	{ TRACK_NOTIFY_FLAG_CHG_SLOW_BTB_OVER_TEMP, "BtbOverTemp" },
 	{ TRACK_NOTIFY_FLAG_CHG_SLOW_R_COOLDOWN, "R_CoolDown" },
 	{ TRACK_NOTIFY_FLAG_CHG_SLOW_QUIET_MODE, "QuietModeLong" },
+	{ TRACK_NOTIFY_FLAG_CHG_SLOW_CYCLE_CURR_DERATING, "CycleCurrentDerating" },
 
 	{ TRACK_NOTIFY_FLAG_FAST_CHARGING_BREAK, "FastChgBreak" },
 	{ TRACK_NOTIFY_FLAG_GENERAL_CHARGING_BREAK, "GeneralChgBreak" },
@@ -3743,7 +3749,7 @@ static int oplus_chg_track_parse_dt(struct oplus_chg_track *track_dev)
 	rc = of_property_read_u32(node, "track,external_gauge_num", &(track_dev->track_cfg.external_gauge_num));
 	if (rc < 0) {
 		pr_err("track,external_gauge_num reading failed, rc=%d\n", rc);
-		track_dev->track_cfg.external_gauge_num = 0;
+		track_dev->track_cfg.external_gauge_num = -1;
 	}
 
 	rc = of_property_read_u32(node, "track,nominal_qmax1", &(track_dev->track_cfg.nominal_qmax1));
@@ -3963,6 +3969,7 @@ oplus_chg_track_record_charger_info(struct oplus_monitor *monitor,
 	int fv_dec = 0, wired_ffc_dec = 0, wls_ffc_dec = 0, vct = 0;
 	char adapter_type[OPLUS_CHG_TRACK_POWER_TYPE_LEN] = { 0 };
 	bool wls_ocar_occur = false;
+	bool cv_mode = false;
 
 	if (monitor == NULL || p_trigger_data == NULL || track_status == NULL || monitor->track == NULL)
 		return;
@@ -4343,6 +4350,24 @@ oplus_chg_track_record_charger_info(struct oplus_monitor *monitor,
                 OPLUS_CHG_TRACK_CURX_INFO_LEN - index, "$$fcl@@%d,%s,%d",
                 track_status->fcl.one_full_trigger_cnt, track_status->fcl.info, track_status->fcl.n_full_trigger_cnt);
 	memset(&(track_status->fcl), 0, sizeof(track_status->fcl));
+
+	index += scnprintf(&(p_trigger_data->crux_info[index]),
+			  OPLUS_CHG_TRACK_CURX_INFO_LEN - index,
+			  "$$Start_Vol@@%d", track_status->chg_start_vol);
+	index += scnprintf(&(p_trigger_data->crux_info[index]),
+			  OPLUS_CHG_TRACK_CURX_INFO_LEN - index,
+			  "$$Start_Cur@@%d", track_status->chg_start_cur);
+	if (monitor->dischg_boost_topic) {
+		cv_mode = oplus_boost_get_cv_mode(monitor->dischg_boost_topic);
+	}
+	index += scnprintf(&(p_trigger_data->crux_info[index]),
+			  OPLUS_CHG_TRACK_CURX_INFO_LEN - index,
+			  "$$Boost_Mode@@%d", cv_mode ? 1 : 0);
+	if (monitor->curr_derating_trig && monitor->track)
+		index += scnprintf(&(p_trigger_data->crux_info[index]),
+			OPLUS_CHG_TRACK_CURX_INFO_LEN - index, "%s",
+			monitor->track->cycle_current_derating_trigger.crux_info);
+
 	oplus_chg_track_record_general_info(monitor, track_status, p_trigger_data, index);
 }
 
@@ -6754,6 +6779,19 @@ oplus_chg_track_cal_rechg_counts(struct oplus_monitor *monitor,
 	return 0;
 }
 
+static bool oplus_chg_track_is_cool_down_too_small(
+	const struct oplus_chg_track_status *track_status)
+{
+	int thd;
+
+	if (!track_status || !track_status->cool_down_status)
+		return false;
+
+	thd = (oplus_gauge_get_batt_num() == 1) ? TRACK_COOL_DOWN_TOO_SMALL_SINGLE_CELL :
+						  TRACK_COOL_DOWN_TOO_SMALL;
+	return track_status->cool_down_status < thd;
+}
+
 static int oplus_chg_track_cal_no_charging_stats_new(
 	struct oplus_monitor *monitor, struct oplus_chg_track_status *track_status)
 {
@@ -6770,8 +6808,7 @@ static int oplus_chg_track_cal_no_charging_stats_new(
 	delta_time = track_status->no_charging_cal_curr_time - track_status->no_charging_cal_pre_time;
 	track_status->no_charging_cal_pre_time = track_status->no_charging_cal_curr_time;
 
-	cool_down_status = track_status->cool_down_status &&
-		track_status->cool_down_status < TRACK_COOL_DOWN_TOO_SMALL;
+	cool_down_status = oplus_chg_track_is_cool_down_too_small(track_status);
 	if (monitor->batt_status == POWER_SUPPLY_STATUS_CHARGING) {
 		track_status->chg_total_time += delta_time;
 		if (monitor->ibat_ma > TRACK_NO_CHARGING_IBAT) {
@@ -9162,6 +9199,9 @@ static int oplus_chg_track_get_speed_slow_reason(
 		 track_status->power_info.power_type == TRACK_CHG_TYPE_WIRELESS)
 		chip->slow_charging_trigger.flag_reason =
 			TRACK_NOTIFY_FLAG_CHG_SLOW_VERITY_FAIL;
+	else if (chip->monitor && chip->monitor->curr_derating_trig)
+		chip->slow_charging_trigger.flag_reason =
+			TRACK_NOTIFY_FLAG_CHG_SLOW_CYCLE_CURR_DERATING;
 	else
 		chip->slow_charging_trigger.flag_reason =
 			TRACK_NOTIFY_FLAG_CHG_SLOW_OTHER;
@@ -10558,6 +10598,27 @@ static int oplus_chg_track_upload_pps_info(struct oplus_chg_track *chip)
 	return 0;
 }
 
+static int oplus_chg_track_upload_cycle_current_derating_info(struct oplus_chg_track *track)
+{
+	union mms_msg_data data = { 0 };
+	int rc;
+
+	if (!track || !track->monitor || !track->monitor->err_topic) {
+		chg_err("invalid track/monitor/err_topic\n");
+		return -EINVAL;
+	}
+
+	rc = oplus_mms_get_item_data(track->monitor->err_topic, ERR_ITEM_CYCLE_CURRENT_DERATING, &data, false);
+	if (rc < 0) {
+		chg_err("get msg data error, rc=%d\n", rc);
+		return rc;
+	}
+	track->monitor->curr_derating_trig = true;
+	scnprintf(track->cycle_current_derating_trigger.crux_info, OPLUS_CHG_TRACK_CURX_INFO_LEN, "%s", data.strval);
+
+	return 0;
+}
+
 static int oplus_chg_track_upload_deep_dischg_info(struct oplus_chg_track *chip , u32 id)
 {
 	int index = 0;
@@ -11550,6 +11611,8 @@ static int oplus_chg_track_status_reset_when_plugin(
 	track_status->batt_max_vol = monitor->vbat_mv;
 	track_status->batt_max_curr = monitor->ibat_ma;
 	track_status->chg_max_vol = monitor->wired_vbus_mv;
+	track_status->chg_start_vol = monitor->vbat_mv;
+	track_status->chg_start_cur = monitor->ibat_ma;
 	track_status->chg_start_rm = monitor->batt_rm;
 	track_status->chg_max_temp = monitor->shell_temp;
 	track_status->ledon_time = 0;
@@ -13036,7 +13099,7 @@ static int oplus_chg_track_gauge_batt_monitor_record(
 	index += scnprintf(&(p_gauge_info->batt_monitor_load_trigger->crux_info[index]),
 			OPLUS_CHG_TRACK_CURX_INFO_LEN - index, "$$device_id@@%s", p_gauge_info->device_name);
 	index += scnprintf(&(p_gauge_info->batt_monitor_load_trigger->crux_info[index]),
-			OPLUS_CHG_TRACK_CURX_INFO_LEN - index, "$$trigger_scene@@%s", err_reason);
+			OPLUS_CHG_TRACK_CURX_INFO_LEN - index, "$$err_scene@@%s", err_reason);
 
 	index += scnprintf(&(p_gauge_info->batt_monitor_load_trigger->crux_info[index]),
 			OPLUS_CHG_TRACK_CURX_INFO_LEN - index, "$$batt_temp@@%d", p_gauge_info->params.batt_temp);
@@ -13106,154 +13169,262 @@ static int oplus_chg_track_get_gauge_low_soc_monitor_status(
 	return 0;
 }
 
+static void oplus_chg_track_gauge_apply_status_pipeline(
+	struct oplus_chg_track *track_chip,
+	struct oplus_chg_track_gauge_info *gauge_info,
+	struct oplus_chg_track_gauge_params *params)
+{
+	oplus_chg_track_get_gauge_status(track_chip, gauge_info, params);
+	oplus_chg_track_get_gauge_sili_alg_application_status(track_chip, gauge_info, params);
+	oplus_chg_track_get_gauge_sili_alg_monitor_status(track_chip, gauge_info, params);
+	oplus_chg_track_get_gauge_lifetime_status(track_chip, gauge_info, params);
+	oplus_chg_track_get_gauge_low_soc_monitor_status(track_chip, gauge_info, params);
+}
+
+static void oplus_chg_track_gauge_apply_status_pipeline_dual_interleaved(
+	struct oplus_chg_track *track_chip)
+{
+	oplus_chg_track_get_gauge_status(track_chip, &track_chip->gauge_info,
+					 &track_chip->gauge_info.params);
+	oplus_chg_track_get_gauge_status(track_chip, &track_chip->sub_gauge_info,
+					 &track_chip->sub_gauge_info.params);
+	oplus_chg_track_get_gauge_sili_alg_application_status(
+		track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
+	oplus_chg_track_get_gauge_sili_alg_application_status(
+		track_chip, &track_chip->sub_gauge_info, &track_chip->sub_gauge_info.params);
+	oplus_chg_track_get_gauge_sili_alg_monitor_status(
+		track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
+	oplus_chg_track_get_gauge_sili_alg_monitor_status(
+		track_chip, &track_chip->sub_gauge_info, &track_chip->sub_gauge_info.params);
+	oplus_chg_track_get_gauge_lifetime_status(
+		track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
+	oplus_chg_track_get_gauge_lifetime_status(
+		track_chip, &track_chip->sub_gauge_info, &track_chip->sub_gauge_info.params);
+	oplus_chg_track_get_gauge_low_soc_monitor_status(
+		track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
+	oplus_chg_track_get_gauge_low_soc_monitor_status(
+		track_chip, &track_chip->sub_gauge_info, &track_chip->sub_gauge_info.params);
+}
+
+static void oplus_chg_track_gauge_single_init_first(
+	struct oplus_chg_track *track_chip,
+	struct oplus_monitor *monitor,
+	char *name)
+{
+	int rc;
+
+	track_chip->gauge_info.nominal_fcc = track_chip->track_cfg.nominal_fcc1;
+	track_chip->gauge_info.nominal_qmax = track_chip->track_cfg.nominal_qmax1;
+	track_chip->gauge_info.params.pre_soc = track_chip->gauge_info.params.soc;
+	track_chip->gauge_info.params.pre_ui_soc = track_chip->gauge_info.params.ui_soc;
+	track_chip->gauge_info.params.pre_cc = track_chip->gauge_info.params.cc;
+	track_chip->gauge_info.params.pre_record_soc = track_chip->gauge_info.params.soc;
+	track_chip->gauge_info.params.pre_batt_temp = track_chip->gauge_info.params.batt_temp;
+	track_chip->gauge_info.params.pre_soh = track_chip->gauge_info.params.soh;
+	rc = oplus_gauge_get_physical_name(monitor->gauge_topic, name, TRACK_GAUGE_NAME_LEN);
+	if (rc == 0)
+		scnprintf(track_chip->gauge_info.device_name, TRACK_GAUGE_NAME_LEN, "%s", name);
+	else
+		scnprintf(track_chip->gauge_info.device_name, TRACK_GAUGE_NAME_LEN, "%s", "main_gauge");
+}
+
+static int oplus_chg_track_gauge_status_check_single(
+	struct oplus_chg_track *track_chip,
+	struct oplus_monitor *monitor,
+	bool *enter,
+	char *name)
+{
+	track_chip->gauge_info.params.gauge_topic = monitor->gauge_topic;
+	track_chip->gauge_info.params.soc = monitor->batt_soc;
+	track_chip->gauge_info.params.cc = monitor->batt_cc;
+	track_chip->gauge_info.params.batt_temp = monitor->batt_temp;
+	track_chip->gauge_info.params.soh = monitor->batt_soh;
+	track_chip->gauge_info.params.fcc = monitor->batt_fcc;
+	track_chip->gauge_info.params.batt_volt = monitor->vbat_mv;
+	track_chip->gauge_info.params.ui_soc = monitor->ui_soc;
+	oplus_gauge_get_qmax(monitor->gauge_topic, 0, &track_chip->gauge_info.params.qmax);
+	if (!*enter) {
+		oplus_chg_track_gauge_single_init_first(track_chip, monitor, name);
+		*enter = true;
+	}
+	oplus_chg_track_gauge_apply_status_pipeline(track_chip, &track_chip->gauge_info,
+						  &track_chip->gauge_info.params);
+	track_chip->gauge_info.params.pre_soc = track_chip->gauge_info.params.soc;
+	track_chip->gauge_info.params.pre_ui_soc = track_chip->gauge_info.params.ui_soc;
+	track_chip->gauge_info.params.pre_cc = track_chip->gauge_info.params.cc;
+	track_chip->gauge_info.params.pre_batt_temp = track_chip->gauge_info.params.batt_temp;
+	track_chip->gauge_info.params.pre_soh = track_chip->gauge_info.params.soh;
+
+	return 0;
+}
+
+static void oplus_chg_track_gauge_dual_init_first(
+	struct oplus_chg_track *track_chip,
+	struct oplus_monitor *monitor,
+	char *name)
+{
+	int rc;
+
+	track_chip->gauge_info.nominal_fcc = track_chip->track_cfg.nominal_fcc1;
+	track_chip->gauge_info.nominal_qmax = track_chip->track_cfg.nominal_qmax1;
+	track_chip->gauge_info.params.pre_soc = track_chip->gauge_info.params.soc;
+	track_chip->gauge_info.params.pre_ui_soc = track_chip->gauge_info.params.ui_soc;
+	track_chip->gauge_info.params.pre_cc = track_chip->gauge_info.params.cc;
+	track_chip->gauge_info.params.pre_record_soc = track_chip->gauge_info.params.soc;
+	track_chip->gauge_info.params.pre_batt_temp = track_chip->gauge_info.params.batt_temp;
+	track_chip->gauge_info.params.pre_soh = track_chip->gauge_info.params.soh;
+	track_chip->sub_gauge_info.nominal_fcc = track_chip->track_cfg.nominal_fcc2;
+	track_chip->sub_gauge_info.nominal_qmax = track_chip->track_cfg.nominal_qmax2;
+	track_chip->sub_gauge_info.params.pre_soc = track_chip->sub_gauge_info.params.soc;
+	track_chip->sub_gauge_info.params.pre_ui_soc = track_chip->sub_gauge_info.params.ui_soc;
+	track_chip->sub_gauge_info.params.pre_cc = track_chip->sub_gauge_info.params.cc;
+	track_chip->sub_gauge_info.params.pre_record_soc = track_chip->sub_gauge_info.params.soc;
+	track_chip->sub_gauge_info.params.pre_batt_temp = track_chip->sub_gauge_info.params.batt_temp;
+	track_chip->sub_gauge_info.params.pre_soh = track_chip->sub_gauge_info.params.soh;
+	rc = oplus_gauge_get_physical_name(monitor->gauge_topic, name, TRACK_GAUGE_NAME_LEN);
+	if (rc == 0) {
+		scnprintf(track_chip->gauge_info.device_name, TRACK_GAUGE_NAME_LEN, "%s_0", name);
+		scnprintf(track_chip->sub_gauge_info.device_name, TRACK_GAUGE_NAME_LEN, "%s_1", name);
+	} else {
+		scnprintf(track_chip->gauge_info.device_name, TRACK_GAUGE_NAME_LEN, "%s", "main_gauge");
+		scnprintf(track_chip->sub_gauge_info.device_name, TRACK_GAUGE_NAME_LEN, "%s", "sub_gauge");
+	}
+}
+
+static void oplus_chg_track_gauge_dual_fetch_params(
+	struct oplus_chg_track *track_chip,
+	struct oplus_monitor *monitor,
+	struct oplus_mms *g0,
+	struct oplus_mms *g1,
+	union mms_msg_data *data)
+{
+	oplus_gauge_get_qmax(monitor->gauge_topic, 0, &track_chip->gauge_info.params.qmax);
+	oplus_gauge_get_qmax(monitor->gauge_topic, 1, &track_chip->sub_gauge_info.params.qmax);
+	oplus_mms_get_item_data(g0, GAUGE_ITEM_SOC, data, false);
+	track_chip->gauge_info.params.soc = data->intval;
+	oplus_mms_get_item_data(g1, GAUGE_ITEM_SOC, data, false);
+	track_chip->sub_gauge_info.params.soc = data->intval;
+	oplus_mms_get_item_data(track_chip->monitor->comm_topic, COMM_ITEM_UI_SOC, data, false);
+	track_chip->gauge_info.params.ui_soc = data->intval;
+	oplus_mms_get_item_data(track_chip->monitor->comm_topic, COMM_ITEM_UI_SOC, data, false);
+	track_chip->sub_gauge_info.params.ui_soc = data->intval;
+	oplus_mms_get_item_data(g0, GAUGE_ITEM_CC, data, true);
+	track_chip->gauge_info.params.cc = data->intval;
+	oplus_mms_get_item_data(g1, GAUGE_ITEM_CC, data, true);
+	track_chip->sub_gauge_info.params.cc = data->intval;
+	oplus_mms_get_item_data(g0, GAUGE_ITEM_TEMP, data, true);
+	track_chip->gauge_info.params.batt_temp = data->intval;
+	oplus_mms_get_item_data(g1, GAUGE_ITEM_TEMP, data, true);
+	track_chip->sub_gauge_info.params.batt_temp = data->intval;
+	oplus_mms_get_item_data(g0, GAUGE_ITEM_SOH, data, true);
+	track_chip->gauge_info.params.soh = data->intval;
+	oplus_mms_get_item_data(g1, GAUGE_ITEM_SOH, data, true);
+	track_chip->sub_gauge_info.params.soh = data->intval;
+	oplus_mms_get_item_data(g0, GAUGE_ITEM_FCC, data, true);
+	track_chip->gauge_info.params.fcc = data->intval;
+	oplus_mms_get_item_data(g1, GAUGE_ITEM_FCC, data, true);
+	track_chip->sub_gauge_info.params.fcc = data->intval;
+	oplus_mms_get_item_data(g0, GAUGE_ITEM_VOL_MAX, data, true);
+	track_chip->gauge_info.params.batt_volt = data->intval;
+	oplus_mms_get_item_data(g1, GAUGE_ITEM_VOL_MAX, data, true);
+	track_chip->sub_gauge_info.params.batt_volt = data->intval;
+}
+
+static void oplus_chg_track_gauge_dual_stash_pre_params(struct oplus_chg_track *track_chip)
+{
+	track_chip->gauge_info.params.pre_soc = track_chip->gauge_info.params.soc;
+	track_chip->sub_gauge_info.params.pre_soc = track_chip->sub_gauge_info.params.soc;
+	track_chip->gauge_info.params.pre_ui_soc = track_chip->gauge_info.params.ui_soc;
+	track_chip->sub_gauge_info.params.pre_ui_soc = track_chip->sub_gauge_info.params.ui_soc;
+	track_chip->gauge_info.params.pre_cc = track_chip->gauge_info.params.cc;
+	track_chip->sub_gauge_info.params.pre_cc = track_chip->sub_gauge_info.params.cc;
+	track_chip->gauge_info.params.pre_batt_temp = track_chip->gauge_info.params.batt_temp;
+	track_chip->sub_gauge_info.params.pre_batt_temp = track_chip->sub_gauge_info.params.batt_temp;
+	track_chip->gauge_info.params.pre_soh = track_chip->gauge_info.params.soh;
+	track_chip->sub_gauge_info.params.pre_soh = track_chip->sub_gauge_info.params.soh;
+}
+
+static int oplus_chg_track_gauge_status_check_dual(
+	struct oplus_chg_track *track_chip,
+	struct oplus_monitor *monitor,
+	bool *enter,
+	char *name,
+	union mms_msg_data *data)
+{
+	struct oplus_mms *g0, *g1;
+
+	track_chip->gauge_info.params.gauge_topic = oplus_mms_get_by_name("gauge:0");
+	track_chip->sub_gauge_info.params.gauge_topic = oplus_mms_get_by_name("gauge:1");
+	if (!track_chip->gauge_info.params.gauge_topic ||
+	    !track_chip->sub_gauge_info.params.gauge_topic) {
+		chg_err("external_gauge_num=2 not match\n");
+		return -EINVAL;
+	}
+	g0 = track_chip->gauge_info.params.gauge_topic;
+	g1 = track_chip->sub_gauge_info.params.gauge_topic;
+
+	oplus_chg_track_gauge_dual_fetch_params(track_chip, monitor, g0, g1, data);
+
+	if (!*enter) {
+		oplus_chg_track_gauge_dual_init_first(track_chip, monitor, name);
+		*enter = true;
+	}
+	oplus_chg_track_gauge_apply_status_pipeline_dual_interleaved(track_chip);
+	oplus_chg_track_gauge_dual_stash_pre_params(track_chip);
+
+	return 0;
+}
+
+static int oplus_chg_track_gauge_status_check_platform_zero(
+	struct oplus_chg_track *track_chip,
+	struct oplus_monitor *monitor,
+	bool *enter)
+{
+	track_chip->gauge_info.params.gauge_topic = monitor->gauge_topic;
+	track_chip->gauge_info.params.soc = monitor->batt_soc;
+	track_chip->gauge_info.params.batt_temp = monitor->batt_temp;
+	track_chip->gauge_info.params.batt_volt = monitor->vbat_mv;
+	track_chip->gauge_info.params.ui_soc = monitor->ui_soc;
+	track_chip->gauge_info.params.batt_curr = monitor->ibat_ma;
+	if (!*enter) {
+		track_chip->gauge_info.params.pre_ui_soc = track_chip->gauge_info.params.ui_soc;
+		scnprintf(track_chip->gauge_info.device_name, TRACK_GAUGE_NAME_LEN, "%s", "platform_gauge");
+		*enter = true;
+	}
+	oplus_chg_track_get_gauge_low_soc_monitor_status(
+		track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
+
+	return 0;
+}
+
 static int oplus_chg_track_gauge_status_check(struct oplus_monitor *monitor)
 {
 	struct oplus_chg_track *track_chip = g_track_chip;
-	union mms_msg_data data = { 0 };
 	static bool enter = false;
-	int rc = 0;
 	char name[TRACK_GAUGE_NAME_LEN] = { 0 };
+	union mms_msg_data data = { 0 };
+	int gauge_type;
+	bool single_one_or_plat;
 
-	if (!track_chip || !track_chip->track_cfg.track_gauge_ctrl || track_chip->track_cfg.external_gauge_num <= 0)
+	if (!track_chip || !track_chip->track_cfg.track_gauge_ctrl)
 		return -ENOTSUPP;
-
 	if (!monitor->batt_exist)
 		return -EINVAL;
 
-	if (track_chip->track_cfg.external_gauge_num == 1) {
-		track_chip->gauge_info.params.gauge_topic = monitor->gauge_topic;
-		track_chip->gauge_info.params.soc = monitor->batt_soc;
-		track_chip->gauge_info.params.cc = monitor->batt_cc;
-		track_chip->gauge_info.params.batt_temp = monitor->batt_temp;
-		track_chip->gauge_info.params.soh = monitor->batt_soh;
-		track_chip->gauge_info.params.fcc = monitor->batt_fcc;
-		track_chip->gauge_info.params.batt_volt = monitor->vbat_mv;
-		track_chip->gauge_info.params.ui_soc = monitor->ui_soc;
-		oplus_gauge_get_qmax(monitor->gauge_topic, 0, &track_chip->gauge_info.params.qmax);
-		if (!enter) {
-			track_chip->gauge_info.nominal_fcc = track_chip->track_cfg.nominal_fcc1;
-			track_chip->gauge_info.nominal_qmax = track_chip->track_cfg.nominal_qmax1;
-			track_chip->gauge_info.params.pre_soc = track_chip->gauge_info.params.soc;
-			track_chip->gauge_info.params.pre_ui_soc = track_chip->gauge_info.params.ui_soc;
-			track_chip->gauge_info.params.pre_cc = track_chip->gauge_info.params.cc;
-			track_chip->gauge_info.params.pre_record_soc = track_chip->gauge_info.params.soc;
-			track_chip->gauge_info.params.pre_batt_temp = track_chip->gauge_info.params.batt_temp;
-			track_chip->gauge_info.params.pre_soh = track_chip->gauge_info.params.soh;
-			rc = oplus_gauge_get_physical_name(monitor->gauge_topic, name, TRACK_GAUGE_NAME_LEN);
-			if (rc == 0)
-				scnprintf(track_chip->gauge_info.device_name, TRACK_GAUGE_NAME_LEN, "%s", name);
-			else
-				scnprintf(track_chip->gauge_info.device_name, TRACK_GAUGE_NAME_LEN, "%s", "main_gauge");
-			enter = true;
-		}
-		oplus_chg_track_get_gauge_status(track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
-		oplus_chg_track_get_gauge_sili_alg_application_status(
-			track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
-		oplus_chg_track_get_gauge_sili_alg_monitor_status(
-			track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
-		oplus_chg_track_get_gauge_lifetime_status(
-			track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
-		oplus_chg_track_get_gauge_low_soc_monitor_status(
-			track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
-		track_chip->gauge_info.params.pre_soc = track_chip->gauge_info.params.soc;
-		track_chip->gauge_info.params.pre_ui_soc = track_chip->gauge_info.params.ui_soc;
-		track_chip->gauge_info.params.pre_cc = track_chip->gauge_info.params.cc;
-		track_chip->gauge_info.params.pre_batt_temp = track_chip->gauge_info.params.batt_temp;
-		track_chip->gauge_info.params.pre_soh = track_chip->gauge_info.params.soh;
-	} else if (track_chip->track_cfg.external_gauge_num == 2) {
-		track_chip->gauge_info.params.gauge_topic = oplus_mms_get_by_name("gauge:0");
-		track_chip->sub_gauge_info.params.gauge_topic = oplus_mms_get_by_name("gauge:1");
-		if (!track_chip->gauge_info.params.gauge_topic || !track_chip->sub_gauge_info.params.gauge_topic) {
-			chg_err("external_gauge_num=2 not match\n");
-			return -EINVAL;
-		}
-		oplus_gauge_get_qmax(monitor->gauge_topic, 0, &track_chip->gauge_info.params.qmax);
-		oplus_gauge_get_qmax(monitor->gauge_topic, 1, &track_chip->sub_gauge_info.params.qmax);
-		oplus_mms_get_item_data(track_chip->gauge_info.params.gauge_topic, GAUGE_ITEM_SOC, &data, false);
-		track_chip->gauge_info.params.soc = data.intval;
-		oplus_mms_get_item_data(track_chip->sub_gauge_info.params.gauge_topic, GAUGE_ITEM_SOC, &data, false);
-		track_chip->sub_gauge_info.params.soc = data.intval;
-		oplus_mms_get_item_data(track_chip->monitor->comm_topic, COMM_ITEM_UI_SOC, &data, false);
-		track_chip->gauge_info.params.ui_soc = data.intval;
-		oplus_mms_get_item_data(track_chip->monitor->comm_topic, COMM_ITEM_UI_SOC, &data, false);
-		track_chip->sub_gauge_info.params.ui_soc = data.intval;
-		oplus_mms_get_item_data(track_chip->gauge_info.params.gauge_topic, GAUGE_ITEM_CC, &data, true);
-		track_chip->gauge_info.params.cc = data.intval;
-		oplus_mms_get_item_data(track_chip->sub_gauge_info.params.gauge_topic, GAUGE_ITEM_CC, &data, true);
-		track_chip->sub_gauge_info.params.cc = data.intval;
-		oplus_mms_get_item_data(track_chip->gauge_info.params.gauge_topic, GAUGE_ITEM_TEMP, &data, true);
-		track_chip->gauge_info.params.batt_temp = data.intval;
-		oplus_mms_get_item_data(track_chip->sub_gauge_info.params.gauge_topic, GAUGE_ITEM_TEMP, &data, true);
-		track_chip->sub_gauge_info.params.batt_temp = data.intval;
-		oplus_mms_get_item_data(track_chip->gauge_info.params.gauge_topic, GAUGE_ITEM_SOH, &data, true);
-		track_chip->gauge_info.params.soh = data.intval;
-		oplus_mms_get_item_data(track_chip->sub_gauge_info.params.gauge_topic, GAUGE_ITEM_SOH, &data, true);
-		track_chip->sub_gauge_info.params.soh = data.intval;
-		oplus_mms_get_item_data(track_chip->gauge_info.params.gauge_topic, GAUGE_ITEM_FCC, &data, true);
-		track_chip->gauge_info.params.fcc = data.intval;
-		oplus_mms_get_item_data(track_chip->sub_gauge_info.params.gauge_topic, GAUGE_ITEM_FCC, &data, true);
-		track_chip->sub_gauge_info.params.fcc = data.intval;
-		oplus_mms_get_item_data(track_chip->gauge_info.params.gauge_topic, GAUGE_ITEM_VOL_MAX, &data, true);
-		track_chip->gauge_info.params.batt_volt= data.intval;
-		oplus_mms_get_item_data(track_chip->sub_gauge_info.params.gauge_topic, GAUGE_ITEM_VOL_MAX, &data, true);
-		track_chip->sub_gauge_info.params.batt_volt = data.intval;
-		if (!enter) {
-			track_chip->gauge_info.nominal_fcc = track_chip->track_cfg.nominal_fcc1;
-			track_chip->gauge_info.nominal_qmax = track_chip->track_cfg.nominal_qmax1;
-			track_chip->gauge_info.params.pre_soc = track_chip->gauge_info.params.soc;
-			track_chip->gauge_info.params.pre_ui_soc = track_chip->gauge_info.params.ui_soc;
-			track_chip->gauge_info.params.pre_cc = track_chip->gauge_info.params.cc;
-			track_chip->gauge_info.params.pre_record_soc = track_chip->gauge_info.params.soc;
-			track_chip->gauge_info.params.pre_batt_temp = track_chip->gauge_info.params.batt_temp;
-			track_chip->gauge_info.params.pre_soh = track_chip->gauge_info.params.soh;
-			track_chip->sub_gauge_info.nominal_fcc = track_chip->track_cfg.nominal_fcc2;
-			track_chip->sub_gauge_info.nominal_qmax = track_chip->track_cfg.nominal_qmax2;
-			track_chip->sub_gauge_info.params.pre_soc = track_chip->sub_gauge_info.params.soc;
-			track_chip->sub_gauge_info.params.pre_ui_soc = track_chip->sub_gauge_info.params.ui_soc;
-			track_chip->sub_gauge_info.params.pre_cc = track_chip->sub_gauge_info.params.cc;
-			track_chip->sub_gauge_info.params.pre_record_soc = track_chip->sub_gauge_info.params.soc;
-			track_chip->sub_gauge_info.params.pre_batt_temp = track_chip->sub_gauge_info.params.batt_temp;
-			track_chip->sub_gauge_info.params.pre_soh = track_chip->sub_gauge_info.params.soh;
-			rc = oplus_gauge_get_physical_name(monitor->gauge_topic, name, TRACK_GAUGE_NAME_LEN);
-			if (rc == 0) {
-				scnprintf(track_chip->gauge_info.device_name, TRACK_GAUGE_NAME_LEN, "%s_0", name);
-				scnprintf(track_chip->sub_gauge_info.device_name, TRACK_GAUGE_NAME_LEN, "%s_1", name);
-			} else {
-				scnprintf(track_chip->gauge_info.device_name, TRACK_GAUGE_NAME_LEN, "%s", "main_gauge");
-				scnprintf(track_chip->sub_gauge_info.device_name, TRACK_GAUGE_NAME_LEN, "%s", "sub_gauge");
-			}
-			enter = true;
-		}
-		oplus_chg_track_get_gauge_status(track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
-		oplus_chg_track_get_gauge_status(track_chip, &track_chip->sub_gauge_info,
-						 &track_chip->sub_gauge_info.params);
-		oplus_chg_track_get_gauge_sili_alg_application_status(
-			track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
-		oplus_chg_track_get_gauge_sili_alg_application_status(
-			track_chip, &track_chip->sub_gauge_info, &track_chip->sub_gauge_info.params);
-		oplus_chg_track_get_gauge_sili_alg_monitor_status(
-			track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
-		oplus_chg_track_get_gauge_sili_alg_monitor_status(
-			track_chip, &track_chip->sub_gauge_info, &track_chip->sub_gauge_info.params);
-		oplus_chg_track_get_gauge_lifetime_status(
-			track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
-		oplus_chg_track_get_gauge_lifetime_status(
-			track_chip, &track_chip->sub_gauge_info, &track_chip->sub_gauge_info.params);
-		oplus_chg_track_get_gauge_low_soc_monitor_status(
-			track_chip, &track_chip->gauge_info, &track_chip->gauge_info.params);
-		oplus_chg_track_get_gauge_low_soc_monitor_status(
-			track_chip, &track_chip->sub_gauge_info, &track_chip->sub_gauge_info.params);
-		track_chip->gauge_info.params.pre_soc =track_chip->gauge_info.params.soc;
-		track_chip->sub_gauge_info.params.pre_soc =track_chip->sub_gauge_info.params.soc;
-		track_chip->gauge_info.params.pre_ui_soc =track_chip->gauge_info.params.ui_soc;
-		track_chip->sub_gauge_info.params.pre_ui_soc =track_chip->sub_gauge_info.params.ui_soc;
-		track_chip->gauge_info.params.pre_cc =track_chip->gauge_info.params.cc;
-		track_chip->sub_gauge_info.params.pre_cc =track_chip->sub_gauge_info.params.cc;
-		track_chip->gauge_info.params.pre_batt_temp = track_chip->gauge_info.params.batt_temp;
-		track_chip->sub_gauge_info.params.pre_batt_temp = track_chip->sub_gauge_info.params.batt_temp;
-		track_chip->gauge_info.params.pre_soh = track_chip->gauge_info.params.soh;
-		track_chip->sub_gauge_info.params.pre_soh = track_chip->sub_gauge_info.params.soh;
-	}
+	gauge_type = oplus_get_gauge_type();
+	/* Support platform gauge even if external_gauge_num is 0 */
+	if (track_chip->track_cfg.external_gauge_num <= 0 && gauge_type != GAUGE_TYPE_PLATFORM)
+		return -ENOTSUPP;
+
+	single_one_or_plat = track_chip->track_cfg.external_gauge_num == 1 ||
+			     (track_chip->track_cfg.external_gauge_num == 0 &&
+			      gauge_type == GAUGE_TYPE_PLATFORM);
+	if (single_one_or_plat)
+		return oplus_chg_track_gauge_status_check_single(track_chip, monitor, &enter, name);
+	if (track_chip->track_cfg.external_gauge_num == 2)
+		return oplus_chg_track_gauge_status_check_dual(track_chip, monitor, &enter, name, &data);
+	if (track_chip->track_cfg.external_gauge_num == 0)
+		return oplus_chg_track_gauge_status_check_platform_zero(track_chip, monitor, &enter);
 
 	return 0;
 }
@@ -13323,6 +13494,9 @@ static void oplus_chg_track_err_subs_callback(struct mms_subscribe *subs,
 			break;
 		case ERR_ITEM_PPS:
 			oplus_chg_track_upload_pps_info(track);
+			break;
+		case ERR_ITEM_CYCLE_CURRENT_DERATING:
+			oplus_chg_track_upload_cycle_current_derating_info(track);
 			break;
 		case ERR_ITEM_DEEP_DISCHG_INFO:
 		case ERR_ITEM_SUB_DEEP_DISCHG_INFO:
@@ -13479,6 +13653,15 @@ static void oplus_chg_track_subscribe_pps_topic(struct oplus_mms *topic, void *p
 		chg_err("subscribe pps topic error, rc=%ld\n",
 			PTR_ERR(track->pps_subs));
 	}
+	return;
+}
+
+static void oplus_chg_track_subscribe_dischg_boost_topic(struct oplus_mms *topic, void *prv_data)
+{
+	struct oplus_chg_track *track = prv_data;
+
+	track->monitor->dischg_boost_topic = topic;
+	/* CV mode is now obtained directly via oplus_boost_get_cv_mode() when needed */
 	return;
 }
 
@@ -13644,6 +13827,7 @@ int oplus_chg_track_driver_init(struct oplus_monitor *monitor)
 
 	rc = oplus_chg_track_subscribe_err_topic(track_dev);
 	oplus_mms_wait_topic("pps", oplus_chg_track_subscribe_pps_topic, track_dev);
+	oplus_mms_wait_topic("dischg_boost", oplus_chg_track_subscribe_dischg_boost_topic, track_dev);
 	oplus_chg_track_bcc_err_init(track_dev);
 	oplus_chg_track_uisoh_err_init(track_dev);
 	oplus_chg_track_chg_up_err_init(track_dev);

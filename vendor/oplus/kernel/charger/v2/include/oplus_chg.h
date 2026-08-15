@@ -307,6 +307,14 @@ enum oplus_chg_wls_event_code {
 	WLS_EVENT_RXAC_DETACH,
 	WLS_EVENT_EPP_NEGO_FAIL,
 	WLS_EVENT_EPP_TX_MANU_ID,
+	WLS_EVENT_BLE_MAC_ADDR,
+	WLS_EVENT_WLSPEN_CHG_STATUS,
+};
+
+enum oplus_chg_wls_tx_start_type {
+	OPLUS_CHG_WLS_TX_STOP,
+	OPLUS_CHG_WLS_TX_START_NORMAL,
+	OPLUS_CHG_WLS_TX_START_WLSPEN,
 };
 
 enum fastchg_protocol_type {

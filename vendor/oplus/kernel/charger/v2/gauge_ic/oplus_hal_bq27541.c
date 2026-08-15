@@ -70,6 +70,7 @@
 
 #include "oplus_hal_bq27541.h"
 #include "oplus_hal_nfg8011b.h"
+#include "oplus_hal_bq28z610.h"
 #include <oplus_chg_monitor.h>
 #include "../monitor/oplus_chg_track.h"
 
@@ -1907,7 +1908,7 @@ static int zy0603_parse_afi_buf(struct chip_bq27541 *chip) {
 }
 
 /* OPLUS 2013-08-24 wangjc Add begin for add adc interface. */
-static int bq27541_get_battery_cc(struct chip_bq27541 *chip) /*  sjc20150105  */
+int bq27541_get_battery_cc(struct chip_bq27541 *chip) /*  sjc20150105  */
 {
 	int ret = 0;
 	int cc = 0;
@@ -2005,7 +2006,7 @@ static void bq27541_fcc_too_small_check(struct chip_bq27541 *chip, int fcc)
 	}
 }
 
-static int bq27541_get_battery_fcc(struct chip_bq27541 *chip) /*  sjc20150105  */
+int bq27541_get_battery_fcc(struct chip_bq27541 *chip) /*  sjc20150105  */
 {
 	int ret = 0;
 	int fcc = 0;
@@ -2123,8 +2124,19 @@ static void bq27541_cntl_cmd(struct chip_bq27541 *chip, int subcmd)
 	bq27541_i2c_txsubcmd(chip, BQ27541_BQ27411_REG_CNTL, subcmd);
 }
 
-static int bq28z610_get_2cell_voltage(struct chip_bq27541 *chip);
 /* static int bq28z610_get_2cell_balance_time(void); */
+
+static int __bq27541_get_battery_mvolts(struct chip_bq27541 *chip, int *volt)
+{
+	int ret;
+
+	if (chip->batt_nfg8011b && chip->fast_sampling_enable)
+		ret = bq27541_read_i2c(chip, NFG8011B_REG_REAL_VOLT, volt);
+	else
+		ret = bq27541_read_i2c(chip, chip->cmd_addr.reg_volt, volt);
+
+	return ret;
+}
 
 static int bq27541_get_battery_mvolts(struct chip_bq27541 *chip)
 {
@@ -2139,7 +2151,7 @@ static int bq27541_get_battery_mvolts(struct chip_bq27541 *chip)
 		return chip->batt_vol_pre;
 	}
 	if (atomic_read(&chip->locked) == 0) {
-		ret = bq27541_read_i2c(chip, chip->cmd_addr.reg_volt, &volt);
+		ret = __bq27541_get_battery_mvolts(chip, &volt);
 		if (ret) {
 			if (is_return_pre_value(chip))
 				return chip->batt_vol_pre;
@@ -2165,7 +2177,7 @@ static int bq27541_get_battery_mvolts(struct chip_bq27541 *chip)
 		while (!normal_range_judge(VOLT_MAX, VOLT_MIN, chip->batt_cell_max_vol) && retry > 0 && !ret) {
 			chg_err("bq27541_get_battery_mvolts %d out of range, retry %d\n", chip->batt_cell_max_vol, retry);
 			usleep_range(10000, 10000);
-			ret = bq27541_read_i2c(chip, chip->cmd_addr.reg_volt, &volt);
+			ret = __bq27541_get_battery_mvolts(chip, &volt);
 			if (ret) {
 				dev_err(chip->dev,
 					"error reading voltage, ret:%d\n", ret);
@@ -2784,7 +2796,7 @@ static int bq28z610_get_battery_balancing_status(void)
 	return batt_balancing_config;
 }
 
-static int bq27541_get_battery_temperature(struct chip_bq27541 *chip)
+int bq27541_get_battery_temperature(struct chip_bq27541 *chip)
 {
 	int ret = 0;
 	int temp = 0;
@@ -3139,7 +3151,7 @@ static int zy602_get_qmax_parameters(struct chip_bq27541 *chip, int *batt_qmax_1
 	return 0;
 }
 
-static int bq28z610_get_qmax_parameters(
+int bq28z610_get_qmax_parameters(
 	struct chip_bq27541 *chip, int *batt_qmax_1, int *batt_qmax_2, int *batt_qmax_passed_q)
 {
 	unsigned char qmax_buffer_1[BQ28Z610_MAC_CELL_QMAX_SIZE_A] = {0, 0, 0, 0};
@@ -3235,7 +3247,7 @@ static int zy602_get_battery_passed_q(struct chip_bq27541 *chip)
 	return passed_q;
 }
 
-static int bq27541_get_battery_soc(struct chip_bq27541 *chip)
+int bq27541_get_battery_soc(struct chip_bq27541 *chip)
 {
 	int ret;
 	int soc = 0;
@@ -3312,6 +3324,18 @@ static int bq27541_get_battery_soc_centi(struct chip_bq27541 *chip)
 	return soc_centi;
 }
 
+static int __bq27541_get_average_current(struct chip_bq27541 *chip, int *curr)
+{
+	int ret;
+
+	if (chip->batt_nfg8011b && chip->fast_sampling_enable)
+		ret = bq27541_read_i2c(chip, NFG8011B_REG_REAL_CURR, curr);
+	else
+		ret = bq27541_read_i2c(chip, chip->cmd_addr.reg_ai, curr);
+
+	return ret;
+}
+
 static int bq27541_get_average_current(struct chip_bq27541 *chip)
 {
 	int ret;
@@ -3326,7 +3350,7 @@ static int bq27541_get_average_current(struct chip_bq27541 *chip)
 		return -chip->current_pre;
 	}
 	if (atomic_read(&chip->locked) == 0) {
-		ret = bq27541_read_i2c(chip, chip->cmd_addr.reg_ai, &curr);
+		ret = __bq27541_get_average_current(chip, &curr);
 		if (!ret && (curr & 0x8000))
 			temp_curr = ((~(curr - 1)) & 0xFFFF);
 		else if (!ret)
@@ -3334,7 +3358,7 @@ static int bq27541_get_average_current(struct chip_bq27541 *chip)
 		while (!normal_range_judge(CURR_MAX, CURR_MIN, temp_curr) && retry > 0 && !ret) {
 			chg_err("bq27541_get_average_current %d out of range, retry %d\n", temp_curr, retry);
 			usleep_range(10000, 10000);
-			ret = bq27541_read_i2c(chip, chip->cmd_addr.reg_ai, &curr);
+			ret = __bq27541_get_average_current(chip, &curr);
 			if (!ret && (curr & 0x8000))
 				temp_curr = ((~(curr - 1)) & 0xFFFF);
 			else if (!ret)
@@ -5865,14 +5889,14 @@ static void bq28z610_modify_dod0_parameter(struct chip_bq27541 *chip)
 		usleep_range(1000, 1000);
 		bq8z610_seal(chip);
 	}
-	
+
 	if (rc < 0)
 		chg_err("read i2c err\n");
 
 	chg_info("end\n");
 }
 
-static int bq28z610_get_2cell_voltage(struct chip_bq27541 *chip)
+int bq28z610_get_2cell_voltage(struct chip_bq27541 *chip)
 {
 	u8 cell_vol[BQ28Z610_MAC_CELL_VOLTAGE_SIZE] = {0, 0, 0, 0};
 	u8 cell_vol_zy0603[BQ28Z610_MAC_CELL_VOLTAGE_SIZE + 2] = {0, 0, 0, 0, 0, 0};
@@ -5934,7 +5958,7 @@ static int bq28z610_get_2cell_voltage(struct chip_bq27541 *chip)
 	return 0;
 }*/
 
-static bool bq8z610_deep_init(struct chip_bq27541 *chip)
+bool bq8z610_deep_init(struct chip_bq27541 *chip)
 {
 	if (!bq8z610_sealed(chip)) {
 		chg_err("bq8z610 already unsealed\n");
@@ -5951,7 +5975,7 @@ static bool bq8z610_deep_init(struct chip_bq27541 *chip)
 	}
 }
 
-static void bq8z610_deep_deinit(struct chip_bq27541 *chip)
+void bq8z610_deep_deinit(struct chip_bq27541 *chip)
 {
 	int i = 0;
 
@@ -9372,7 +9396,7 @@ static int oplus_bq27541_set_first_usage_date(struct oplus_chg_ic_dev *ic_dev, c
 
 	if (chip->batt_nfg8011b) {
 		rc = nfg8011b_write_block(chip, NFG8011B_SUBCMD_DEEP_INFO_ADDR, (u8 *)&date, sizeof(date),
-					  NFG8011B_ECO_FIRST_USAGE_DATE_OFFSET, true);
+					  NFG8011B_ECO_FIRST_USAGE_DATE_OFFSET, true, true);
 		if (rc) {
 			chg_err("set fail rc = %d\n", rc);
 			return rc;
@@ -9437,7 +9461,7 @@ static int oplus_bq27541_set_ui_cycle_count(struct oplus_chg_ic_dev *ic_dev, u16
 
 	if (chip->batt_nfg8011b) {
 		rc = nfg8011b_write_block(chip, NFG8011B_SUBCMD_DEEP_INFO_ADDR, (u8 *)&ui_cycle_count,
-					  sizeof(ui_cycle_count), NFG8011B_ECO_UI_CC_OFFSET, true);
+					  sizeof(ui_cycle_count), NFG8011B_ECO_UI_CC_OFFSET, true, true);
 		if (rc) {
 			chg_err("set fail rc = %d\n", rc);
 			return rc;
@@ -9501,7 +9525,7 @@ static int oplus_bq27541_set_ui_soh(struct oplus_chg_ic_dev *ic_dev, u8 ui_soh)
 
 	if (chip->batt_nfg8011b) {
 		rc = nfg8011b_write_block(chip, NFG8011B_SUBCMD_DEEP_INFO_ADDR, (u8 *)&ui_soh, sizeof(ui_soh),
-					  NFG8011B_ECO_UI_SOH_OFFSET, true);
+					  NFG8011B_ECO_UI_SOH_OFFSET, true, true);
 		if (rc) {
 			chg_err("set fail rc = %d\n", rc);
 			return rc;
@@ -9565,7 +9589,7 @@ static int oplus_bq27541_set_used_flag(struct oplus_chg_ic_dev *ic_dev, u8 used_
 
 	if (chip->batt_nfg8011b) {
 		rc = nfg8011b_write_block(chip, NFG8011B_SUBCMD_DEEP_INFO_ADDR, (u8 *)&used_flag, sizeof(used_flag),
-					  NFG8011B_ECO_USED_FLAG_OFFSET, true);
+					  NFG8011B_ECO_USED_FLAG_OFFSET, true, true);
 		if (rc) {
 			chg_err("set fail rc = %d\n", rc);
 			return rc;
@@ -9770,6 +9794,144 @@ static int oplus_gauge_get_sili_lifetime_info(
 	return ret;
 }
 
+#define GAURGE_R_SUBCMD_TRY_COUNT	3
+int bq28z610_get_gauge_r_info(struct chip_bq27541 *chip, u8 *info, int len)
+{
+	int i;
+	int j;
+	int ret = 0;
+	int size;
+	int index = 0;
+	int data_check;
+	int try_count = GAURGE_R_SUBCMD_TRY_COUNT;
+	u8 extend_data[34] = {0};
+	struct gauge_track_info_reg *extend;
+	struct gauge_track_info_reg gauge_r_extend[] = {
+		{ BQ28Z610_REG_TRUE_FCC, 12, BQ28Z610_TRUE_FCC_OFFSET, BQ28Z610_TRUE_FCC_OFFSET + 1},
+		{ BQ28Z610_REG_DELTA_VOL, 2, 0, 1},
+		{ BQ28Z610_REG_CELL0_RA, 10, 0, 9},
+		{ BQ28Z610_REG_CELL1_RA, 10, 0, 9},
+	};
+
+	extend = gauge_r_extend;
+	size = ARRAY_SIZE(gauge_r_extend);
+
+	mutex_lock(&chip->bq28z610_alt_manufacturer_access);
+	if (!bq8z610_deep_init(chip)) {
+		mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+		return ret;
+	}
+
+	for (i = 0; i < size; i++) {
+		try_count = GAURGE_R_SUBCMD_TRY_COUNT;
+try:
+		ret = bq27541_i2c_txsubcmd(chip, BQ28Z610_REG_CNTL1, extend[i].addr);
+		if (ret < 0)
+			continue;
+
+		if (sizeof(extend_data) >= extend[i].len + 2) {
+			usleep_range(1000, 1000);
+			ret = bq27541_read_i2c_block(chip, BQ28Z610_REG_CNTL1, (extend[i].len + 2), extend_data);
+			if (ret < 0)
+				continue;
+			data_check = (extend_data[1] << 0x8) | extend_data[0];
+			if (try_count-- > 0 && data_check != extend[i].addr) {
+				chg_info("0x%4x not match. try_count=%d, extend_data[0]=0x%2x, extend_data[1]=0x%2x\n",
+					extend[i].addr, try_count, extend_data[0], extend_data[1]);
+				usleep_range(2000, 2000);
+				goto try;
+			}
+			if (try_count < 0)
+				continue;
+			index += scnprintf(info + index, len - index, "0x%04x=", extend[i].addr);
+			for (j = extend[i].start_index; j < extend[i].end_index; j++)
+				index += scnprintf(info + index, len - index, "%02x,", extend_data[j + 2]);
+			index += scnprintf(info + index, len - index, "%02x", extend_data[j + 2]);
+			if (i < size - 1)
+				usleep_range(2000, 2000);
+		}
+		if (i  <  size - 1)
+			index += scnprintf(info + index, len - index, "|");
+	}
+	bq8z610_deep_deinit(chip);
+	mutex_unlock(&chip->bq28z610_alt_manufacturer_access);
+
+	return index;
+}
+
+static int oplus_gauge_get_gauge_r_info(struct oplus_chg_ic_dev *ic_dev, u8 *info, int len)
+{
+	struct chip_bq27541 *chip;
+	int ret = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+
+	if (chip->batt_bq28z610 && !chip->batt_zy0603)
+		ret = bq28z610_get_gauge_r_info(chip, info, len);
+
+	return ret;
+}
+
+static int oplus_bq27541_vdelta_check(struct oplus_chg_ic_dev *ic_dev, bool ra_cv)
+{
+	struct chip_bq27541 *chip;
+	int ret = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+	if (!chip->batt_bq28z610 || !chip->fcc_vdelta_support)
+		return ret;
+
+	bq28z610_fcc_init_cc1(chip);
+
+	if ((chip->ra_config.ra_cc1 < chip->ra_config.ra_vd_cc0 +
+		chip->ra_vd_curve.delta_cc) && (!chip->ra_config.dbg_cc) && !ra_cv) {
+		return 0;
+	}
+	ret = bq28z610_delta_volt_clear(chip, false);
+	return ret;
+}
+
+static int oplus_bq27541_ra_t_check(struct oplus_chg_ic_dev *ic_dev)
+{
+	struct chip_bq27541 *chip;
+	int ret = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+	bq28z610_fcc_ra_t_check(chip);
+
+	return ret;
+}
+
+static int oplus_bq27541_ra0_check(struct oplus_chg_ic_dev *ic_dev)
+{
+	struct chip_bq27541 *chip;
+	int ret = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+	if (!chip->batt_bq28z610 || !chip->fcc_ra0_support)
+		return ret;
+
+
+	ret = bq28z610_fcc_ra0_init(chip);
+	return ret;
+}
+
 static int gauge_get_sili_alg_application_info(
 	struct oplus_chg_ic_dev *ic_dev, u8 *buf, int len)
 {
@@ -9784,6 +9946,27 @@ static int gauge_get_sili_alg_application_info(
 
 	if (chip->batt_nfg8011b)
 		ret = nfg8011b_get_sili_alg_application_info(chip, buf, len);
+
+	return ret;
+}
+
+static int oplus_bq27541_set_fast_sampling(
+	struct oplus_chg_ic_dev *ic_dev, bool enable)
+{
+	int ret = 0;
+	struct chip_bq27541 *chip;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
+	if (is_return_pre_value(chip))
+		return -EINVAL;
+
+	if (chip->batt_nfg8011b)
+		ret = nfg8011b_set_fast_sampling(chip, enable);
 
 	return ret;
 }
@@ -10197,6 +10380,26 @@ static void *oplus_chg_get_func(struct oplus_chg_ic_dev *ic_dev,
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_SN_MATCH,
 			oplus_bq27541_get_sn_match);
 		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_GAUGE_R_INFO:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_GET_GAUGE_R_INFO,
+						  oplus_gauge_get_gauge_r_info);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_SET_FAST_SAMPLING:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_SET_FAST_SAMPLING,
+			oplus_bq27541_set_fast_sampling);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_FCC_VDELTA_CHECK:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_FCC_VDELTA_CHECK,
+			oplus_bq27541_vdelta_check);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_FFC_T_RA_CHECK:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_FFC_T_RA_CHECK,
+			oplus_bq27541_ra_t_check);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_FFC_RA0_CHECK:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GAUGE_FFC_RA0_CHECK,
+			oplus_bq27541_ra0_check);
+		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);
 		func = NULL;
@@ -10322,6 +10525,12 @@ static int bq27541_driver_probe(struct i2c_client *client,
 	int ic_index;
 	struct oplus_chg_ic_cfg ic_cfg = { 0 };
 	int rc = 0;
+	struct device_node *node = oplus_get_node_by_child_gauge(client->dev.of_node);
+
+	if (node && of_property_read_bool(node, "skip_gauge_probe")) {
+		dev_err(&client->dev, "non-external gauge, skip i2c gauge driver probe\n");
+		return -ENODEV;
+	}
 
 	if (bq27541_need_level_shift(client->dev.of_node) &&
 	    !is_level_shift_available(client->dev.of_node)) {
@@ -10351,6 +10560,8 @@ static int bq27541_driver_probe(struct i2c_client *client,
 	mutex_init(&fg_ic->calib_time_mutex);
 	mutex_init(&fg_ic->bq28z610_alt_manufacturer_access);
 	bq27541_parse_dt(fg_ic);
+	bq28z610_parse_fcc_ra_dt(fg_ic);
+	bq27541_create_device_node(&(client->dev));
 	/* workaround for I2C pull SDA can't trigger error issue 230504153935012779 */
 	fg_ic->err_status = false;
 	/* end workaround 230504153935012779 */
@@ -10372,6 +10583,9 @@ rerun:
 */
 	INIT_WORK(&fg_ic->fcc_too_small_check_work, bq27541_fcc_too_small_check_work);
 	INIT_DELAYED_WORK(&fg_ic->check_iic_recover, bq27541_check_iic_recover);
+	INIT_DELAYED_WORK(&fg_ic->track_fcc_ra0_work, bq27541_track_fcc_ra0_work);
+	INIT_DELAYED_WORK(&fg_ic->track_fcc_vdelta_work, bq27541_track_fcc_vdelta_work);
+	INIT_DELAYED_WORK(&fg_ic->track_fcc_ra_t_work, bq27541_track_fcc_ra_t_work);
 	fg_ic->soc_pre = 50;
 	if (fg_ic->batt_bq28z610) {
 		fg_ic->batt_vol_pre = 3800;
@@ -10440,14 +10654,13 @@ rerun:
 	oplus_bq27541_init_sn_match(fg_ic);
 	atomic_set(&fg_ic->locked, 0);
 	bq28z610_afi_param_update(fg_ic);
-	rc = of_property_read_u32(fg_ic->dev->of_node, "oplus,ic_type",
-				  &ic_type);
+	bq28z610_fcc_vdelta_init(fg_ic);
+	rc = of_property_read_u32(fg_ic->dev->of_node, "oplus,ic_type", &ic_type);
 	if (rc < 0) {
 		chg_err("can't get ic type, rc=%d\n", rc);
 		goto error;
 	}
-	rc = of_property_read_u32(fg_ic->dev->of_node, "oplus,ic_index",
-				  &ic_index);
+	rc = of_property_read_u32(fg_ic->dev->of_node, "oplus,ic_index", &ic_index);
 	if (rc < 0) {
 		chg_err("can't get ic index, rc=%d\n", rc);
 		goto error;
