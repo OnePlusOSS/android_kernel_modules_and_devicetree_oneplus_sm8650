@@ -1,6 +1,9 @@
 //ifdef OPLUS_FEATURE_CHG_BASIC
 &oplus_mms_gauge {
 	silicon_1 {
+		oplus,fcl_support;
+		oplus,fcl_index = <0>;
+		oplus,vb_offset = <0>;
 		deep_spec,support;
 		deep_spec,uv_thr = <3000>;
 		deep_spec,count_thr = <50>;
@@ -236,6 +239,9 @@
 
 &oplus_chg_comm {
 	silicon_1 {
+		oplus_spec,dec_step = <20>;
+		oplus_spec,dec-vol-cc-full-thr = <0 400 600 800 1000 1200>;
+		oplus_spec,dec-vol-fv-full-mv = <0 20 20 40 40 40>;
 		oplus_spec,batt-them-thr = <(-100) 0 50 120 160 350 450 530>;
 		oplus_spec,iterm-ma = <160>;
 		oplus_spec,fv-mv = <4500 4500 4500 4500 4500 4500 4485 4130 4130>;
@@ -258,6 +264,10 @@
 		oplus_spec,ffc-temp-thr = <120 200 350 400>;
 		oplus_spec,wired-ffc-step-max = <2>;
 		oplus_spec,wired-ffc-fv-mv = <4590 4590>;
+		oplus_spec,bdd-vbatdiff-mv = <50>;
+		oplus_spec,bdd-enter-current-ma = <100>;
+		oplus_spec,bdd-enter-voltage-mv = <200>;
+		oplus_spec,bdd-vbatdiff-timeout-min = <10080>;
 		oplus_spec,wired-ffc-fv-cutoff-mv = <4545 4515 4500
 						     4515 4505 4490>;
 
@@ -274,6 +284,7 @@
 							10 20>;
 		oplus_spec,wired-aging-ffc-cycle-thr = <500 1000>;
 
+		oplus_spec,support_gauge_r_track;
 		oplus_spec,vbat_uv_thr_mv = <3000>;
 		oplus_spec,vbat_charging_uv_thr_mv = <2900>;
 
@@ -288,6 +299,7 @@
 		oplus,gauge_stuck_threshold = <15>;
 		oplus,gauge_stuck_time = <50>;
 
+		oplus_spec,batt_full_time = <300>;
 		oplus,smooth_switch;
 		oplus,reserve_chg_soc = <3>;
 		oplus,reserve_dis_soc = <3>;

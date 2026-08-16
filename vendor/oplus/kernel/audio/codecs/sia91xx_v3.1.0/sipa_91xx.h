@@ -30,7 +30,7 @@
 #define SIPA_ERROR_SOFT_MUTE				(6)
 #define SIPA_ERROR_DEV_START				(7)
 
-#define I2C_RETRIES 						(50)
+#define I2C_RETRIES 						(5)
 #define I2C_RETRY_DELAY 					(5) 		/* ms */
 
 #define TRIGGER_RISING						(0)			/* Rising edge trigger   */

@@ -115,6 +115,9 @@ int cam_sync_init_group_object(struct sync_table_row *table,
  *
  * @return None
  */
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+void cam_sync_util_cb_dispatch_kthread_work(struct kthread_work *cb_dispatch_kwork);
+#endif
 void cam_sync_util_cb_dispatch(struct work_struct *cb_dispatch_work);
 
 /**

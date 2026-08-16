@@ -629,7 +629,7 @@ static long logger_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	}
 
 	ret = osvelte_common_ioctl(file, cmd, arg);
-	if (ret != CMD_COMMON_INVLAID)
+	if (ret != CMD_COMMON_INVALID)
 		return ret;
 
 	ret = proc_memstat_ioctl(file, cmd, arg);

@@ -77,5 +77,7 @@ struct oplus_spk_dev_node {
 struct oplus_speaker_device* get_speaker_dev(enum oplus_pa_type pa_type);
 void *oplus_speaker_pa_register(struct oplus_speaker_device *device);
 int oplus_speaker_pa_remove(void *node);
+void oplus_speaker_probe_lock(void);
+void oplus_speaker_probe_unlock(void);
 #endif /* __OPLUS_AUDIO_SPEAKER_CODEC_H__ */
 

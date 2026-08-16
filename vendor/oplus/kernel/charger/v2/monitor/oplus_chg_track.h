@@ -74,7 +74,12 @@ enum oplus_chg_track_info_flag {
 	TRACK_NOTIFY_FLAG_PRECHG_BATT_R_INFO,
 	TRACK_NOTIFY_FLAG_BDD_INFO,
 	TRACK_NOTIFY_FLAG_BS_INFO,
-	TRACK_NOTIFY_FLAG_GENERAL_RECORD_LAST = TRACK_NOTIFY_FLAG_BS_INFO,
+	TRACK_NOTIFY_FLAG_STATE_KEEP_INFO,
+	TRACK_NOTIFY_FLAG_SEC_IC_MEMINFO,
+	TRACK_NOTIFY_FLAG_WIRED_REVERSE_CHG_INFO,
+	TRACK_NOTIFY_FLAG_WIRED_HIGH_REVERSE_ERR,
+	TRACK_NOTIFY_FLAG_SHUTDOWN_VOL,
+	TRACK_NOTIFY_FLAG_GENERAL_RECORD_LAST = TRACK_NOTIFY_FLAG_SHUTDOWN_VOL,
 
 	TRACK_NOTIFY_FLAG_NO_CHARGING_FIRST,
 	TRACK_NOTIFY_FLAG_NO_CHARGING = TRACK_NOTIFY_FLAG_NO_CHARGING_FIRST,
@@ -99,7 +104,8 @@ enum oplus_chg_track_info_flag {
 	TRACK_NOTIFY_FLAG_CHG_SLOW_BTB_OVER_TEMP,
 	TRACK_NOTIFY_FLAG_CHG_SLOW_R_COOLDOWN,
 	TRACK_NOTIFY_FLAG_CHG_SLOW_QUIET_MODE,
-	TRACK_NOTIFY_FLAG_CHARGING_SLOW_LAST = TRACK_NOTIFY_FLAG_CHG_SLOW_QUIET_MODE,
+	TRACK_NOTIFY_FLAG_CHG_SLOW_CYCLE_CURR_DERATING,
+	TRACK_NOTIFY_FLAG_CHARGING_SLOW_LAST = TRACK_NOTIFY_FLAG_CHG_SLOW_CYCLE_CURR_DERATING,
 
 	TRACK_NOTIFY_FLAG_CHARGING_BREAK_FIRST,
 	TRACK_NOTIFY_FLAG_FAST_CHARGING_BREAK = TRACK_NOTIFY_FLAG_CHARGING_BREAK_FIRST,
@@ -143,16 +149,20 @@ enum oplus_chg_track_info_flag {
 	TRACK_NOTIFY_FLAG_DUMMY_START_ABNORMAL,
 	TRACK_NOTIFY_FLAG_WIRED_ONLINE_ERROR,
 	TRACK_NOTIFY_FLAG_UISOC_KEEP_2_ERROR,
+	TRACK_NOTIFY_FLAG_UISOC_KEEP_3_ERROR,
 	TRACK_NOTIFY_FLAG_UISOC_DROP_ERROR,
 	TRACK_NOTIFY_FLAG_BCC_SI_ABNORMAL,
 	TRACK_NOTIFY_FLAG_EIS_ABNORMAL,
 	TRACK_NOTIFY_FLAG_BAL_ABNORMAL,
-	TRACK_NOTIFY_FLAG_SOFTWARE_ABNORMAL_LAST = TRACK_NOTIFY_FLAG_BAL_ABNORMAL,
+	TRACK_NOTIFY_FLAG_STATE_KEEP_ABNORMAL,
+	TRACK_NOTIFY_FLAG_USBIN_ABNORMAL,
+	TRACK_NOTIFY_FLAG_SOFTWARE_ABNORMAL_LAST = TRACK_NOTIFY_FLAG_USBIN_ABNORMAL,
 
 	TRACK_NOTIFY_FLAG_UPLOAD_LOG_FIRST,
 	TRACK_NOTIFY_FLAG_UPLOAD_BREAK_LOG = TRACK_NOTIFY_FLAG_UPLOAD_LOG_FIRST,
 	TRACK_NOTIFY_FLAG_UPLOAD_NO_CHG_LOG,
-	TRACK_NOTIFY_FLAG_UPLOAD_LOG_LAST = TRACK_NOTIFY_FLAG_UPLOAD_NO_CHG_LOG,
+	TRACK_NOTIFY_FLAG_UPLOAD_WLS_BREAK_LOG,
+	TRACK_NOTIFY_FLAG_UPLOAD_LOG_LAST = TRACK_NOTIFY_FLAG_UPLOAD_WLS_BREAK_LOG,
 
 	TRACK_NOTIFY_FLAG_CRASH_FIRST,
 	TRACK_NOTIFY_FLAG_SOCCP_CRASH  = TRACK_NOTIFY_FLAG_CRASH_FIRST,
@@ -224,6 +234,7 @@ void oplus_chg_track_init_dischg_profile(struct oplus_monitor *monitor);
 void oplus_chg_track_update_dischg_profile(struct oplus_monitor *monitor);
 void oplus_chg_track_upload_dischg_profile(struct oplus_monitor *monitor);
 void oplus_chg_track_upload_uisoc_keep_2_err_info(struct oplus_monitor *monitor);
+void oplus_chg_track_upload_uisoc_keep_3_err_info(struct oplus_monitor *monitor);
 int oplus_chg_track_upload_rechg_info(struct oplus_monitor *monitor);
 int oplus_chg_track_get_bidirect_cp_err_reason(int err_type, char * err_reason, int len);
 void oplus_chg_track_upload_wired_retention_online_info(struct oplus_monitor *monitor);
@@ -232,4 +243,6 @@ int oplus_chg_track_check_wired_mul_break_stat(int vbus_rising);
 int oplus_chg_track_check_wls_mul_break_stat(int wls_connect);
 void oplus_chg_track_update_break_ui_online(void);
 void oplus_chg_track_update_prechg_r_data(struct oplus_monitor *monitor);
+void oplus_chg_track_upload_reverse_chg_info(struct oplus_monitor *monitor);
+void oplus_chg_track_upload_high_reverse_err_info(struct oplus_monitor *monitor);
 #endif /* __OPLUS_CHG_TRACK_H__ */

@@ -66,7 +66,8 @@ def define_oplus_local_modules():
             "hbp_power.c",
             "hbp_spi.c",
             "hbp_sysfs.c",
-            "hbp_exception.c"
+            "hbp_exception.c",
+            "hbp_healthinfo.c"
         ]),
         includes = ["."],
         ko_deps = panel_event_notifier_ko_deps + tp_others_ko_deps,
@@ -85,6 +86,26 @@ def define_oplus_local_modules():
         srcs = native.glob([
             "**/*.h",
             "chips/focal/ft3683g/fhp_core.c",
+        ]),
+        includes = ["."],
+        ko_deps = [
+            "//vendor/oplus/kernel/tp/hbp/hbp:oplus_hbp_core",
+        ],
+        local_defines = [
+                 "BUILD_BY_BAZEL",
+        ],
+        conditional_defines = {
+            "mtk":  ["CONFIG_TOUCHPANEL_MTK_PLATFORM", "CONFIG_DRM_MEDIATEK"],
+            "qcom":  ["CONFIG_QCOM_PANEL_EVENT_NOTIFIER"],
+        },
+
+    )
+
+    define_oplus_ddk_module(
+        name = "oplus_ft3685g",
+        srcs = native.glob([
+            "**/*.h",
+            "chips/focal/ft3685g/fhp_core.c",
         ]),
         includes = ["."],
         ko_deps = [
@@ -158,6 +179,7 @@ def define_oplus_local_modules():
         module_list = [
             "oplus_hbp_core",
             "oplus_ft3683g",
+            "oplus_ft3685g",
             "oplus_bsp_tp_hbp_syna_s3910",
             "oplus_bsp_tp_hbp_goodix_gt99x6"
         ],

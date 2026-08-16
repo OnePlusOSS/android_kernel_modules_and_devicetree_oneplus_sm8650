@@ -1,0 +1,5 @@
+config OPLUS_CHG_SYMBOL
+        tristate "Add for oplus chg v1 and v2 compatible"
+        default n
+        help
+          Add for oplus chg v1 and v2 compatible.

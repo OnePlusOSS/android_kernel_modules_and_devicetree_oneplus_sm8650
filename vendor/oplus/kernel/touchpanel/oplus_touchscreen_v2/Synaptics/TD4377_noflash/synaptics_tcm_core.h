@@ -138,6 +138,8 @@ enum touch_report_code {
 	TOUCH_GET_WATER_MODE = 202,
 	TOUCH_GESTURE_SINGLE_TAP   = 203,
 	TOUCH_REPORT_GLOVE_DETECTED = 204,
+	TOUCH_REPORT_IFP_INFO = 219,
+	TOUCH_REPORT_IFP_DEBUG_INFO = 220,
 };
 
 enum module_type {
@@ -233,10 +235,13 @@ enum dynamic_config_id {
 	DC_HEADSET_MODE_ENABLED = 0xD1,
 	DC_FREQUENCE_HOPPING = 0xD2,
 	DC_SET_REPORT_FRE = 0x11,
+	DC_FW_SUPPORT_DATA_RECOED   = 0xF7,
 	DC_GLOVE_MODE_ENABLED = 0x0D,
 	DC_GLOVE_MODE_STATE = 0xF5,
 	DC_GESTURE_MASK   = 0xFE,
 	DC_UNDER_WATER = 0xF6,
+	DC_LOW_TEMP_ENABLE = 0xFD,
+	DC_WATERPROOF_ENABLE = 0xFC,
 };
 
 enum command {
@@ -259,6 +264,7 @@ enum command {
 	CMD_SET_STATIC_CONFIG = 0x22,
 	CMD_GET_DYNAMIC_CONFIG = 0x23,
 	CMD_SET_DYNAMIC_CONFIG = 0x24,
+	CMD_SET_LONG_CONFIG = 0x34,
 	CMD_GET_TOUCH_REPORT_CONFIG = 0x25,
 	CMD_SET_TOUCH_REPORT_CONFIG = 0x26,
 	CMD_REZERO = 0x27,
@@ -336,6 +342,13 @@ enum flash_data {
 enum palm_mode {
 	PALM_TO_DEFAULT = 0,
 	PALM_TO_SLEEP   = 1,
+};
+
+enum diaphragm_mode {
+	DIAPHRAGM_DEFAULT_MODE = 0,
+	DIAPHRAGM_FILM_MODE = 1,
+	DIAPHRAGM_WATERPROO_MODE = 2,
+	DIAPHRAGM_FILM_WATERPROO_MODE = 3,
 };
 
 enum glove_mode {
@@ -505,6 +518,7 @@ struct syna_tcm_hcd {
 	struct touch_hcd *touch_hcd;
 	struct syna_tcm_test *test_hcd;
 	struct synaptics_proc_operations *syna_ops;
+	struct touchpanel_data *ts;
 	struct firmware_headfile *p_firmware_headfile;
 	struct firmware *tcm_firmware_headfile;
 
@@ -535,15 +549,18 @@ struct syna_tcm_hcd {
 	unsigned int app_status;
 	unsigned int max_touch_num;
 	unsigned int hdl_finished_flag;
+	unsigned int hw_reset_retry;
 	uint8_t  touch_direction;
 
 	bool tp_fw_update_headfile;
 	bool tp_fw_update_first;
 	bool tp_fw_update_parse;
+	bool lpwg_fw_support_flag;
 	int tp_irq_state;
 	int zeroflash_init_done;
 	int check_uboot_failed_count;
 	int request_fw_image_id;
+	int gesture_fw_finished_flag;
 
 	struct completion config_complete;
 	struct mutex reset_mutex;
@@ -576,6 +593,7 @@ struct syna_tcm_hcd {
 	struct hrtimer watchdog;
 	struct work_struct timeout_work;
 
+	int tp_index;
 	unsigned int grip_darkzone_x;
 	unsigned int grip_darkzone_y;
 	unsigned int grip_darkzone_v2_x;
@@ -586,6 +604,10 @@ struct syna_tcm_hcd {
 	bool health_monitor_support;
 	bool health_monitor_v2_support;
 	bool pt17_pt18_test_support;
+	bool hw_rt_retry_support;
+	bool differ_read_every_frame;
+	bool tp_data_record_support;
+	unsigned short fw_data_record_support;
 };
 
 struct device_hcd {
@@ -641,6 +663,30 @@ struct zeroflash_image_header {
 	unsigned char magic_value[4];
 	unsigned char num_of_areas[4];
 };
+
+struct touch_data_frame_message {
+	unsigned short MaxDelta:16;
+	unsigned short frameCnt:4;
+	unsigned short lgmFlg:1;
+	unsigned short curFrequency:2;
+	unsigned short gloveFlg:1;
+	unsigned short gameMode:1;
+	unsigned short gripFlg:1;
+	unsigned short bendintFlg:1;
+	unsigned short baseFlg:1;
+	unsigned short groundFlg:1;
+	unsigned short palmFlg:1;
+	unsigned short moistureFlg:1;
+	unsigned short chargerFlg:1;
+	unsigned short powerIm:16;
+
+	unsigned short deltaOrBaseline:15;
+	unsigned short baselineErrorFlg:1;
+
+	unsigned short fingerThreshold:9;
+	unsigned short dozeThreshold:7;
+	unsigned short gestureDetected:16;
+} __packed;
 
 struct rmi_f35_query {
 	unsigned char version:4;
@@ -744,8 +790,7 @@ static inline int syna_tcm_realloc_mem(struct syna_tcm_hcd *tcm_hcd,
 		if (!(buffer->buf)) {
 			TPD_INFO("%s: Failed to allocate memory\n",
 				 __func__);
-			kfree(temp);
-			buffer->buf_size = 0;
+			buffer->buf = temp;
 			return -ENOMEM;
 		}
 
@@ -773,14 +818,15 @@ static inline int syna_tcm_alloc_mem(struct syna_tcm_hcd *tcm_hcd,
 				     struct syna_tcm_buffer *buffer, unsigned int size)
 {
 	if (size > buffer->buf_size) {
-		kfree(buffer->buf);
+		unsigned char *temp;
+		temp = buffer->buf;
 		buffer->buf = kmalloc(size, GFP_KERNEL);
 		if (!(buffer->buf)) {
 			TPD_INFO("%s: Failed to allocate memory, size %d\n", __func__, size);
-			buffer->buf_size = 0;
-			buffer->data_length = 0;
+			buffer->buf = temp;
 			return -ENOMEM;
 		}
+		kfree(temp);
 		buffer->buf_size = size;
 	}
 

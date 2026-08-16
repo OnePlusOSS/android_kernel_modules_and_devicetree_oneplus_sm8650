@@ -171,6 +171,7 @@
 					OPLUS_IC_FUNC_CP_WATCHDOG_ENABLE
 					OPLUS_IC_FUNC_CP_GET_IIN_MAX
 					OPLUS_IC_FUNC_CP_WATCHDOG_RESET
+					OPLUS_IC_FUNC_CP_SET_SSTIMEOUT_UCP_ENABLE
 				>;
 				virqs = <
 					OPLUS_IC_VIRQ_ERR
@@ -279,7 +280,7 @@
 		compatible = "oplus,wired";
 
 		oplus,vooc-support;
-
+		oplus,qc-curr-check-support;
 		oplus_spec,vbatt_pdqc_to_9v_thr = <5000>;
 		oplus_spec,vbatt_pdqc_to_5v_thr = <5000>;
 		oplus_spec,pd-iclmax-ma = <2000>;
@@ -389,6 +390,8 @@
 		oplus,smooth_switch;
 		oplus,reserve_chg_soc = <3>;
 		oplus,reserve_dis_soc = <3>;
+
+		oplus_spec,batt_full_time = <300>;
 	};
 
 	oplus_vooc: oplus,vooc {
@@ -473,6 +476,9 @@
 		oplus,gauge_ic = <&oplus_virtual_gauge>;
 		oplus,topic-update-interval = <5000>;
 		oplus,support_subboard_ntc;
+		oplus,fcl_support;
+		oplus,fcl_index = <0>;
+		oplus,vb_offset = <20>;
 
 		oplus_virtual_gauge: oplus,virtual_gauge {
 			compatible = "oplus,virtual_gauge";

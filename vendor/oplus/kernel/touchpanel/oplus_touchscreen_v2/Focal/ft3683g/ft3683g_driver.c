@@ -2416,7 +2416,6 @@ static int fts_enable_game_mode(struct chip_data_ft3683g *ts_data, bool enable)
 	struct chip_data_ft3683g *chip_data = (struct chip_data_ft3683g *)ts_data;
 	struct touchpanel_data *ts = spi_get_drvdata(chip_data->ft_spi);
 	int ret = 0;
-	u8 regvalue = 0;
 	int game_mode = FTS_NOT_GAME_MODE;
 	int report_rate = FTS_120HZ_REPORT_RATE;
 	TPD_INFO("MODE_GAME, write 0x8B%d", enable);
@@ -2429,11 +2428,9 @@ static int fts_enable_game_mode(struct chip_data_ft3683g *ts_data, bool enable)
 	if (enable) {
 		if (ts_data->extreme_game_report_rate) {
 				TPD_INFO("%s:ts->noise_level:%d rate_ctrl_level:%d", __func__, ts->noise_level, ts->rate_ctrl_level);
-				fts_read_reg(FTS_REG_CHARGER_MODE_EN, &regvalue);
-				if(regvalue<= 1) {
-				regvalue  = (regvalue) | (0x0C);
-				ret = fts_write_reg(FTS_REG_CHARGER_MODE_EN, regvalue);
-				}
+				SET_REG(FTS_REG_GAME_MODE_EN_BIT, 0x03);
+				TPD_INFO("MODE_GAME, write 0x8B=0x%x, 0x88=%d", ts_data->ctrl_reg_state, report_rate);
+				ret = fts_write_reg(FTS_REG_CTRL, ts_data->ctrl_reg_state);
 			switch (ts->noise_level) {
 			case INTELLIGENT_GAME_MODE:
 				ts_data->extreme_game_flag = false;
@@ -2487,11 +2484,9 @@ static int fts_enable_game_mode(struct chip_data_ft3683g *ts_data, bool enable)
 	} else {
 		if (ts_data->extreme_game_report_rate) {
 			ts_data->extreme_game_flag = false;
-			fts_read_reg(FTS_REG_CHARGER_MODE_EN, &regvalue);
-			if(regvalue> 1) {
-			regvalue  = (regvalue) & (0xF3);
-			ret = fts_write_reg(FTS_REG_CHARGER_MODE_EN, regvalue);
-			}
+			SET_REG(FTS_REG_GAME_MODE_EN_BIT, enable);
+			TPD_INFO("MODE_GAME, write 0x8B =0x%x, 0x88=%d", ts_data->ctrl_reg_state, report_rate);
+			ret = fts_write_reg(FTS_REG_CTRL, ts_data->ctrl_reg_state);
 			fts_rate_white_list_ctrl(ts_data, ts->rate_ctrl_level);
 			return ret;
 		} else {
@@ -2558,6 +2553,12 @@ static int fts_mode_switch(void *chip_data, work_mode mode, int flag)
 
 	case MODE_SLEEP:
 		TPD_INFO("MODE_SLEEP, write 0xA5=3");
+		if (ts_data->fod_info.fp_down) {
+			TPD_INFO("fingerprint auto up");
+			ts_data->ts->view_area_touched = 0;
+			ts_data->fod_info.event_type = 0;
+			ts_data->fod_info.fp_down = 0;
+		}
 		ret = fts_write_reg(FTS_REG_POWER_MODE, 0x03);
 
 		if (ret < 0) {
@@ -2647,6 +2648,49 @@ static int fts_mode_switch(void *chip_data, work_mode mode, int flag)
 	return 0;
 mode_err:
 	return ret;
+}
+
+static void fts_report_rate(void *chip_data, int value)
+{
+	struct chip_data_ft3683g *ts_data = (struct chip_data_ft3683g *)chip_data;
+	int ret = 0;
+	int regvalue = 0;
+
+	TPD_INFO("fts_report_rate_ctrl to  value: %d", value);
+	if (ts_data == NULL) {
+		return;
+	}
+
+	if (ts_data->ts->is_suspended) {
+		return;
+	}
+
+	switch(value) {
+	case REPORT_FPS_125HZ:
+		regvalue = FTS_120HZ_REPORT_RATE;
+		break;
+	case REPORT_FPS_144HZ:
+		regvalue = FTS_144HZ_REPORT_RATE;
+		break;
+	case REPORT_FPS_180HZ:
+		regvalue = FTS_180HZ_REPORT_RATE;
+		break;
+	case REPORT_FPS_240HZ:
+		regvalue = FTS_240HZ_REPORT_RATE;
+		break;
+	case REPORT_FPS_288Hz:
+		regvalue = FTS_288HZ_REPORT_RATE;
+		break;
+	default:
+		TPD_INFO("%s:default report rate = %d \n", __func__, value);
+		return;
+	}
+	TPD_INFO("fts_report_rate_ctrl to  regvalue: %x", regvalue);
+	ret = fts_write_reg(FTS_REG_REPORT_RATE, regvalue);
+	if (ret < 0) {
+		TPD_INFO("write FTS_REG_REPORT_RATE fail");
+		return;
+	}
 }
 
 static int fts_send_temperature(void *chip_data, int temp, bool normal_mode);
@@ -4495,6 +4539,7 @@ static struct oplus_touchpanel_operations fts_ops = {
 	.set_high_frame_rate        = fts_set_high_frame_rate,
 	.rate_white_list_ctrl       = fts_rate_white_list_ctrl,
 	.edge_limit_switch_write    = fts_edge_limit_switch_write,
+	.report_rate                = fts_report_rate,
 	.diaphragm_touch_lv_set     = fts_diaphragm_touch_lv_set,
 	.get_water_mode             = fts_get_water_mode,
 	.get_glove_mode             = fts_get_glove_mode,

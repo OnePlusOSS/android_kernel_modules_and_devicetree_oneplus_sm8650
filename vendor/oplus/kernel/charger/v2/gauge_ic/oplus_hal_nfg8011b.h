@@ -72,6 +72,13 @@
 
 #define NFG801B_REG_RSOC_CENTI			0x1E
 
+#define NFG8011B_REG_ENABLE_FAST_SAMP		0x005d
+#define NFG8011B_REG_DISABLE_FAST_SAMP		0x005e
+#define NFG8011B_REG_ENABLE_STATE		0x005f
+#define NFG8011B_ENABLE_OK			0xa5
+#define NFG8011B_REG_REAL_CURR			0x1c
+#define NFG8011B_REG_REAL_VOLT			0x1a
+
 #ifdef CONFIG_OPLUS_GAUGE_NFG8011B
 bool nfg8011b_sha256_hmac_authenticate(struct chip_bq27541 *chip);
 int nfg8011b_get_car_c_parameters(struct chip_bq27541 *chip, int *car_c_ptr);
@@ -97,9 +104,11 @@ int nfg8011b_get_sili_chemistry_info(struct chip_bq27541 *chip, u8 *info, int le
 int nfg8011b_get_last_cc(struct chip_bq27541 *chip, int *cc);
 int nfg8011b_set_last_cc(struct chip_bq27541 *chip, int cc);
 int nfg8011b_read_block(struct chip_bq27541 *chip, int addr, u8 *buf, int len, int offset, bool do_checksum);
-int nfg8011b_write_block(struct chip_bq27541 *chip, int addr, u8 *buf, int len, int offset, bool do_checksum);
+int nfg8011b_write_block(struct chip_bq27541 *chip,
+	int addr, u8 *buf, int len, int offset, bool do_checksum, bool read_back);
 void nfg8011b_effect_term_volt_init(struct chip_bq27541 *chip);
 int nfg8011b_soc_centi_init(struct chip_bq27541 *chip);
+int nfg8011b_set_fast_sampling(struct chip_bq27541 *chip, bool enable);
 #else
 bool nfg8011b_sha256_hmac_authenticate(struct chip_bq27541 *chip)
 {
@@ -221,7 +230,8 @@ int nfg8011b_read_block(struct chip_bq27541 *chip, int addr, u8 *buf, int len, i
 	return 0;
 }
 
-int nfg8011b_write_block(struct chip_bq27541 *chip, int addr, u8 *buf, int len, int offset, bool do_checksum)
+int nfg8011b_write_block(struct chip_bq27541 *chip,
+	int addr, u8 *buf, int len, int offset, bool do_checksum, bool read_back)
 {
 	return 0;
 }
@@ -231,6 +241,11 @@ void nfg8011b_effect_term_volt_init(struct chip_bq27541 *chip)
 }
 
 int nfg8011b_soc_centi_init(struct chip_bq27541 *chip)
+{
+	return 0;
+}
+
+int nfg8011b_set_fast_sampling(struct chip_bq27541 *chip, bool enable)
 {
 	return 0;
 }

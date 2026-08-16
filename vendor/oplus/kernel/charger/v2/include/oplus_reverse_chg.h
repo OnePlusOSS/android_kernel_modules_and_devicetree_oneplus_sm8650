@@ -1,0 +1,118 @@
+/***********************************************************
+** Copyright (C), 2025-2025 Oplus. All rights reserved.
+** File: oplus_reverse_chg.h
+** Description: cpreverse ic
+** Date: 2025-11-14
+** -----------Revision History: -------------------------------
+** <author>        <data>    <version >       <desc>
+****************************************************************/
+
+#ifndef __OPLUS_CHG_REVERSE_H__
+#define __OPLUS_CHG_REVERSE_H__
+
+#include <oplus_mms.h>
+#define REVERSE_CHG_TEMP_MAX		53
+#define REVERSE_CHG_TEMP_MIN		0
+#define REVERSE_CHG_SOC_MIN		30
+#define HRP_TEMP_SWITCH_DELAY		100
+#define REVERSE_MONITOR_TIME_MS		500
+#define REVERSE_TEMP_OVER_COUNTS	2
+#define REVERSE_TEMP_WARM_RANGE_THD	10
+#define REVERSE_TEMP_LOW_RANGE_THD	10
+#define REVERSE_ENABLE_DELAY_MS		5000
+#define MAX_DIGITS 7
+#define MAX_VOLT  30000
+#define MIN_VOLT  4000
+#define MAX_CURRENT 10000
+#define MIN_CURRENT 500
+#define MAX_DIGITS_NUM 3
+
+enum reverse_chg_type_level {
+	REVERSE_CHG_TYPE_UNKNOWN,
+	REVERSE_CHG_TYPE_NORMAL,
+	REVERSE_CHG_TYPE_PD,
+	REVERSE_CHG_TYPE_PPS,
+	REVERSE_CHG_TYPE_UFCS,
+};
+
+enum {
+	REVERSE_BAT_TEMP_COLD,
+	REVERSE_BAT_TEMP_COOL,
+	REVERSE_BAT_TEMP_WARM,
+	REVERSE_BAT_TEMP_NORMAL,
+	REVERSE_BAT_TEMP_HIGH,
+	REVERSE_BAT_TEMP_EXIT,
+	REVERSE_BAT_TEMP_SWITCH_CURVE,
+};
+
+enum reverse_topic_item {
+	HIGH_REVERSE_ITEM_STATUS,
+	REVERSE_ITEM_HIGH_REVERSE_CHG_ENABLE,
+	REVERSE_ITEM_REVERSE_CHG_TYPE,
+	REVERSE_ITEM_SINK_OPLUS_SVID,
+	REVERSE_ITEM_HIGH_REVERSE_ERR,
+	REVERSE_ITEM_HIGH_REVERSE_CHG_COUNT,
+	REVERSE_ITEM_LAST_HIGH_REVERSE_PDO,
+	REVERSE_ITEM_SINK_REQUEST_VOLT,
+};
+
+enum oplus_reverse_chg_level {
+	REVERSE_CHG_LEVEL_INVALID = -1,		/* disable POWER  OUTPUT*/
+	REVERSE_CHG_LEVEL_DEFAULT = 0,		/* MAX POWER  OUTPUT*/
+	REVERSE_CHG_LEVEL_FIRST = 1,		/* 5V1A*/
+	REVERSE_CHG_LEVEL_SECOND = 2,		/* 5V2A*/
+	REVERSE_CHG_LEVEL_THIRD = 3,		/* 5V3A*/
+	REVERSE_CHG_LEVEL_FORTH = 4,		/* 9V1A*/
+	REVERSE_CHG_LEVEL_FIFTH = 5,		/* 9V2.5A*/
+	REVERSE_CHG_LEVEL_MAX,
+};
+
+enum reverse_chg_msg_type {
+	REVERSE_CHG_MSG_TYPE_UNKNOWN,
+	REVERSE_CHG_MSG_TYPE_SINK_REQ_PDO,
+	REVERSE_CHG_MSG_TYPE_MAX
+};
+
+enum reverse_user_cmd_list {
+	REVERSE_USER_CMD_SET_LEVEL_DEFAULT,
+	REVERSE_USER_CMD_SET_LEVEL_FORCE,
+	REVERSE_USER_CMD_SET_HIGH_PWR_PATH_TEST_MODE,
+	REVERSE_USER_CMD_GET_HIGH_PWR_PATH_TEST_END,
+	REVERSE_USER_CMD_MAX
+};
+
+enum reverse_test_mode_result {
+	REVERSE_TEST_MODE_RESULT_SUCCESS,
+	REVERSE_TEST_MODE_OPEN_HIGH_PWR_MODE_FAIL,
+	REVERSE_TEST_MODE_CLOSE_HIGH_PWR_MODE_FAIL,
+	REVERSE_TEST_MODE_RESULT_FAIL,
+	REVERSE_TEST_MODE_RESULT_MAX
+};
+
+enum high_reverse_disable_flag {
+	HPR_NO_VOTER_DISABLE = 0,
+	HPR_USER_VOTER_DISABLE,
+	HPR_BATT_TEMP_VOTER_DISABLE,
+	HPR_BATT_SOC_VOTER_DISABLE,
+	HPR_CURR_ERR_VOTER_DISABLE,
+	HPR_AUTH_VOTER_DISABLE,
+	HPR_SVID_VOTER_DISABLE,
+	HPR_USB_VOTER_DISABLE,	/*uebtemp*/
+	HPR_HW_ERR_VOTER_DISABLE, /*hard reset*/
+	HPR_DEVICE_ERROR_DISABLE,
+	HPR_UNDEFINED_VOTER_DISABLE,
+};
+
+typedef enum {
+	PARSE_SUCCESS,
+	PARSE_FORMAT_ERROR,
+	PARSE_RANGE_ERROR,
+	PARSE_OVERFLOW_ERROR
+} PARSE_RESULT;
+
+int oplus_set_reverse_chg_type(struct oplus_mms *topic, int type);
+int oplus_reverse_chg_set_level(const char *buf, int len);
+int oplus_reverse_chg_info_show(char *buf);
+int oplus_reverse_chg_get_power_role_status(char *buf);
+
+#endif /* __OPLUS_CHG_PLC_H__ */

@@ -626,6 +626,7 @@ struct dp_rx_fst {
  * @def_link: Pointer to default link (usually used for TX operation)
  * @dp_link_list_lock: Lock to protect dp_link_list operatiosn
  * @dp_link_list: List of dp_links for this DP interface
+ * @ipv4_addr: IPv4 address
  */
 struct wlan_dp_intf {
 	struct wlan_dp_psoc_context *dp_ctx;
@@ -694,6 +695,7 @@ struct wlan_dp_intf {
 	struct wlan_dp_link *def_link;
 	qdf_spinlock_t dp_link_list_lock;
 	qdf_list_t dp_link_list;
+	uint8_t ipv4_addr[QDF_IPV4_ADDR_SIZE];
 };
 
 #define WLAN_DP_LINK_MAGIC 0x5F44505F4C494E4B	/* "_DP_LINK" in ASCII */

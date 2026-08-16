@@ -893,7 +893,23 @@ int32_t CTP_SPI_READ(struct spi_device *client, uint8_t *buf, uint16_t len)
 {
 	int32_t ret = -1;
 	int32_t retries = 0;
-	uint8_t rbuf[SPI_TANSFER_LEN + 1] = {0};
+	uint8_t *rbuf;
+
+	if (len > SPI_TANSFER_LEN) {
+		rbuf = kzalloc((len + 1), GFP_KERNEL);
+		if (NULL == rbuf) {
+			TPD_INFO("rbuf malloc len:%u fail", (len + 1));
+			ret = -ENOMEM;
+			return ret;
+		}
+	} else {
+		rbuf = kzalloc((SPI_TANSFER_LEN + 1), GFP_KERNEL);
+		if (NULL == rbuf) {
+			TPD_INFO("rbuf malloc len:%u fail", (SPI_TANSFER_LEN + 1));
+			ret = -ENOMEM;
+			return ret;
+		}
+	}
 
 	buf[0] = SPI_READ_MASK(buf[0]);
 
@@ -914,7 +930,7 @@ int32_t CTP_SPI_READ(struct spi_device *client, uint8_t *buf, uint16_t len)
 	} else {
 		memcpy((buf + 1), (rbuf + 2), (len - 1));
 	}
-
+	kfree(rbuf);
 	return ret;
 }
 EXPORT_SYMBOL(CTP_SPI_READ);

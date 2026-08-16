@@ -114,6 +114,7 @@
 #define CW2217_CHECK_UPDATE        4
 
 #define BATNUM 2
+#define CHG_NTC_TEMP_COUNT 796
 /*default batt-profile*/
 static char *battery_name[BATNUM] = {"BLT004-ALT-7100MA"};
 static unsigned char config_profile_info[SIZE_OF_PROFILE] = {
@@ -149,6 +150,10 @@ struct cw_battery {
 	struct workqueue_struct *cwfg_workqueue;
 	struct delayed_work battery_delay_work;
         struct oplus_chg_ic_dev *ic_dev;
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *ntc_switch2_low;
+	struct pinctrl_state *ntc_switch2_high;
+	bool ntc_switch_support;
 	int  chip_id;
 	int  voltage;
 	int  ic_soc_h;
@@ -162,7 +167,8 @@ struct cw_battery {
 	int  design_capacity;
 	int  rated_capacity;
 	int  fw_version;
-	struct iio_channel	*batt_id_chan;
+	struct iio_channel *batt_id_chan;
+	struct iio_channel *sub_board_temp_chan;
         int batt_num;
 	int cw_ui_full;
 	bool cw_switch_config_profile;
@@ -179,8 +185,10 @@ struct cw_battery {
 	char track_info[CW_INFO_LEN];
 	u8 device_name[CW_NAME_LEN];
 	int device_type;
+	int chg_ntc_temp_table[CHG_NTC_TEMP_COUNT];
 };
 
+bool oplus_gauge_check_chip_is_null(void);
 int oplus_vooc_get_fastchg_started(void);
 int oplus_vooc_get_fastchg_ing(void);
 #endif /* __OPLUS_CW2217B_H__ */

@@ -1392,7 +1392,7 @@ static ssize_t proc_aiunit_game_info_read(struct file *file, char __user *buffer
 
 	} else {
 		get_num = ts->aiunit_game_get_num;
-		if (get_num > 0 && ts->noise_level > 0) {
+		if (get_num > 0 && ts->aiunit_game_enable) {
 			for(num = 0; num < get_num; num++) {
 				if (count > strlen(page)) {
 					snprintf(&page[0] + strlen(page), MAX_AIINFO_SIZE - strlen(page),
@@ -2336,6 +2336,72 @@ static ssize_t proc_edge_limit_switch_write(struct file *file,
 
 DECLARE_PROC_OPS(touch_edge_limit_switch_fops, simple_open, proc_edge_limit_switch_read, proc_edge_limit_switch_write, NULL);
 
+static ssize_t proc_report_rate_read(struct file *file, char __user *user_buf,
+				     size_t count, loff_t *ppos)
+{
+	int ret = 0;
+	char page[PAGESIZE] = {0};
+	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
+
+	if (!ts) {
+		snprintf(page, PAGESIZE - 1, "%d\n", -1); /* no support */
+
+	} else {
+		snprintf(page, PAGESIZE - 1, "%d\n", ts->report_rate_write_value); /* support */
+	}
+
+	ret = simple_read_from_buffer(user_buf, count, ppos, page, strlen(page));
+	return ret;
+}
+
+static ssize_t proc_report_rate_write(struct file *file,
+				      const char __user *buffer, size_t count, loff_t *ppos)
+{
+	int value = 0;
+	char buf[4] = {0};
+	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
+
+	if (count > 4) {
+		TPD_INFO("%s:count > 4\n", __func__);
+		return -EINVAL;
+	}
+
+	if (!ts || !(ts->ts_ops)) {
+		TPD_INFO("%s: ts is NULL\n", __func__);
+		return -EINVAL;
+	}
+
+	touchpanel_trusted_touch_completion(ts);
+	if (!ts->ts_ops->report_rate) {
+		TS_TP_INFO("%s:not support ts_ops->report_rate callback\n", __func__);
+		return count;
+	}
+
+	tp_copy_from_user(buf, sizeof(buf), buffer, count, 4);
+
+	if (kstrtoint(buf, 10, &value)) {
+		TP_INFO(ts->tp_index, "%s: kstrtoint error\n", __func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&ts->mutex);
+
+	ts->report_rate_write_value = value;
+	TS_TP_INFO("%s: write value=%d\n", __func__, value);
+
+	if (!ts->is_suspended) {
+		ts->ts_ops->report_rate(ts->chip_data, value);
+
+	} else {
+		TS_TP_INFO("%s: TP is_suspended.\n", __func__);
+	}
+
+	mutex_unlock(&ts->mutex);
+
+	return count;
+}
+DECLARE_PROC_OPS(touch_report_rate_fops, simple_open, proc_report_rate_read, proc_report_rate_write, NULL);
+
 static ssize_t proc_rate_white_list_write(struct file *file,
 		const char __user *buffer, size_t count, loff_t *ppos)
 {
@@ -3093,8 +3159,19 @@ static void touch_scen_config_write(struct touchpanel_data *ts, char *input, int
 		mutex_unlock(&ts->mutex);
 		break;
 	case 2:
+		TPD_INFO("set_package_type:%u set value:%d.\n", scene_info->set_package_type, value);
+		if (value == scene_info->set_package_type) {
+			break;
+		}
+		mutex_lock(&ts->mutex);
 		scene_info->set_package_type = value;
-		TPD_INFO("set_package_type is %d\n", scene_info->set_package_type);
+		TS_TP_INFO("%s: set_package_type set:%d.\n", __func__, value);
+		if (!ts->is_suspended && ts->ts_ops->set_package_type && ts->tp_scene_para_switch_support) {
+			ts->ts_ops->set_package_type(ts->chip_data, value);
+		} else {
+			TS_TP_INFO("%s: TP is_suspended.\n", __func__);
+		}
+		mutex_unlock(&ts->mutex);
 		break;
 	case 3:
 		TPD_INFO("pen_sensitive_level:%u set value:%d.\n", scene_info->pen_sensitive_level, value);
@@ -5101,6 +5178,11 @@ static ssize_t proc_pocket_prevent_mode_write(struct file *file, const char __us
 		return count;
 	}
 
+	if (tp_status(ts) == SLEEP_MODE) {
+		TPD_INFO("%s: Not in resume over or gesture state\n", __func__);
+		return count;
+	}
+
 	tp_copy_from_user(buf, sizeof(buf), buffer, count, 4);
 
 	if (kstrtoint(buf, 10, &value)) {
@@ -5627,7 +5709,7 @@ int init_touchpanel_proc_part2(struct touchpanel_data *ts, struct proc_dir_entry
 		},
 		{
 			"disable_touch_event", 0666, NULL, &proc_disable_touch_event_fops, ts, false,
-			ts->disable_touch_event_support
+			true
 		},
 		{
 			"wireless_charge_detect", 0666, NULL, &proc_wireless_charge_detect_fops, ts, false,
@@ -5747,7 +5829,7 @@ int init_touchpanel_proc_part3(struct touchpanel_data *ts, struct proc_dir_entry
 			ts->glove_mode_v2_support
 		},
 		{
-			"pocket_prevent_mode", 0666, NULL, &proc_pocket_prevent_mode, ts, false, true
+			"pocket_prevent_mode", 0666, NULL, &proc_pocket_prevent_mode, ts, false, ts->glove_mode_v2_support
 		},
 		{
 			"leather_cover_enable", 0666, NULL, &leather_cover_enable, ts, false,
@@ -5756,6 +5838,10 @@ int init_touchpanel_proc_part3(struct touchpanel_data *ts, struct proc_dir_entry
 		{
 			"leather_cover_enable", 0666, NULL, &leather_cover_enable, ts, false,
 			ts->leather_cover_mode_support
+		},
+		{
+			"report_rate", 0666, NULL, &touch_report_rate_fops, ts, false,
+			ts->report_rate_v2_support
 		},
 		{
 			"fp_grip_enable", 0666, NULL, &fp_grip_support_ops, ts, false,

@@ -88,3 +88,7 @@ config OPLUS_FEATURE_GAUGE_KPOC_OPS
           Say Y here to declare MTK GAUGE KPOC support
           Applicable to kernel version >= 6.12
 
+config OPLUS_MT6769_CHARGER
+        bool "MTK6769 support"
+        help
+          Say Y here to declare MTK6769 support

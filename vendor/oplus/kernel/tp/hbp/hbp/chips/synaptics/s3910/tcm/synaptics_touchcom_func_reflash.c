@@ -53,6 +53,27 @@
 #define DO_NONE (0)
 #define DO_UPDATE (1)
 
+unsigned int syna_tcm_get_delay_ms(unsigned int rw_delay_ms,
+				unsigned int default_delay, unsigned int rw_default_ms,
+				unsigned int length_words)
+{
+	unsigned int delay_ms = 0;
+
+	if (rw_delay_ms == default_delay)
+		delay_ms = rw_default_ms;
+	else
+		delay_ms = rw_delay_ms;
+
+	if (delay_ms == RESP_IN_ATTN) {
+		LOGD("xfer: %d, delay: ATTN-driven\n", length_words);
+	} else {
+		delay_ms = (delay_ms * length_words) / 1000;
+		LOGD("xfer: %d, delay: %d\n", length_words, delay_ms);
+	}
+
+	return delay_ms;
+}
+
 /**
  * syna_tcm_set_up_flash_access()
  *
@@ -66,6 +87,32 @@
  * @return
  *    Result of image file comparison
  */
+static int syna_tcm_enter_bootloader_mode(struct tcm_dev *tcm_dev,
+		struct tcm_identification_info id_info)
+{
+	int retval = 0;
+
+	if (IS_APP_FW_MODE(id_info.mode)) {
+		hbp_info("Prepare to enter bootloader mode\n");
+
+		retval = syna_tcm_switch_fw_mode(tcm_dev,
+				MODE_BOOTLOADER,
+				FW_MODE_SWITCH_DELAY_MS);
+		if (retval < 0) {
+			hbp_err("Fail to enter bootloader mode\n");
+			return retval;
+		}
+	}
+
+	if (!IS_BOOTLOADER_MODE(tcm_dev->dev_mode)) {
+		hbp_err("Fail to enter bootloader mode (current: 0x%x)\n",
+			tcm_dev->dev_mode);
+		return -1;
+	}
+
+	return 0;
+}
+
 static int syna_tcm_set_up_flash_access(struct tcm_dev *tcm_dev,
 		struct tcm_reflash_data_blob *reflash_data)
 {
@@ -94,21 +141,9 @@ static int syna_tcm_set_up_flash_access(struct tcm_dev *tcm_dev,
 	}
 
 	/* switch to bootloader mode */
-	if (IS_APP_FW_MODE(id_info.mode)) {
-		hbp_info("Prepare to enter bootloader mode\n");
-
-		retval = syna_tcm_switch_fw_mode(tcm_dev,
-				MODE_BOOTLOADER,
-				FW_MODE_SWITCH_DELAY_MS);
-		if (retval < 0) {
-			hbp_err("Fail to enter bootloader mode\n");
-			return retval;
-		}
-	}
-
-	if (!IS_BOOTLOADER_MODE(tcm_dev->dev_mode)) {
-		hbp_err("Fail to enter bootloader mode (current: 0x%x)\n",
-			tcm_dev->dev_mode);
+	retval = syna_tcm_enter_bootloader_mode(tcm_dev, id_info);
+	if (retval < 0) {
+		hbp_err("Fail to enter bootloader mode\n");
 		return retval;
 	}
 
@@ -812,17 +847,7 @@ static int syna_tcm_read_flash(struct tcm_dev *tcm_dev,
 	out[4] = (unsigned char)length_words;
 	out[5] = (unsigned char)(length_words >> 8);
 
-	if (rd_delay_ms == DEFAULT_FLASH_READ_DELAY)
-		delay_ms = FLASH_READ_DELAY_MS;
-	else
-		delay_ms = rd_delay_ms;
-
-	if (delay_ms == RESP_IN_ATTN) {
-		LOGD("xfer: %d, delay: ATTN-driven\n", length_words);
-	} else {
-		delay_ms = (delay_ms * length_words) / 1000;
-		LOGD("xfer: %d, delay: %d\n", length_words, delay_ms);
-	}
+	delay_ms = syna_tcm_get_delay_ms(rd_delay_ms, DEFAULT_FLASH_READ_DELAY, FLASH_READ_DELAY_MS, length_words);
 
 	retval = syna_tcm_reflash_send_command(tcm_dev,
 			CMD_READ_FLASH,
@@ -1460,17 +1485,7 @@ static int syna_tcm_write_flash(struct tcm_dev *tcm_dev,
 			return retval;
 		}
 
-		if (wr_delay_ms == DEFAULT_FLASH_WRITE_DELAY)
-			delay_ms = FLASH_WRITE_DELAY_MS;
-		else
-			delay_ms = wr_delay_ms;
-
-		if (delay_ms == RESP_IN_ATTN) {
-			LOGD("xfer: %d, delay: ATTN-driven\n", xfer_length);
-		} else {
-			delay_ms = (delay_ms * xfer_length) / 1000;
-			LOGD("xfer: %d, delay: %d\n", xfer_length, delay_ms);
-		}
+		delay_ms = syna_tcm_get_delay_ms(wr_delay_ms, DEFAULT_FLASH_WRITE_DELAY, FLASH_WRITE_DELAY_MS, xfer_length);
 
 		retval = syna_tcm_reflash_send_command(tcm_dev,
 				CMD_WRITE_FLASH,
@@ -1896,9 +1911,9 @@ exit:
  * @return
  *    on success, 0 or positive value; otherwise, negative value on error.
  */
-static int syna_tcm_do_reflash_generic(struct tcm_dev *tcm_dev,
+static int syna_tcm_do_reflash_code_and_config(struct tcm_dev *tcm_dev,
 		struct tcm_reflash_data_blob *reflash_data,
-		enum update_area type, unsigned int wait_delay_ms)
+		unsigned int wait_delay_ms)
 {
 	int retval = 0;
 	struct block_data *block;
@@ -1919,47 +1934,101 @@ static int syna_tcm_do_reflash_generic(struct tcm_dev *tcm_dev,
 		return _EINVAL;
 	}
 
+	if (tcm_dev->dev_mode != MODE_BOOTLOADER) {
+		hbp_err("Incorrect bootloader mode, 0x%02x, expected: 0x%02x\n",
+			tcm_dev->dev_mode, MODE_BOOTLOADER);
+		return _EINVAL;
+	}
+
+	block = &reflash_data->image_info.data[AREA_APP_CODE];
+
+	retval = syna_tcm_update_flash_block(tcm_dev,
+			reflash_data,
+			block,
+			wait_delay_ms);
+	if (retval < 0) {
+		hbp_err("Fail to update application firmware\n");
+		return retval;
+	}
+
+	block = &reflash_data->image_info.data[AREA_APP_CONFIG];
+
+	retval = syna_tcm_update_flash_block(tcm_dev,
+			reflash_data,
+			block,
+			wait_delay_ms);
+	if (retval < 0) {
+		hbp_err("Fail to update application config\n");
+		return retval;
+	}
+
+	return retval;
+}
+
+
+static int syna_tcm_do_reflash_config(struct tcm_dev *tcm_dev,
+		struct tcm_reflash_data_blob *reflash_data,
+		unsigned int wait_delay_ms)
+{
+	int retval = 0;
+	struct block_data *block;
+
+	if (!tcm_dev) {
+		hbp_err("Invalid tcm device handle\n");
+		return _EINVAL;
+	}
+
+	if (!reflash_data) {
+		hbp_err("Invalid reflash_data blob\n");
+		return _EINVAL;
+	}
+
+	if (tcm_dev->dev_mode != MODE_BOOTLOADER) {
+		hbp_err("Incorrect bootloader mode, 0x%02x, expected: 0x%02x\n",
+			tcm_dev->dev_mode, MODE_BOOTLOADER);
+		return _EINVAL;
+	}
+
+	if (tcm_dev->dev_mode != MODE_BOOTLOADER) {
+		hbp_err("Incorrect bootloader mode, 0x%02x, expected: 0x%02x\n",
+			tcm_dev->dev_mode, MODE_BOOTLOADER);
+		return _EINVAL;
+	}
+
+	block = &reflash_data->image_info.data[AREA_APP_CONFIG];
+
+	retval = syna_tcm_update_flash_block(tcm_dev,
+			reflash_data,
+			block,
+			wait_delay_ms);
+	if (retval < 0) {
+		hbp_err("Fail to update application config\n");
+		return retval;
+	}
+
+	return retval;
+}
+
+static int syna_tcm_do_reflash_generic(struct tcm_dev *tcm_dev,
+		struct tcm_reflash_data_blob *reflash_data,
+		enum update_area type, unsigned int wait_delay_ms)
+{
+	int retval = 0;
+
 	switch (type) {
 	case UPDATE_FIRMWARE_CONFIG:
-		block = &reflash_data->image_info.data[AREA_APP_CODE];
-
-		retval = syna_tcm_update_flash_block(tcm_dev,
-				reflash_data,
-				block,
-				wait_delay_ms);
-		if (retval < 0) {
-			hbp_err("Fail to update application firmware\n");
-			goto exit;
-		}
-
-		block = &reflash_data->image_info.data[AREA_APP_CONFIG];
-
-		retval = syna_tcm_update_flash_block(tcm_dev,
-				reflash_data,
-				block,
-				wait_delay_ms);
-		if (retval < 0) {
-			hbp_err("Fail to update application config\n");
-			goto exit;
-		}
+		retval = syna_tcm_do_reflash_code_and_config(tcm_dev,
+						reflash_data, wait_delay_ms);
 		break;
 	case UPDATE_CONFIG_ONLY:
-		block = &reflash_data->image_info.data[AREA_APP_CONFIG];
-
-		retval = syna_tcm_update_flash_block(tcm_dev,
-				reflash_data,
-				block,
-				wait_delay_ms);
-		if (retval < 0) {
-			hbp_err("Fail to update application config\n");
-			goto exit;
-		}
+		retval = syna_tcm_do_reflash_config(tcm_dev,
+						reflash_data, wait_delay_ms);
 		break;
 	case UPDATE_NONE:
 	default:
 		break;
 	}
-exit:
+
 	return retval;
 }
 

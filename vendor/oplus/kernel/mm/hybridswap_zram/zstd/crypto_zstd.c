@@ -16,6 +16,7 @@
 #include "../zstd/include/zstd.h"
 #include <crypto/internal/scompress.h>
 
+#include "../../mm_osvelte/common.h"
 
 #define ZSTD_DEF_LEVEL	1
 
@@ -231,16 +232,38 @@ static struct scomp_alg scomp = {
 	}
 };
 
+typedef int (*crypto_register_scomp_t)(struct scomp_alg *alg);
+typedef int (*crypto_unregister_scomp_t)(struct scomp_alg *alg);
+static crypto_register_scomp_t kp_crypto_register_scomp;
+static crypto_unregister_scomp_t kp_crypto_unregister_scomp;
+
+static bool init_kprobe_crypto(void)
+{
+	kp_crypto_register_scomp = osvelte_kallsyms_lookup_name("crypto_register_scomp");
+	if (!kp_crypto_register_scomp)
+		return false;
+
+	kp_crypto_unregister_scomp = osvelte_kallsyms_lookup_name("crypto_unregister_scomp");
+	if (!kp_crypto_unregister_scomp)
+		return false;
+	return true;
+}
+
 static int __init zstdn_mod_init(void)
 {
 	int ret;
 
 	pr_info("register comp zstdn start\n");
+	if (!init_kprobe_crypto()) {
+		pr_info("kprobe symbols failed\n");
+		return -EINVAL;
+	}
+
 	ret = crypto_register_alg(&alg);
 	if (ret)
 		return ret;
 
-	ret = crypto_register_scomp(&scomp);
+	ret = kp_crypto_register_scomp(&scomp);
 	if (ret)
 		crypto_unregister_alg(&alg);
 	pr_info("register comp zstdn success\n");
@@ -251,7 +274,7 @@ static int __init zstdn_mod_init(void)
 static void __exit zstdn_mod_fini(void)
 {
 	crypto_unregister_alg(&alg);
-	crypto_unregister_scomp(&scomp);
+	kp_crypto_unregister_scomp(&scomp);
 }
 
 subsys_initcall(zstdn_mod_init);

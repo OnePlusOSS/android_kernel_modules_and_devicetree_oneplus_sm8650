@@ -32,6 +32,8 @@ enum wired_topic_item {
 	WIRED_ITEM_ICL_DONE_STATUS,
 	WIRED_ITEM_VBUS_VOL_TYPE,
 	WIRED_ITEM_BUCK_EIS_CURRENT_RATE,
+	WIRED_ITEM_POWER_ROLE,
+	WIRED_ITEM_SOURCE_PDO_VOLT,
 };
 
 enum oplus_wired_cc_detect_status {
@@ -142,6 +144,7 @@ int oplus_wired_get_byb_id_match_info(struct oplus_mms *topic);
 int oplus_wired_get_byb_status_info(struct oplus_mms *topic, char *buf);
 int oplus_wired_get_byb_vout_info(struct oplus_mms *topic, char *byb_buff);
 int oplus_wired_set_byb_vout_info(struct oplus_mms *topic, int byb_vout);
+int oplus_wired_get_vbat_pwr(void);
 bool oplus_wired_is_usb_aicl_enhance(void);
 int oplus_wired_get_lpd_info_status(struct oplus_mms *topic);
 int oplus_wired_set_lpd_config(struct oplus_mms *topic, int *config);
@@ -149,4 +152,12 @@ int oplus_wired_set_chg_path(struct oplus_mms *topic, int path);
 int oplus_wired_get_chg_path_status(struct oplus_mms *topic);
 int oplus_wired_push_info(struct oplus_mms *topic, const char *err_scene, const char *err_reason);
 int oplus_wired_iterm_check(struct oplus_mms *topic, bool enable);
+int oplus_wired_get_shaft_btb_temp(void);
+bool oplus_wired_get_shaft_btb_is_normal(void);
+int oplus_wired_set_shaft_btb_over(bool is_shaft_btb_over);
+bool oplus_wired_get_supplementary_power_mos(void);
+int oplus_wired_set_supplementary_power_mos(struct oplus_mms *topic, bool enable);
+int oplus_wired_set_dischg_status(bool dischg_en);
+int oplus_set_ovp_forced(bool enable);
+int oplus_set_dpdm_ovp_disable(bool disable);
 #endif /* __OPLUS_MMS_WIRED_H__ */

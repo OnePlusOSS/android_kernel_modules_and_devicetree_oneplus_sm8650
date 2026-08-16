@@ -719,7 +719,6 @@ bool test_kit_qcom_gpio_check(void *info, char *buf, size_t len, size_t *use_siz
 			gpio_info->name, offset);
 		return false;
 	}
-	pr_err("[GPIO-CHECK]: gpio_chip :%p, chip :%p\n", gpio_info->chip, chip);
 	pctrl = gpiochip_get_data(chip);
 
 	if (!gpiochip_line_is_valid(chip, offset)) {

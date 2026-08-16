@@ -50,6 +50,13 @@
 #include "nfc_vbat_monitor.h"
 //#endif CONFIG_NXP_NFC_VBAT_MONITOR
 
+#define MIXED_CHIPSET    "mixed-chipset"
+#define MAX_ID_COUNT     5
+#define SUPPORT_CHIPSET_LIST     "SN100T|SN110T|SN220T|SN220U|SN220P|SN220E|PN560"
+struct id_entry {
+    u32 key;
+    const char *chipset;
+};
 /**
  * i2c_disable_irq()
  *
@@ -346,7 +353,138 @@ static const struct file_operations nfc_i2c_dev_fops = {
 	.compat_ioctl = nfc_dev_compat_ioctl,
 #endif
 };
-
+static int read_id_properties(struct device_node *np, u32 id_count, struct id_entry *id_entries)
+{
+    int err;
+    u32 i;
+    char propname[30];
+    for (i = 0; i < id_count; i++) {
+        snprintf(propname, sizeof(propname), "id-%u-key", i);
+        err = of_property_read_u32(np, propname, &id_entries[i].key);
+        if (err) {
+          pr_err("Failed to read dts node:%s\n",propname);
+          return err;
+        }
+        snprintf(propname, sizeof(propname), "id-%u-value-chipset", i);
+        err = of_property_read_string(np, propname, &id_entries[i].chipset);
+        if (err) {
+          pr_err("Failed to read dts node:%s\n",propname);
+          return err;
+        }
+    }
+    pr_info("read_id_properties success");
+    return 0;
+}
+static int get_gpio_value(struct device_node *np, int *gpio_value)
+{
+    int gpio_num = of_get_named_gpio(np, "id-gpio", 0);
+    if (!gpio_is_valid(gpio_num)) {
+        pr_err("id-gpio is not valid\n");
+        return -EINVAL;
+    }
+    *gpio_value = gpio_get_value(gpio_num);
+    pr_info("%s, id gpio value is %d", __func__, *gpio_value);
+    return 0;
+}
+static int checkNfcChip(struct device *dev)
+{
+    struct device_node *np = NULL;
+    u32 id_count;
+    int i, gpio_value, err;
+    bool found = false;
+    struct id_entry *id_entries = NULL;
+    uint32_t mixed_chipset;
+    if (NULL == dev)
+    {
+        pr_err("%s dev is NULL", __func__);
+        return -ENOENT;
+    }
+    np = dev->of_node;
+    if (NULL == np)
+    {
+        pr_err("%s dev->of_node is NULL", __func__);
+        return -ENOENT;
+    }
+    if (of_property_read_u32(np, MIXED_CHIPSET, &mixed_chipset))
+    {
+        pr_info("%s, read dts property mixed-chipset failed", __func__);
+        return 0;
+    }
+    else
+    {
+        if (1 == mixed_chipset)
+        {
+            pr_info("%s, the value of dts property mixed-chipset is 1(true)", __func__);
+            err = of_property_read_u32(np, "id_count", &id_count);
+            if (err)
+            {
+                pr_err("%s read dts property id_count failed", __func__);
+                return err;
+            }
+            if (id_count >= MAX_ID_COUNT)
+            {
+                pr_err("%s error: id_count is more than %d", __func__, MAX_ID_COUNT);
+                return -ENOENT;
+            }
+            id_entries = kzalloc(sizeof(struct id_entry) * id_count, GFP_DMA | GFP_KERNEL);
+            if(NULL == id_entries)
+            {
+                pr_err("%s error: can not kzalloc memory for id_entry", __func__);
+                return -ENOMEM;
+            }
+            err = read_id_properties(np, id_count,id_entries);
+            if (err)
+            {
+                pr_err("%s error: read_id_properties failed", __func__);
+                kfree(id_entries);
+                return err;
+            }
+            err = get_gpio_value(np, &gpio_value);
+            if (err)
+            {
+                pr_err("%s error: get_gpio_value failed", __func__);
+                kfree(id_entries);
+                return err;
+            }
+            for (i = 0; i < id_count; i++)
+            {
+                if (id_entries[i].key == gpio_value)
+                {
+                    if (strstr(SUPPORT_CHIPSET_LIST, id_entries[i].chipset) == NULL)
+                    {
+                        pr_err("%s this nfc chipset:%s does not correspond to this nfc driver", __func__, id_entries[i].chipset);
+                        err = -EINVAL;
+                        kfree(id_entries);
+                        return err;
+                    }
+                    pr_debug("%s this nfc chipset:%s corresponds to this nfc driver", __func__, id_entries[i].chipset);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+            {
+                pr_err("%s no matching key found for GPIO value\n", __func__);
+                err = -EINVAL;
+                kfree(id_entries);
+                return err;
+            }
+            pr_info("%s checkNfcChip success\n", __func__);
+            kfree(id_entries);
+            return 0;
+        }
+        else if (0 == mixed_chipset)
+        {
+            pr_info("%s, the value of dts property mixed-chipset is 0(false)", __func__);
+            return 0;
+        }
+        else
+        {
+            pr_err("%s, mixed-chipset's value is wrong,it is neither 1 nor 0", __func__);
+            return -ENOENT;
+        }
+    }
+}
 int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	int ret = 0;
@@ -355,6 +493,11 @@ int nfc_i2c_dev_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	struct platform_configs *nfc_configs = NULL;
 	struct platform_gpio *nfc_gpio = NULL;
 	pr_debug("NxpDrv: %s: enter\n", __func__);
+	ret = checkNfcChip(&client->dev);
+	if (ret) {
+		pr_err("NxpDrv: %s: failed to checkNfcChip\n", __func__);
+		goto err;
+	}
 	nfc_dev = kzalloc(sizeof(struct nfc_dev), GFP_KERNEL);
 	if (nfc_dev == NULL) {
 		ret = -ENOMEM;

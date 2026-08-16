@@ -229,7 +229,7 @@ static int ret_handler(struct kretprobe_instance *kri, struct pt_regs *regs)
 	leader = rcu_dereference(current->group_leader);
 	if (likely(leader && pid_alive(leader))) {
 		leader_pid = leader->pid;
-		get_task_comm(leader_comm, leader);
+		snprintf(leader_comm, TASK_COMM_LEN, "%llu", (unsigned long long)leader->start_time);
 	}
 	rcu_read_unlock();
 

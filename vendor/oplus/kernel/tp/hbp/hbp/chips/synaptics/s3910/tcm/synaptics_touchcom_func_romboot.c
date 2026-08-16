@@ -980,13 +980,70 @@ static int syna_tcm_romboot_jedec_erase_flash(struct tcm_dev *tcm_dev,
   * @return
   *    on success, 0 or positive value; otherwise, negative value on error.
   */
+static int syna_tcm_romboot_jedec_write_flash_buf(struct tcm_dev *tcm_dev,
+		unsigned int address, const unsigned char *data,
+		unsigned int data_size, unsigned int delay_ms,
+		unsigned int xfer_length, unsigned int offset)
+{
+	int retval = 0;
+	unsigned char buf[ROMBOOT_FLASH_PAGE_SIZE + 3] = {0};
+
+	retval = syna_tcm_romboot_jedec_send_command(tcm_dev,
+			JEDEC_WRITE_ENABLE,
+			NULL,
+			0,
+			NULL,
+			0,
+			delay_ms);
+	if (retval < 0) {
+		hbp_err("Failed to write JEDEC_WRITE_ENABLE\n");
+		return retval;
+	}
+
+	buf[0] = (unsigned char)((address + offset) >> 16);
+	buf[1] = (unsigned char)((address + offset) >> 8);
+	buf[2] = (unsigned char)(address + offset);
+
+	retval = syna_pal_mem_cpy(&buf[3],
+			sizeof(buf) - 3,
+			&data[offset],
+			data_size - offset,
+			xfer_length);
+	if (retval < 0) {
+		hbp_err("Fail to copy data to write, size: %d\n",
+			xfer_length);
+		return retval;
+	}
+
+	retval = syna_tcm_romboot_jedec_send_command(tcm_dev,
+			JEDEC_PAGE_PROGRAM,
+			buf,
+			sizeof(buf),
+			NULL,
+			0,
+			delay_ms);
+	if (retval < 0) {
+		hbp_err("Failed to write data to addr 0x%x (offset: %x)\n",
+			address + offset, offset);
+		return retval;
+	}
+
+	retval = syna_tcm_romboot_jedec_get_status(tcm_dev, delay_ms);
+	if (retval < 0) {
+		hbp_err("Fail to get correct status, retval = %d\n",
+			retval);
+		return retval;
+	}
+
+	return 0;
+}
+
 static int syna_tcm_romboot_jedec_write_flash(struct tcm_dev *tcm_dev,
 		unsigned int address, const unsigned char *data,
 		unsigned int data_size, unsigned int delay_ms)
 {
 	int retval = 0;
 	unsigned int offset;
-	unsigned char buf[ROMBOOT_FLASH_PAGE_SIZE + 3];
 	unsigned int remaining_length;
 	unsigned int xfer_length;
 
@@ -1010,56 +1067,15 @@ static int syna_tcm_romboot_jedec_write_flash(struct tcm_dev *tcm_dev,
 		else
 			xfer_length = remaining_length;
 
-		syna_pal_mem_set(buf, 0x00, sizeof(buf));
-
-		retval = syna_tcm_romboot_jedec_send_command(tcm_dev,
-				JEDEC_WRITE_ENABLE,
-				NULL,
-				0,
-				NULL,
-				0,
-				delay_ms);
+		retval = syna_tcm_romboot_jedec_write_flash_buf(tcm_dev,
+						address, data, data_size,
+						delay_ms, xfer_length, offset);
 		if (retval < 0) {
-			hbp_err("Failed to write JEDEC_WRITE_ENABLE\n");
-			goto exit;
-		}
-
-		buf[0] = (unsigned char)((address + offset) >> 16);
-		buf[1] = (unsigned char)((address + offset) >> 8);
-		buf[2] = (unsigned char)(address + offset);
-
-		retval = syna_pal_mem_cpy(&buf[3],
-				sizeof(buf) - 3,
-				&data[offset],
-				data_size - offset,
-				xfer_length);
-		if (retval < 0) {
-			hbp_err("Fail to copy data to write, size: %d\n",
-				xfer_length);
-			goto exit;
-		}
-
-		retval = syna_tcm_romboot_jedec_send_command(tcm_dev,
-				JEDEC_PAGE_PROGRAM,
-				buf,
-				sizeof(buf),
-				NULL,
-				0,
-				delay_ms);
-		if (retval < 0) {
-			hbp_err("Failed to write data to addr 0x%x (offset: %x)\n",
-				address + offset, offset);
 			hbp_err("Remaining data %d\n",
 				remaining_length);
 			goto exit;
 		}
 
-		retval = syna_tcm_romboot_jedec_get_status(tcm_dev, delay_ms);
-		if (retval < 0) {
-			hbp_err("Fail to get correct status, retval = %d\n",
-				retval);
-			goto exit;
-		}
 		offset += xfer_length;
 		remaining_length -= xfer_length;
 	}
@@ -1574,65 +1590,3 @@ exit:
 
 	return retval;
 }
-
-
-/**
- * syna_tcm_get_romboot_info()
- *
- * Implement the bootloader command code, which is used to request a
- * RomBoot information packet.
- *
- * @param
- *    [ in] tcm_dev:       the device handle
- *    [out] rom_boot_info: the romboot info packet returned
- *
- * @return
- *    on success, 0 or positive value; otherwise, negative value on error.
- */
-int syna_tcm_get_romboot_info(struct tcm_dev *tcm_dev,
-	struct tcm_romboot_info *rom_boot_info)
-{
-	int retval = 0;
-	unsigned char resp_code;
-	unsigned int copy_size = 0;
-
-	if (!tcm_dev) {
-		hbp_err("Invalid tcm device handle\n");
-		return _EINVAL;
-	}
-
-	retval = tcm_dev->write_message(tcm_dev,
-			CMD_GET_ROMBOOT_INFO,
-			NULL,
-			0,
-			&resp_code,
-			tcm_dev->msg_data.default_resp_reading);
-	if (retval < 0) {
-		hbp_err("Fail to send command 0x%02x\n",
-			CMD_GET_ROMBOOT_INFO);
-		goto exit;
-	}
-
-	if (rom_boot_info == NULL)
-		goto exit;
-
-	copy_size = MIN(sizeof(struct tcm_romboot_info),
-			tcm_dev->resp_buf.data_length);
-
-	/* copy romboot_info to caller */
-	retval = syna_pal_mem_cpy((unsigned char *)rom_boot_info,
-			sizeof(struct tcm_romboot_info),
-			tcm_dev->resp_buf.buf,
-			tcm_dev->resp_buf.buf_size,
-		copy_size);
-	if (retval < 0) {
-		hbp_err("Fail to copy romboot info to caller\n");
-		goto exit;
-	}
-
-exit:
-	return retval;
-}
-
-
-

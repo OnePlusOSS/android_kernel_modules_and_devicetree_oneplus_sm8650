@@ -185,6 +185,7 @@ struct aw883xx {
 	unsigned char sync_load;	/*sync load fw*/
 	uint8_t pstream;
 	unsigned char fw_retry_cnt;
+	unsigned char create_controls_retry_cnt;
 
 	uint8_t dbg_en_prof;
 	uint8_t i2c_log_en;

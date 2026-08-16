@@ -7,6 +7,8 @@
 #define __SC6607_HAL_H__
 
 #include <tcpm.h>
+#include <tcpci.h>
+#include <oplus_chg_pps.h>
 
 #define SC6607_VINDPM_VOL_MV(x)		(x)
 #define SC6607_WD_TIMEOUT_S(x)		(x)
@@ -65,6 +67,8 @@
 #define SC6607_REG_BMC_WIDTH_2		0xE9
 #define SC6607_REG_BMC_WIDTH_3		0xEA
 #define SC6607_REG_BMC_WIDTH_4		0xEB
+#define SC6607_REG_ADC_SAMPLING_MODE_CFG_REG			0xAE
+#define SC6607_LED_ADC_SAMPLING_MODE_CONFIG_MASK		BIT(2)
 
 #define SC6607_I2C_ERR_NUM		10
 #define SC6607_IRQ_EVNET_NUM		5
@@ -84,6 +88,7 @@
 #define SC6607_ADC_1000		1000
 #define SC6607_ADC_TSBUS_CONVERT		100000
 #define SC6607_ADC_TSBUS_200		200
+#define SC6607_ADC_TSBUS_100		100
 #define SC6607_PD_AICR_MAX_3000MA		3000
 
 #ifdef CONFIG_OPLUS_CHARGER_MTK
@@ -101,7 +106,7 @@
 #define TRACK_DEVICE_ABNORMAL_UPLOAD_PERIOD		(24 * 3600)
 
 #define SC6607_1P1_CHIP_ID		0x67
-#define SC6607_1P0_CHIP_ID		0x66
+#define SC6607A_CHIP_ID			0x66
 
 #define PORT_ERROR		0
 #define PORT_A		1
@@ -379,6 +384,7 @@ enum sc6607_fields {
 	F_EDL_TSBUS_SEL,
 	F_ADC_EN,
 	F_ADC_FREEZE,
+	F_FORCE_REGN_BYPASS,
 	F_BATSNS_EN,
 	F_VBAT,
 	F_ICHG_CC,
@@ -634,6 +640,7 @@ enum {
 /* Register 32h */
 #define SC6607_BUCK_ICHG_OFFSET		0
 #define SC6607_BUCK_ICHG_STEP		50
+#define SC6607_BUCK_ICHG_500MA		500
 
 /* Register 34h */
 #define SC6607_BUCK_IINDPM_OFFSET		100
@@ -743,6 +750,7 @@ static const struct reg_field sc6607_reg_fields[] = {
 	[F_EDL_TSBUS_SEL] = REG_FIELD(SC6607_REG_EDL_BUFFER, 0, 0),
 	[F_ADC_EN] = REG_FIELD(SC6607_REG_HK_ADC_CTRL, 7, 7),
 	[F_ADC_FREEZE] = REG_FIELD(SC6607_REG_HK_ADC_CTRL, 5, 5),
+	[F_FORCE_REGN_BYPASS] = REG_FIELD(SC6607_REG_HK_ADC_CTRL, 4, 4),
 	[F_BATSNS_EN] = REG_FIELD(SC6607_REG_VBAT, 7, 7),
 	[F_VBAT] = REG_FIELD(SC6607_REG_VBAT, 0, 6),
 	[F_ICHG_CC] = REG_FIELD(SC6607_REG_ICHG_CC, 0, 6),
@@ -855,7 +863,186 @@ static const struct reg_field sc6607_reg_fields[] = {
 #define DEFAULT_CURR_BY_CC	100
 #define SINK_SUSPEND_CURRENT	5
 #define SUSPEND_RECOVERY_DELAY_MS	2000
+#define SC6607_BUCK_NAME		"sc6607-buck"
+#define FOUND_BUCK_ADDR_MAX_COUNT	100
+#define FOUND_BUCK_ADDR_MAX_DELAY	1000
 
+struct soft_bc12 {
+	u8 bc12_state;
+	enum DPDM_STATE dp_state;
+	enum DPDM_STATE dm_state;
+	enum BC12_RESULT result;
+
+	u8 flag;
+	bool detect_done;
+	bool first_noti_sdp;
+	bool detect_ing;
+
+	struct mutex running_lock;
+	struct delayed_work detect_work;
+	int next_run_time;
+};
+
+struct sc6607_platform_data {
+	u32 vsyslim;
+	u32 batsns_en;
+	u32 vbat;
+	u32 ichg;
+	u32 vindpm;
+	u32 iindpm_dis;
+	u32 iindpm;
+	u32 ico_enable;
+	u32 iindpm_ico;
+	u32 vprechg;
+	u32 iprechg;
+	u32 iterm_en;
+	u32 iterm;
+	u32 rechg_dis;
+	u32 rechg_dg;
+	u32 rechg_volt;
+	u32 vboost;
+	u32 conv_ocp_dis;
+	u32 tsbat_jeita_dis;
+	u32 ibat_ocp_dis;
+	u32 vpmid_ovp_otg_dis;
+	u32 vbat_ovp_buck_dis;
+	u32 ibat_ocp;
+	u32 ntc_suport_1000k;
+/********* workaround: Octavian needs to enable adc start *********/
+	bool enable_adc;
+/********* workaround: Octavian needs to enable adc end *********/
+	u32 cc_pull_up_idrive;
+	u32 cc_pull_down_idrive;
+	u32 continuous_time;
+	u32 bmc_width[4];
+	u32 batfet_rst_en;
+};
+
+struct sc6607 {
+	struct device *dev;
+	struct i2c_client *client;
+
+	struct regmap *regmap;
+	struct regmap_field *regmap_fields[F_MAX_FIELDS];
+
+	const char *chg_dev_name;
+	const char *eint_name;
+
+	struct wakeup_source *suspend_ws;
+	struct wakeup_source *keep_resume_ws;
+	wait_queue_head_t wait;
+
+	atomic_t driver_suspended;
+	atomic_t charger_suspended;
+	atomic_t otg_enable_cnt;
+	unsigned long request_otg;
+
+	int irq;
+	int irq_gpio;
+	struct pinctrl *pinctrl;
+	struct pinctrl_state *charging_inter_active;
+	struct pinctrl_state *charging_inter_sleep;
+
+	bool power_good;
+	bool wd_rerun_detect;
+	struct sc6607_platform_data *platform_data;
+
+	struct power_supply *psy;
+	struct power_supply *chg_psy;
+	struct power_supply_desc psy_desc;
+
+	int vbus_type;
+	int hw_aicl_point;
+	bool open_adc_by_vac;
+	bool camera_on;
+	int disable_wdt;
+
+	bool is_force_dpdm;
+	bool usb_connect_start;
+
+	struct thermal_zone_device *tz_dev;
+
+	struct mutex dpdm_lock;
+	struct mutex adc_read_lock;
+	struct mutex i2c_rw_lock;
+	struct regulator *dpdm_reg;
+	bool dpdm_enabled;
+	struct soft_bc12 bc12;
+	int soft_bc12_type;
+	int bc12_try_count;
+	bool soft_bc12;
+	bool bc12_done;
+	int  bc12_timeouts;
+	struct timer_list bc12_timeout;
+	unsigned int oplus_chg_type;
+
+	struct mutex track_upload_lock;
+	struct mutex track_hk_err_lock;
+	u32 debug_force_hk_err;
+	bool hk_err_uploading;
+	struct delayed_work hk_err_load_trigger_work;
+	struct delayed_work hw_bc12_detect_work;
+	struct delayed_work init_status_work;
+	struct delayed_work init_status_check_work;
+	struct delayed_work tcpc_complete_work;
+	struct delayed_work get_voocphy_info_work;
+	bool track_init_done;
+
+	u8 chip_id;
+	bool pr_swap;
+	bool disable_tcpc_irq;
+#ifdef CONFIG_OPLUS_CHARGER_MTK
+	struct adapter_device *pd_adapter;
+	struct mutex charger_pd_lock;
+	struct charger_device *chg_dev;
+#endif
+	bool disable_qc;
+	bool pdqc_setup_5v;
+	int  qc_to_9v_count;
+	bool hvdcp_cfg_9v_done;
+	int hvdcp_exit_stat;
+	bool hvdcp_can_enabled;
+	unsigned long long hvdcp_detect_time;
+	unsigned long long hvdcp_detach_time;
+	struct delayed_work qc_vol_convert_work;
+
+	bool not_support_usb_btb;
+	bool sc6607_switch_ntc;
+	bool usb_aicl_enhance;
+	struct iio_channel *batt_btb_temp_chan;
+	struct iio_channel *usb_btb_temp_chan;
+	bool error_reported;
+	bool use_ufcs_phy;
+	bool use_vooc_phy;
+	bool is_sc6607a;
+	struct votable *chg_disable_votable;
+	struct oplus_chg_ic_dev *ic_dev;
+	struct oplus_mms *err_topic;
+	struct mms_subscribe *err_subs;
+	struct oplus_mms *comm_topic;
+	struct mms_subscribe *comm_subs;
+
+	int found_cp_client_count;
+	struct oplus_voocphy_manager *voocphy;
+
+	struct tcpc_device *tcpc;
+	struct notifier_block pd_nb;
+
+	int cap_nr;
+	int pd_type;
+	int pd_chg_volt;
+	pd_msg_data pdo[PPS_PDO_MAX];
+	struct delayed_work sourcecap_done_work;
+	struct delayed_work charger_suspend_recovery_work;
+
+	struct delayed_work flash_mode_checkout_work;
+
+	struct votable *wired_icl_votable;
+	struct votable *wired_fcc_votable;
+	struct work_struct rerun_votable_work;
+};
+
+int sc6607a_set_dpdm_ctrl(struct sc6607 *chip, bool enable);
 #ifdef CONFIG_OPLUS_CHARGER_MTK
 void Charger_Detect_Init(void);
 void Charger_Detect_Release(void);

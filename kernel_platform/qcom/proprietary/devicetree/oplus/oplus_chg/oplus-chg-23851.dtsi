@@ -74,6 +74,9 @@
 		oplus,gauge_ic = <&oplus_virtual_gauge>;
 		oplus,topic-update-interval = <5000>;
 		oplus,support_subboard_ntc;
+		oplus,fcl_support;
+		oplus,fcl_index = <0>;
+		oplus,vb_offset = <30>;
 
 		oplus_virtual_gauge: oplus,virtual_gauge {
 			compatible = "oplus,virtual_gauge";
@@ -152,6 +155,7 @@
 					OPLUS_IC_VIRQ_CHG_TYPE_CHANGE
 					OPLUS_IC_VIRQ_OTG_ENABLE
 					OPLUS_IC_VIRQ_SVID
+					OPLUS_IC_VIRQ_PD_COMPLETED
 				>;
 			};
 		};
@@ -250,6 +254,10 @@
 				OPLUS_IC_FUNC_GAUGE_GET_LAST_CC
 				OPLUS_IC_FUNC_GAUGE_GET_CHEM_ID
 				OPLUS_IC_FUNC_GAUGE_GET_GAUGE_CAR_C
+				OPLUS_IC_FUNC_GAUGE_GET_DEC_FG_TYPE
+				OPLUS_IC_FUNC_GAUGE_GET_DEC_CV_SOH
+				OPLUS_IC_FUNC_GAUGE_SET_VCT
+				OPLUS_IC_FUNC_GAUGE_GET_VCT
 			>;
 			virqs = <
 				OPLUS_IC_VIRQ_ERR
@@ -280,6 +288,7 @@
 					OPLUS_IC_FUNC_CP_GET_WORK_STATUS
 					OPLUS_IC_FUNC_CP_SET_ADC_ENABLE
 					OPLUS_IC_FUNC_CP_WATCHDOG_ENABLE
+					OPLUS_IC_FUNC_CP_SET_SSTIMEOUT_UCP_ENABLE
 				>;
 				virqs = <
 					OPLUS_IC_VIRQ_ERR
@@ -354,6 +363,9 @@
 
 	oplus_chg_comm: oplus,comm {
 		compatible = "oplus,common-charge";
+		oplus_spec,dec_step = <20>;
+		oplus_spec,dec-vol-cc-full-thr = <0 400 600 800 1000 1200>;
+		oplus_spec,dec-vol-fv-full-mv = <0 20 20 40 40 40>;
 		oplus_spec,batt-them-thr = <(-100) 0 50 120 160 350 450 530>;
 		oplus_spec,iterm-ma = <303>;
 		oplus_spec,removed_bat_decidegc = <390>;
@@ -401,6 +413,8 @@
 
 		oplus,smooth_switch;
 		oplus,reserve_chg_soc = <2>;
+
+		oplus_spec,batt_full_time = <300>;
 	};
 
 	oplus_vooc: oplus,vooc {
@@ -485,6 +499,7 @@
 	oplus_chg_plc: oplus,plc_charge {
 		compatible = "oplus,plc_charge";
 		oplus,plc_soc = <90>;
+		oplus,plc_support_timeout;
 		oplus,plc_strategy-data = <&buck_simple_strategy>;
 		oplus,plc_strategy-names = "default";
 
@@ -515,11 +530,12 @@
 		compatible = "oplus,monitor";
 		oplus,topic-update-interval = <60000>;
 
-		track,fast_chg_break_t_thd = <1400>;
+		track,fast_chg_break_t_thd = <2500>;
 		track,general_chg_break_t_thd = <300>;
 		track,voocphy_type = <TRACK_AP_DUAL_CP_VOOCPHY>;
 		track,wired_max_power = <80000>;
 		track,wired_fast_chg_scheme = <TRACK_WIRED_SCHEME_SINGLE_60W_67W>;
+		track,track_ver = <TRACK_VER_4_0>;
 
 		track,gauge_status_ctrl;
 		track,nominal_qmax1 = <6122>;
@@ -577,6 +593,7 @@
 		oplus,default_protocol_list = <CHG_PROTOCOL_UFCS
 						CHG_PROTOCOL_VOOC
 						CHG_PROTOCOL_PD>;
+		oplus,protocol_wait_list = <CHG_PROTOCOL_UFCS 1000>;
 	};
 
 	oplus_ufcs_charge: oplus,ufcs_charge {

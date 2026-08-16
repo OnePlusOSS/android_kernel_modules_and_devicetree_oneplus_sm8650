@@ -412,6 +412,21 @@ int oplus_chglib_get_usb_btb_temp_cal(void)
 	return oplus_wired_get_usb_btb_temp();
 }
 
+int oplus_chglib_get_shaft_btb_temp(void)
+{
+	return oplus_wired_get_shaft_btb_temp();
+}
+
+bool oplus_chglib_get_shaft_btb_is_normal(void)
+{
+	return oplus_wired_get_shaft_btb_is_normal();
+}
+
+bool oplus_chglib_set_shaft_btb_over(bool is_shaft_btb_over)
+{
+	return oplus_wired_set_shaft_btb_over(is_shaft_btb_over);
+}
+
 bool oplus_chglib_get_chg_stats(void)
 {
 	return oplus_wired_is_present();
@@ -459,6 +474,49 @@ int oplus_chglib_notify_ap(struct device *dev, int event)
 	oplus_chg_ic_virq_trigger(chip->ic_dev, OPLUS_IC_VIRQ_VOOC_DATA);
 
 	return 0;
+}
+
+/* this function inform mtk tcpc to ignore pd vbus irq.
+This vooc charge break issue will trigger when below condition satisfy:
+  1. Cancel primary usb switch
+  2. adapter type is VOOC
+  3. battery voltage is low(< 3600mv)
+  The function's purpose is inform typec to ignore pd vbus irq.
+*/
+void oplus_chglib_set_vooc_startup(struct device *dev, int status)
+{
+	struct vphy_chip *chip = oplus_chglib_get_vphy_chip(dev);
+	struct mms_msg *msg;
+	int rc;
+	static int last_status = 0;
+
+	if (!chip->vooc_topic) {
+		chg_err("vooc topic is null\n");
+		return;
+	}
+
+	if (last_status == status)
+		return;
+
+	chg_err("set vooc2/3.0 status: %d\n", status);
+	last_status = status;
+	msg = oplus_mms_alloc_int_msg(MSG_TYPE_ITEM, MSG_PRIO_MEDIUM,
+					VOOC_ITEM_OLD_ADAPTER_STATUS, status);
+	if (msg == NULL) {
+		chg_err("alloc old vooc status msg error\n");
+		return;
+	}
+
+	rc = oplus_mms_publish_msg_sync(chip->vooc_topic, msg);
+	if (rc < 0) {
+		chg_err("publish old vooc status msg error, rc=%d\n", rc);
+		kfree(msg);
+	}
+}
+
+void oplus_chglib_set_ovp_forced(bool enable)
+{
+	oplus_set_ovp_forced(enable);
 }
 
 int oplus_chglib_push_break_code(struct device *dev, int code)
@@ -747,6 +805,9 @@ static void oplus_chglib_subscribe_wired_topic(struct oplus_mms *topic, void *pr
 		chg_err("subscribe gauge topic error, rc=%ld\n",
 			PTR_ERR(chip->wired_subs));
 
+	oplus_mms_get_item_data(chip->wired_topic, WIRED_ITEM_PRESENT, &data, true);
+	chip->is_wired_present = !!data.intval;
+
 	oplus_mms_get_item_data(chip->wired_topic,
 				WIRED_TIME_ABNORMAL_ADAPTER, &data, true);
 	chip->is_pd_svooc_adapter = !!data.intval;
@@ -952,6 +1013,32 @@ static void oplus_chglib_parallel_subs_callback(struct mms_subscribe *subs,
 	default:
 		break;
 	}
+}
+
+static int vphy_set_usb_dischg_enable(struct oplus_chg_ic_dev *ic_dev, bool enable)
+{
+	struct vphy_chip *chip;
+	int rc = 0;
+
+	if (!ic_dev->online) {
+		chg_err("ic_dev is offline\n");
+		return -ENODEV;
+	}
+	chip = oplus_chglib_get_vphy_chip(ic_dev->dev);
+	if ((chip == NULL) || (chip->vinf == NULL)) {
+		chg_err("vphy_chip/vinf is NULL\n");
+		return -ENODEV;
+	}
+
+	/*to ap voocphy*/
+	if (chip->vinf->vphy_set_usb_dischg_enable) {
+		chip->vinf->vphy_set_usb_dischg_enable(chip->dev, enable);
+	} else {
+		chg_err("vphy_set_usb_dischg_enable not supported\n");
+		rc = -ENOTSUPP;
+	}
+
+	return rc;
 }
 
 static void oplus_chglib_subscribe_parallel_topic(struct oplus_mms *topic,
@@ -1220,6 +1307,20 @@ static int vphy_set_chg_auto_mode(struct oplus_chg_ic_dev *ic_dev, bool enable)
 	return 0;
 }
 
+static int vphy_set_chg_vac2v2x_uvp(struct oplus_chg_ic_dev *ic_dev, bool disable)
+{
+	struct vphy_chip *chip;
+
+	if (!ic_dev->online)
+		return 0;
+	chip = oplus_chglib_get_vphy_chip(ic_dev->dev);
+
+	if (chip && chip->vinf && chip->vinf->vphy_set_chg_vac2v2x_uvp)
+		chip->vinf->vphy_set_chg_vac2v2x_uvp(chip->dev, disable);
+
+	return 0;
+}
+
 static int vphy_get_curve_current(struct oplus_chg_ic_dev *ic_dev, int *curr)
 {
 	struct vphy_chip *chip;
@@ -1302,6 +1403,20 @@ static int vphy_get_frame_head(struct oplus_chg_ic_dev *ic_dev, int *head)
 		rc = chip->vinf->vphy_get_frame_head(chip->dev, head);
 
 	return rc;
+}
+
+static int vphy_get_fastchg_commu_ing(struct oplus_chg_ic_dev *ic_dev, bool *fastchg_commu_ing)
+{
+	struct vphy_chip *chip;
+
+	if (!ic_dev->online)
+		return 0;
+	chip = oplus_chglib_get_vphy_chip(ic_dev->dev);
+
+	if (chip && chip->vinf && chip->vinf->vphy_get_fastchg_commu_ing && fastchg_commu_ing)
+		*fastchg_commu_ing = chip->vinf->vphy_get_fastchg_commu_ing(chip->dev);
+
+	return 0;
 }
 
 static void *vphy_get_func(struct oplus_chg_ic_dev *ic_dev,
@@ -1397,6 +1512,18 @@ static void *vphy_get_func(struct oplus_chg_ic_dev *ic_dev,
 	case OPLUS_IC_FUNC_VOOCPHY_GET_FRAME_HEAD:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_VOOCPHY_GET_FRAME_HEAD,
 					       vphy_get_frame_head);
+		break;
+	case OPLUS_IC_FUNC_VOOCPHY_GET_FASTCHG_COMMU_ING:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_VOOCPHY_GET_FASTCHG_COMMU_ING,
+					       vphy_get_fastchg_commu_ing);
+		break;
+	case OPLUS_IC_FUNC_VOOCPHY_SET_VAC2V2X_UVP:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_VOOCPHY_SET_VAC2V2X_UVP,
+					       vphy_set_chg_vac2v2x_uvp);
+		break;
+	case OPLUS_IC_FUNC_VOOCPHY_SET_USB_DISCHG_ENABLE:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_VOOCPHY_SET_USB_DISCHG_ENABLE,
+					       vphy_set_usb_dischg_enable);
 		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);

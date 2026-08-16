@@ -195,6 +195,20 @@ static int oplus_wcc_send_to_user(struct sock *oplus_sock,
         return 0;
 }
 
+static bool validate_nla_payload(struct nlattr *nla, size_t required_size) {
+        if (!nla) {
+                debug("nla validation failed: null attribute\n");
+                return false;
+        }
+
+        if (nla_len(nla) < required_size) {
+                debug("nla validation failed: length %u < required %zu\n", nla_len(nla), required_size);
+                return false;
+        }
+
+        return true;
+}
+
 static void oplus_wcc_sample_resp(struct sock *oplus_sock, u32 oplus_pid, int msg_type)
 {
         int payload[4];
@@ -213,7 +227,12 @@ static void oplus_wcc_sample_resp(struct sock *oplus_sock, u32 oplus_pid, int ms
 
 static int oplus_wcc_sample_sync_get(struct nlattr *nla)
 {
-        u32 *data = (u32 *)NLA_DATA(nla);
+	u32 *data;
+        if (!validate_nla_payload(nla, sizeof(u32) * 4)) {
+                return -EINVAL;
+        }
+
+        data = (u32 *)NLA_DATA(nla);
 
         debug("sample_sync_get: %u%u%u%u\n", data[0], data[1], data[2], data[3]);
         oplus_wcc_sample_resp(oplus_sync_nl_sock, oplus_sync_nl_pid, OPLUS_SAMPLE_SYNC_GET);
@@ -222,7 +241,12 @@ static int oplus_wcc_sample_sync_get(struct nlattr *nla)
 
 static int oplus_wcc_sample_sync_get_no_resp(struct nlattr *nla)
 {
-        u32 *data = (u32 *)NLA_DATA(nla);
+        u32 *data;
+        if (!validate_nla_payload(nla, sizeof(u32) * 4)) {
+                return -EINVAL;
+        }
+
+        data = (u32 *)NLA_DATA(nla);
 
         debug("sample_sync_get_no_resp: %u%u%u%u\n", data[0], data[1], data[2], data[3]);
         return 0;
@@ -353,7 +377,12 @@ EXPORT_SYMBOL_GPL(register_oplus_wfd_wlan_ops);
 
 static int oplus_wcc_sample_async_get(struct nlattr *nla)
 {
-        u32 *data = (u32 *)NLA_DATA(nla);
+        u32 *data;
+        if (!validate_nla_payload(nla, sizeof(u32) * 4)) {
+                return -EINVAL;
+        }
+
+        data = (u32 *)NLA_DATA(nla);
 
         async_msg_type = OPLUS_SAMPLE_ASYNC_GET;
         oplus_timer.expires = jiffies + HZ;/* timer expires in ~1s*/

@@ -104,6 +104,8 @@ typedef  unsigned int   uint32_t;
 typedef  unsigned char  uint8_t;
 #endif
 
+int sipa_read_reg(struct regmap *regmap, unsigned char subaddress, unsigned int *val);
+int sipa_write_reg(struct regmap *regmap, unsigned char subaddr, unsigned int val);
 int sipa_regmap_read(struct regmap *regmap,	unsigned int chip_type,
 	unsigned int start_reg,	unsigned int reg_num, void *buf);
 int sipa_regmap_write(struct regmap *regmap,	unsigned int chip_type,

@@ -46,15 +46,19 @@
 
 #define PERCENT_SCALE 100
 #define FULL_SCALE (100 * (PERCENT_SCALE))
-#define MAX_FULL_SOC 9000
+#define MIN_FULL_SOC 9500
+#define INIT_MIN_SOC 1000
+
+#define SOC_CENTI_DELTA_IGNORE	25	/* 0.25% */
+#define MAX_SMOOTH_LEAD_CENTI	600	/* 6% */
 
 #define UPDATE_MAP_DEBOUNCE_MS 10000
 
-#define BASE64_ENCODE_LEN(raw_len) (((raw_len) + 2) / 3 * 4 + 1)
+#define BASE64_ENCODE_LEN(raw_len) (DIV_ROUND_UP((raw_len) * 4, 3) + 1)
 #define BASE64_DECODE_LEN(encoded_len) ((encoded_len) * 3 / 4)
 
 #define TRACK_CACHE_SIZE (TOPIC_MSG_STR_BUF - 1)
-#define TRACK_FIFO_SIZE BASE64_DECODE_LEN(TRACK_CACHE_SIZE)
+#define TRACK_FIFO_SIZE BASE64_DECODE_LEN(ALIGN_DOWN(TRACK_CACHE_SIZE - 1, 4))
 
 #define BATTERY_LOG_FIFO_SIZE 256
 #define BATTERY_LOG_CACHE_SIZE BASE64_ENCODE_LEN(BATTERY_LOG_FIFO_SIZE)
@@ -81,6 +85,7 @@ struct bs_strategy {
 
 	struct oplus_mms *gauge_topic;
 	struct oplus_mms *err_topic;
+	int init_ui_soc;
 	int soc;
 	int soc_centi;
 	int smooth_soc;
@@ -89,6 +94,7 @@ struct bs_strategy {
 	int smooth_map_lower;
 	int smooth_map_upper;
 
+	bool chg_online_inited;
 	bool chg_online;
 	bool chg_full;
 	bool inited;
@@ -110,11 +116,17 @@ struct bs_strategy {
 	time64_t last_send_time;
 
 	struct rtc_time tm;
+
+	int last_chg_smooth_soc;
+	int last_chg_soc_centi;
+	int last_chg_ref_centi;
+	bool last_chg_valid;
+	int chg_dis_delta_acc_centi;
 };
 
 enum map_type {
 	MAP_TYPE_INIT_SPLIT_EQ_MAX = 0,
-	MAP_TYPE_INIT_SPLIT_NQ_MAX = 1,
+	MAP_TYPE_INIT_DISCHG = 1,
 	MAP_TYPE_CHG_SPLIT_EQ_MAX = 2,
 	MAP_TYPE_CHG_SMOOTH_EQ_SPLIT = 3,
 	MAP_TYPE_CHG_SMOOTH_LT_SPLIT = 4,
@@ -133,12 +145,14 @@ struct __attribute__((packed)) bs_track {
 	union {
 		struct __attribute__((packed)) {
 			uint16_t chg_reserve;
+			uint16_t soc_centi;
+			uint8_t init_ui_soc;
 		} init_split_eq_max;
 
 		struct __attribute__((packed)) {
-			uint8_t chg_split_soc;
-			uint16_t chg_reserve;
-		} init_split_nq_max;
+			uint16_t soc_centi;
+			uint8_t init_ui_soc;
+		} init_dischg;
 
 		struct __attribute__((packed)) {
 			uint8_t smooth_soc;
@@ -226,8 +240,8 @@ static time64_t bs_get_current_time_s(struct bs_strategy *bs)
 	return ts64.tv_sec;
 }
 
-static const char base64_table[65] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-static int base64_encode(const u8 *src, int srclen, char *dst)
+static const char oplus_base64_table[65] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+static int oplus_base64_encode(const u8 *src, int srclen, char *dst)
 {
 	u32 ac = 0;
 	int bits = 0;
@@ -239,11 +253,11 @@ static int base64_encode(const u8 *src, int srclen, char *dst)
 		bits += 8;
 		do {
 			bits -= 6;
-			*cp++ = base64_table[(ac >> bits) & 0x3f];
+			*cp++ = oplus_base64_table[(ac >> bits) & 0x3f];
 		} while (bits >= 6);
 	}
 	if (bits) {
-		*cp++ = base64_table[(ac << (6 - bits)) & 0x3f];
+		*cp++ = oplus_base64_table[(ac << (6 - bits)) & 0x3f];
 		bits -= 6;
 	}
 	while (bits < 0) {
@@ -304,7 +318,7 @@ err:
 static uint8_t bs_track_calc_size(enum map_type type) {
 	static const uint8_t extra_len_map[] = {
 		[MAP_TYPE_INIT_SPLIT_EQ_MAX] = sizeof(((struct bs_track*)0)->init_split_eq_max),
-		[MAP_TYPE_INIT_SPLIT_NQ_MAX] = sizeof(((struct bs_track*)0)->init_split_nq_max),
+		[MAP_TYPE_INIT_DISCHG] = sizeof(((struct bs_track*)0)->init_dischg),
 		[MAP_TYPE_CHG_SPLIT_EQ_MAX] = sizeof(((struct bs_track*)0)->chg_split_eq_max),
 		[MAP_TYPE_CHG_SMOOTH_EQ_SPLIT] = sizeof(((struct bs_track*)0)->chg_smooth_eq_split),
 		[MAP_TYPE_CHG_SMOOTH_LT_SPLIT] = sizeof(((struct bs_track*)0)->chg_smooth_lt_split),
@@ -352,7 +366,7 @@ static int bs_track_fifo_pop_and_encode(struct bs_strategy *bs)
 		chg_err("incomplete read from FIFO\n");
 		rc = -EIO;
 	} else {
-		b64_len = base64_encode(raw_data, total_len, bs->track_cache);
+		b64_len = oplus_base64_encode(raw_data, total_len, bs->track_cache);
 		if (b64_len > TRACK_CACHE_SIZE) {
 			chg_err("base64 length exceeds limit (%d > %d)\n", b64_len, TRACK_CACHE_SIZE);
 			rc = -EOVERFLOW;
@@ -391,7 +405,7 @@ static int bs_battery_log_fifo_pop_and_encode(struct bs_strategy *bs)
 		chg_err("incomplete read from FIFO\n");
 		rc = -EIO;
 	} else {
-		b64_len = base64_encode(raw_data, total_len, bs->battery_log_cache);
+		b64_len = oplus_base64_encode(raw_data, total_len, bs->battery_log_cache);
 		if (b64_len > BATTERY_LOG_CACHE_SIZE) {
 			chg_err("base64 length exceeds limit (%d > %d)\n", b64_len, BATTERY_LOG_CACHE_SIZE);
 			rc = -EOVERFLOW;
@@ -502,7 +516,7 @@ static int bs_track_push_to_fifo(struct bs_strategy *bs, struct bs_track *track)
 	chg_info("type=%d len=%d utc=%llu hex=[%*ph]\n", track->type, track->len, track->utc,
 		total_need, (uint8_t *)track);
 
-	if (kfifo_avail(&bs->track_fifo) < total_need) {
+	if (kfifo_avail(&bs->track_fifo) < total_need || kfifo_len(&bs->track_fifo) + total_need > TRACK_FIFO_SIZE) {
 		rc = bs_track_upload(bs);
 		chg_err("fifo full, upload rc=%d\n", rc);
 	}
@@ -581,50 +595,76 @@ static int smooth_soc_to_soc_centi(struct bs_strategy *bs, int start_index, int 
 	return 0;
 }
 
-static void bs_init_map(struct bs_strategy *bs)
+static void bs_save_dischg_ref(struct bs_strategy *bs)
 {
-	struct reserve_cfg *cfg;
-	int i = 0;
-	struct bs_track track;
-
-	cfg = find_reserve_cfg_by_soc(bs, 0);
-	if (!cfg) {
-		chg_err("no config found for soc 0\n");
-		return;
-	}
-
-	for (i = 0; i < SOC_TABLE_SIZE; i++)
-		bs->smooth_map[i] = i * PERCENT_SCALE;
-
-	if (cfg->chg_split_soc == MAX_SOC) {
-		track.type =  (uint8_t)MAP_TYPE_INIT_SPLIT_EQ_MAX;
-		track.init_split_eq_max.chg_reserve = (uint16_t)cfg->chg_reserve;
-
-		/* [0,100] -> [0,FULL_SCALE-chg_reserve] */
-		smooth_soc_to_soc_centi(bs, 0, MAX_SOC, 0, FULL_SCALE, 0, FULL_SCALE - cfg->chg_reserve);
+	if (bs->smooth_soc >= MIN_SOC && bs->smooth_soc <= MAX_SOC) {
+		bs->last_chg_smooth_soc = bs->smooth_soc;
+		bs->last_chg_soc_centi = bs->soc_centi;
+		bs->last_chg_ref_centi = bs->smooth_map[bs->smooth_soc];
+		bs->last_chg_valid = true;
 	} else {
-		track.type = (uint8_t)MAP_TYPE_INIT_SPLIT_NQ_MAX;
-		track.init_split_nq_max.chg_split_soc = (uint8_t)cfg->chg_split_soc;
-		track.init_split_nq_max.chg_reserve = (uint16_t)cfg->chg_reserve;
+		bs->last_chg_valid = false;
+	}
+}
 
-		/* [0,split_soc] -> [0,map[chg_split_soc]-chg_reserve] */
-		smooth_soc_to_soc_centi(bs, 0, cfg->chg_split_soc, 0, cfg->chg_split_soc * PERCENT_SCALE, 0,
-				      bs->smooth_map[cfg->chg_split_soc] - cfg->chg_reserve);
+static bool bs_calc_chg_lower_bound(struct bs_strategy *bs, struct reserve_cfg *cfg,
+	int delta_dis, int *lower_bound)
+{
+	int last_acc = bs->chg_dis_delta_acc_centi;
 
-		/* [split_soc+1,100] -> [map[chg_split_soc],FULL_SCALE] */
-		smooth_soc_to_soc_centi(bs, cfg->chg_split_soc + 1, MAX_SOC, cfg->chg_split_soc * PERCENT_SCALE,
-				      FULL_SCALE, bs->smooth_map[cfg->chg_split_soc], FULL_SCALE);
+	bs->chg_dis_delta_acc_centi += delta_dis;
+
+	if (bs->chg_dis_delta_acc_centi < cfg->dischg_reserve)
+		*lower_bound = bs->last_chg_ref_centi - delta_dis;
+	else if (last_acc < cfg->dischg_reserve)
+		*lower_bound = bs->last_chg_ref_centi - (cfg->dischg_reserve - last_acc);
+	else
+		*lower_bound = bs->last_chg_ref_centi;
+
+	if (*lower_bound < 0)
+		return false;
+
+	chg_info("last=%d delta=%d acc=%d dischg=%d lb=%d\n",
+		bs->last_chg_ref_centi, delta_dis, bs->chg_dis_delta_acc_centi,
+		cfg->dischg_reserve, *lower_bound);
+
+	return true;
+}
+
+static bool bs_get_chg_lower_bound(struct bs_strategy *bs, int *lower_bound)
+{
+	int delta_dis;
+	struct reserve_cfg *cfg = NULL;
+
+	if (!bs->last_chg_valid || bs->last_chg_smooth_soc != bs->smooth_soc) {
+		bs->chg_dis_delta_acc_centi = 0;
+		return false;
 	}
 
-	bs->smooth_map[MIN_SOC] = 0;
-	bs->smooth_map[MAX_SOC] = FULL_SCALE;
+	cfg = find_reserve_cfg_by_soc(bs, bs->smooth_soc);
+	if (!cfg) {
+		chg_err("no config for smooth_soc %d\n", bs->smooth_soc);
+		return false;
+	}
 
-	bs_track_push_to_fifo(bs, &track);
+	delta_dis = bs->last_chg_soc_centi - bs->soc_centi;
+	if (delta_dis < -SOC_CENTI_DELTA_IGNORE)
+		return false;
+
+	if (delta_dis <= SOC_CENTI_DELTA_IGNORE ||
+	    (bs->smooth_soc * PERCENT_SCALE - bs->soc_centi > MAX_SMOOTH_LEAD_CENTI)) {
+		*lower_bound = bs->last_chg_ref_centi;
+		return true;
+	}
+
+	return bs_calc_chg_lower_bound(bs, cfg, delta_dis, lower_bound);
 }
 
 static void handle_chg_map_split_eq_max(struct bs_strategy *bs, struct reserve_cfg *cfg)
 {
 	struct bs_track track;
+	int lower_bound = 0;
+	bool has_lower = false;
 
 	track.type = (uint8_t)MAP_TYPE_CHG_SPLIT_EQ_MAX;
 	track.chg_split_eq_max.smooth_soc = (uint8_t)bs->smooth_soc;
@@ -632,10 +672,19 @@ static void handle_chg_map_split_eq_max(struct bs_strategy *bs, struct reserve_c
 	track.chg_split_eq_max.soc_centi = (uint16_t)bs->soc_centi;
 	track.chg_split_eq_max.chg_reserve = (uint16_t)cfg->chg_reserve;
 
-	if (bs->smooth_soc < MAX_SOC - 1 && bs->smooth_soc != MIN_SOC) {
-		/* [0,smooth_soc] -> [0,soc_centi] */
-		smooth_soc_to_soc_centi(bs, 0, bs->smooth_soc, 0, bs->smooth_soc_centi, 0, bs->soc_centi);
+	has_lower = bs_get_chg_lower_bound(bs, &lower_bound);
 
+	if (bs->smooth_soc < MAX_SOC - 1 && bs->smooth_soc != MIN_SOC) {
+		if (has_lower) {
+			track.chg_split_eq_max.smooth_soc_centi = (uint16_t)(bs->smooth_soc * PERCENT_SCALE);
+			track.chg_split_eq_max.soc_centi = (uint16_t)lower_bound;
+			/* [0,smooth_soc] -> [0,lower_bound] */
+			smooth_soc_to_soc_centi(bs, 0, bs->smooth_soc, 0, bs->smooth_soc * PERCENT_SCALE, 0, lower_bound);
+			bs->smooth_map[bs->smooth_soc] = lower_bound;
+		} else {
+			/* [0,smooth_soc] -> [0,soc_centi] */
+			smooth_soc_to_soc_centi(bs, 0, bs->smooth_soc, 0, bs->smooth_soc_centi, 0, bs->soc_centi);
+		}
 		if (bs->smooth_map[bs->smooth_soc] <= FULL_SCALE - cfg->chg_reserve)
 			/* [smooth_soc+1,100] -> [map[smooth_soc],FULL_SCALE-chg_reserve] */
 			smooth_soc_to_soc_centi(bs, bs->smooth_soc + 1, MAX_SOC, bs->smooth_soc * PERCENT_SCALE,
@@ -811,7 +860,7 @@ static void bs_update_dischg_map(struct bs_strategy *bs)
 
 		/* [0,100] -> [0,FULL_SCALE-dischg_reserve-full_reserve] */
 		smooth_soc_to_soc_centi(bs, 0, MAX_SOC, 0, FULL_SCALE,
-			0, bs->soc_centi - cfg->dischg_reserve - extra_reserve);
+			0, max(bs->soc_centi, MIN_FULL_SOC) - cfg->dischg_reserve - extra_reserve);
 	} else if (is_dischg_no_reserve(bs)) {
 		track.type = (uint8_t)MAP_TYPE_DISCHG_NO_RESERVE;
 		track.dischg_no_reserve.smooth_soc = (uint8_t)bs->smooth_soc;
@@ -854,6 +903,8 @@ static void bs_update_dischg_map(struct bs_strategy *bs)
 	bs->chg_full = false;
 
 	bs_track_push_to_fifo(bs, &track);
+
+	bs_save_dischg_ref(bs);
 }
 
 static void bs_update_smmoth_soc(struct bs_strategy *bs)
@@ -908,9 +959,7 @@ static int bs_update_data(struct bs_strategy *bs)
 	}
 
 	oplus_mms_get_item_data(bs->gauge_topic, GAUGE_ITEM_RM, &data, false);
-	bs->batt_rm = data.intval;
-	if (bs->batt_rm < 0)
-		bs->batt_rm = 0;
+	bs->batt_rm = max(data.intval, 0);
 
 	oplus_mms_get_item_data(bs->gauge_topic, GAUGE_ITEM_FCC, &data, false);
 	bs->batt_fcc = data.intval;
@@ -934,7 +983,10 @@ static int bs_update_data(struct bs_strategy *bs)
 	bs->soc = data.intval;
 
 	if (abs(bs->soc * PERCENT_SCALE - bs->soc_centi) >= MAX_SOC_DIFF_SOC_CENTI) {
-		chg_err("|soc%d*1000-soc_centi%d| too large\n", bs->soc, bs->soc_centi);
+		chg_err("|soc %d - soc_centi %d.%02d| too large\n",
+			bs->soc, bs->soc_centi / PERCENT_SCALE, bs->soc_centi % PERCENT_SCALE);
+		bs->soc_centi = bs->soc * PERCENT_SCALE;
+	} else if (bs->soc == 0) {
 		bs->soc_centi = bs->soc * PERCENT_SCALE;
 	}
 
@@ -980,6 +1032,88 @@ static void bs_update_map(struct bs_strategy *bs)
 		bs_update_chg_map(bs);
 	else
 		bs_update_dischg_map(bs);
+	print_smooth_map(bs);
+}
+
+static void bs_init_chg_map(struct bs_strategy *bs, struct reserve_cfg *cfg)
+{
+	int soc_centi = 0;
+	struct bs_track track;
+
+	if (cfg->chg_split_soc == MAX_SOC) {
+		track.type = (uint8_t)MAP_TYPE_INIT_SPLIT_EQ_MAX;
+		track.init_split_eq_max.chg_reserve = (uint16_t)cfg->chg_reserve;
+		track.init_split_eq_max.soc_centi = (uint16_t)bs->soc_centi;
+		track.init_split_eq_max.init_ui_soc = (uint8_t)bs->init_ui_soc;
+		bs_track_push_to_fifo(bs, &track);
+		if (bs->init_ui_soc >= MIN_DISCHG_SOC && bs->init_ui_soc < MAX_SOC - 1 &&
+		    bs->soc_centi >= INIT_MIN_SOC) {
+			soc_centi = clamp_val(bs->soc_centi,
+				max(bs->init_ui_soc - MAX_DISCHG_DELTA_SOC, MIN_SOC) * PERCENT_SCALE,
+				min(bs->init_ui_soc + MAX_DISCHG_DELTA_SOC, MAX_SOC) * PERCENT_SCALE);
+			/* [0,ui_soc] -> [0,soc_centi] */
+			smooth_soc_to_soc_centi(bs, 0, bs->init_ui_soc, 0,
+				bs->init_ui_soc * PERCENT_SCALE - PERCENT_SCALE / 2, 0, soc_centi);
+
+			/* [ui_soc+1,100] -> [map[soc_centi],FULL_SCALE-chg_reserve] */
+			smooth_soc_to_soc_centi(bs, bs->init_ui_soc + 1, MAX_SOC, bs->init_ui_soc * PERCENT_SCALE,
+				FULL_SCALE, bs->smooth_map[bs->init_ui_soc], FULL_SCALE - cfg->chg_reserve);
+			return;
+		}
+	}
+
+	/* [0,100] -> [0,FULL_SCALE] */
+	smooth_soc_to_soc_centi(bs, 0, MAX_SOC, 0, FULL_SCALE, 0, FULL_SCALE);
+}
+
+static void bs_init_dischg_map(struct bs_strategy *bs)
+{
+	int soc_centi = 0;
+	struct bs_track track;
+
+	track.type = (uint8_t)MAP_TYPE_INIT_DISCHG;
+	track.init_dischg.soc_centi = (uint16_t)bs->soc_centi;
+	track.init_dischg.init_ui_soc = (uint8_t)bs->init_ui_soc;
+	bs_track_push_to_fifo(bs, &track);
+
+	if (bs->init_ui_soc >= MIN_DISCHG_SOC && bs->init_ui_soc < MAX_SOC - 1 && bs->soc_centi >= INIT_MIN_SOC) {
+		soc_centi = clamp_val(bs->soc_centi,
+			max(bs->init_ui_soc - MAX_DISCHG_DELTA_SOC, MIN_SOC) * PERCENT_SCALE,
+			min(bs->init_ui_soc + MAX_DISCHG_DELTA_SOC, MAX_SOC) * PERCENT_SCALE);
+		/* [0,ui_soc] -> [0,soc_centi] */
+		smooth_soc_to_soc_centi(bs, 0, bs->init_ui_soc, 0,
+			bs->init_ui_soc * PERCENT_SCALE - PERCENT_SCALE / 2, 0, soc_centi);
+
+		/* [ui_soc+1,100] -> [map[soc_centi],FULL_SCALE] */
+		smooth_soc_to_soc_centi(bs, bs->init_ui_soc + 1, MAX_SOC, bs->init_ui_soc * PERCENT_SCALE,
+			FULL_SCALE, bs->smooth_map[bs->init_ui_soc], FULL_SCALE);
+	} else {
+		/* [0,100] -> [0,FULL_SCALE] */
+		smooth_soc_to_soc_centi(bs, 0, MAX_SOC, 0, FULL_SCALE, 0, FULL_SCALE);
+	}
+}
+
+static void bs_init_map(struct bs_strategy *bs)
+{
+	struct reserve_cfg *cfg;
+
+	if (bs->init_ui_soc < 0 || !bs->chg_online_inited)
+		return;
+
+	cfg = find_reserve_cfg_by_soc(bs, bs->init_ui_soc);
+	if (!cfg) {
+		chg_err("no config found for soc %d\n", bs->init_ui_soc);
+		return;
+	}
+
+	if (bs->chg_online) {
+		bs_init_chg_map(bs, cfg);
+	} else {
+		bs_init_dischg_map(bs);
+	}
+
+	bs->smooth_map[MIN_SOC] = 0;
+	bs->smooth_map[MAX_SOC] = FULL_SCALE;
 	print_smooth_map(bs);
 }
 
@@ -1162,10 +1296,56 @@ static int parse_reserve_config(struct device_node *node, struct bs_strategy *bs
 	return rc;
 }
 
+static int bs_dump_log_data(char *buffer, int size, void *dev_data)
+{
+	struct bs_strategy *bs = dev_data;
+
+	if (!buffer || !bs)
+		return -ENOMEM;
+
+	mutex_lock(&bs->lock);
+	if (bs->inited) {
+		bs_battery_log_fifo_pop_and_encode(bs);
+		snprintf(buffer, size, ",%d.%02d,%d,%d.%02d,%d.%02d,%d.%02d,%s",
+			bs->soc_centi / PERCENT_SCALE, bs->soc_centi % PERCENT_SCALE,
+			bs->smooth_soc,
+			bs->smooth_soc_centi / PERCENT_SCALE, bs->smooth_soc_centi % PERCENT_SCALE,
+			bs->smooth_map_lower / PERCENT_SCALE, bs->smooth_map_lower % PERCENT_SCALE,
+			bs->smooth_map_upper / PERCENT_SCALE, bs->smooth_map_upper % PERCENT_SCALE,
+			bs->battery_log_cache);
+		memset(bs->battery_log_cache, 0, BATTERY_LOG_CACHE_SIZE);
+	} else {
+		snprintf(buffer, size, ",,,,,,");
+	}
+	mutex_unlock(&bs->lock);
+
+	return 0;
+}
+
+static int bs_get_log_head(char *buffer, int size, void *dev_data)
+{
+	struct oplus_monitor *chip = dev_data;
+
+	if (!buffer || !chip)
+		return -ENOMEM;
+
+	snprintf(buffer, size,
+		",bs_soc_centi,bs_smooth_soc,bs_smooth_soc_centi,bs_smooth_map_lower,bs_smooth_map_upper,bs_formula");
+
+	return 0;
+}
+
+static struct battery_log_ops battlog_bs_ops = {
+	.dev_name = "bs_info",
+	.dump_log_head = bs_get_log_head,
+	.dump_log_content = bs_dump_log_data,
+};
+
 static struct oplus_chg_strategy *bs_strategy_alloc_by_node(struct device_node *node)
 {
 	struct bs_strategy *bs;
 	int rc;
+	int i = 0;
 
 	if (!node) {
 		chg_err("node is NULL\n");
@@ -1191,15 +1371,20 @@ static struct oplus_chg_strategy *bs_strategy_alloc_by_node(struct device_node *
 		goto free_battery_log;
 
 	mutex_init(&bs->lock);
+	battlog_bs_ops.dev_data = (void *)bs;
+	battery_log_ops_register(&battlog_bs_ops);
 	INIT_DELAYED_WORK(&bs->map_update_work, bs_map_update_work);
 	bs->smooth_soc = -EINVAL;
-	/* init use charge map */
-	bs->chg_online = true;
-	bs_init_map(bs);
-	print_smooth_map(bs);
+	bs->init_ui_soc = -EINVAL;
+	for (i = 0; i < SOC_TABLE_SIZE; i++)
+		bs->smooth_map[i] = i * PERCENT_SCALE;
 	bs->last_map_update_jiffies = jiffies;
 	bs->map_update_pending = false;
-	bs->last_chg_online = bs->chg_online;
+	bs->last_chg_smooth_soc = -EINVAL;
+	bs->last_chg_soc_centi = -EINVAL;
+	bs->last_chg_ref_centi = 0;
+	bs->last_chg_valid = false;
+	bs->chg_dis_delta_acc_centi = 0;
 	return &bs->strategy;
 free_battery_log:
 	kfree(bs->battery_log_cache);
@@ -1230,47 +1415,6 @@ static int bs_strategy_release(struct oplus_chg_strategy *strategy)
 	return 0;
 }
 
-static int bs_dump_log_data(char *buffer, int size, void *dev_data)
-{
-	struct bs_strategy *bs = dev_data;
-
-	if (!buffer || !bs)
-		return -ENOMEM;
-
-	mutex_lock(&bs->lock);
-	bs_battery_log_fifo_pop_and_encode(bs);
-	snprintf(buffer, size, ",%d.%02d,%d,%d.%02d,%d.%02d,%d.%02d,%s",
-		bs->soc_centi / PERCENT_SCALE, bs->soc_centi % PERCENT_SCALE,
-		bs->smooth_soc,
-		bs->smooth_soc_centi / PERCENT_SCALE, bs->smooth_soc_centi % PERCENT_SCALE,
-		bs->smooth_map_lower / PERCENT_SCALE, bs->smooth_map_lower % PERCENT_SCALE,
-		bs->smooth_map_upper / PERCENT_SCALE, bs->smooth_map_upper % PERCENT_SCALE,
-		bs->battery_log_cache ? bs->battery_log_cache : "");
-	memset(bs->battery_log_cache, 0, BATTERY_LOG_CACHE_SIZE);
-	mutex_unlock(&bs->lock);
-
-	return 0;
-}
-
-static int bs_get_log_head(char *buffer, int size, void *dev_data)
-{
-	struct oplus_monitor *chip = dev_data;
-
-	if (!buffer || !chip)
-		return -ENOMEM;
-
-	snprintf(buffer, size,
-		",bs_soc_centi,bs_smooth_soc,bs_smooth_soc_centi,bs_smooth_map_lower,bs_smooth_map_upper,bs_formula");
-
-	return 0;
-}
-
-static struct battery_log_ops battlog_bs_ops = {
-	.dev_name = "bs_info",
-	.dump_log_head = bs_get_log_head,
-	.dump_log_content = bs_dump_log_data,
-};
-
 static int bs_strategy_init(struct oplus_chg_strategy *strategy)
 {
 	struct bs_strategy *bs;
@@ -1284,9 +1428,6 @@ static int bs_strategy_init(struct oplus_chg_strategy *strategy)
 	mutex_lock(&bs->lock);
 	bs->inited = true;
 	mutex_unlock(&bs->lock);
-
-	battlog_bs_ops.dev_data = (void *)bs;
-	battery_log_ops_register(&battlog_bs_ops);
 
 	return 0;
 }
@@ -1328,8 +1469,8 @@ static int bs_strategy_set_process_data(struct oplus_chg_strategy *strategy, con
 	struct bs_strategy *bs;
 	bool update_map = false;
 
-	if (!strategy || !type) {
-		chg_err("strategy or type is NULL\n");
+	if (!type) {
+		chg_err("type is NULL\n");
 		return -EINVAL;
 	}
 
@@ -1342,8 +1483,15 @@ static int bs_strategy_set_process_data(struct oplus_chg_strategy *strategy, con
 			bs->chg_online = !!arg;
 			update_map = true;
 		}
+		if (!bs->chg_online_inited) {
+			bs->chg_online_inited = true;
+			bs_init_map(bs);
+		}
 	} else if (sysfs_streq(type, "chg_full")) {
 		bs->chg_full = !!arg;
+	} else if (sysfs_streq(type, "init_ui_soc")) {
+		bs->init_ui_soc = (int)arg;
+		bs_init_map(bs);
 	} else {
 		mutex_unlock(&bs->lock);
 		return -ENOTSUPP;
@@ -1363,6 +1511,32 @@ static int bs_strategy_set_process_data(struct oplus_chg_strategy *strategy, con
 	return 0;
 }
 
+static int bs_strategy_get_metadata(struct oplus_chg_strategy *strategy,
+	void *ret)
+{
+	struct bs_strategy *bs;
+	struct reserve_cfg *cfg;
+
+	if (strategy == NULL) {
+		chg_err("strategy is NULL\n");
+		return -EINVAL;
+	}
+	if (ret == NULL) {
+		chg_err("ret is NULL\n");
+		return -EINVAL;
+	}
+
+	bs = (struct bs_strategy *)strategy;
+	cfg = find_reserve_cfg_by_soc(bs, bs->smooth_soc);
+	if (!cfg) {
+		*((int *)ret) = 0;
+		return 0;
+	}
+
+	*((int *)ret) = cfg->chg_reserve / PERCENT_SCALE;
+	return 0;
+}
+
 static struct oplus_chg_strategy_desc bs_strategy_desc = {
 	.name = "bs",
 	.strategy_alloc_by_node = bs_strategy_alloc_by_node,
@@ -1370,6 +1544,7 @@ static struct oplus_chg_strategy_desc bs_strategy_desc = {
 	.strategy_init = bs_strategy_init,
 	.strategy_get_data = bs_strategy_get_data,
 	.strategy_set_process_data = bs_strategy_set_process_data,
+	.strategy_get_metadata = bs_strategy_get_metadata,
 };
 
 int bs_strategy_register(void)

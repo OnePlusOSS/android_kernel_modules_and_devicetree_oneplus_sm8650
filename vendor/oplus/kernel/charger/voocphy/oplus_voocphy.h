@@ -916,6 +916,8 @@ struct oplus_voocphy_manager {
 
 	bool cancel_primary_switch; /* cancel usb primary switch */
 	bool vooc_direct_charge; /* inform tcpc to ignore pd vbus irq */
+	bool twice_request_current_enable;
+	bool vbus_adjust_new_method;
 };
 
 struct oplus_voocphy_operations {

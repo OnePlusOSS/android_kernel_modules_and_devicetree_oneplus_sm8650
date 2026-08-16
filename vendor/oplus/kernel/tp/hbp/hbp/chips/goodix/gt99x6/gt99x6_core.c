@@ -155,6 +155,18 @@ u16 checksum16_cmp(u8 *data, u32 size, int mode)
 		return cal_checksum == checksum ? 0 : 1;
 }
 
+void gt_hw_power_off(struct gt_core *gt)
+{
+    hbp_dev_power_type_ctrl(gt, POWER_RESET, false);
+    msleep(POWER_OFF_RESET_DELAY_MS);
+    hbp_dev_power_type_ctrl(gt, POWER_AVDD, false);
+    msleep(POWER_OFF_AVDD_DELAY_MS);
+    hbp_dev_power_type_ctrl(gt, POWER_VDDI, false);
+    msleep(POWER_OFF_VDDI_DELAY_MS);
+    hbp_dev_power_type_ctrl(gt, POWER_BUS, false);
+    msleep(POWER_OFF_BUS_DELAY_MS);
+}
+
 static int gt_chip_enable_hbp_mode(void *priv, bool en)
 {
 	return 0;
@@ -162,6 +174,22 @@ static int gt_chip_enable_hbp_mode(void *priv, bool en)
 
 static int gt_chip_get_irq_reason(void *priv, enum irq_reason *reason)
 {
+	struct gt_core *gt = (struct gt_core *)priv;
+	u32 ges_addr = gt->board_data.ges_addr;
+	u8 buf[sizeof(struct goodix_version_info)] = {0};
+	struct goodix_version_info *fw_ver = (struct goodix_version_info *)buf;
+
+	*reason = IRQ_REASON_NORMAL;
+
+	goodix_spi_read(gt, 0x10014, buf, sizeof(buf));
+
+	if (memcmp(fw_ver->patch_pid, "GEST", 4) == 0) {
+		goodix_spi_read(gt, ges_addr, buf, 1);
+		if (buf[0] & 0x20)
+			*reason = IRQ_REASON_NORMAL;
+		else
+			*reason = IRQ_REASON_GESTURE_DIFF;
+	}
 	return 0;
 }
 
@@ -175,12 +203,14 @@ static int gt_chip_get_gesture(void *priv, struct gesture_info *gesture)
 	u8 temp_data[GESTURE_KEY_DATA_LEN] = {0};
 	u8 ges_cmd[] = {0x00, 0x00, 0x06, 0xA6, 0x00, 0x00, 0xAC, 0x00};
 	u8 clean_data = 0;
+	u8 *ges_coor = &temp_data[GESTURE_DATA_HEAD_LEN];
 
 	/* read gesture data */
 	goodix_spi_read(gt, ges_addr, temp_data, sizeof(temp_data));
 	if (temp_data[0] == 0) {
 		hbp_err("invalid gesture head\n");
-		goto re_send_ges_cmd;
+		//goto re_send_ges_cmd;
+		return -1;
 	}
 
 	/* check gesture data */
@@ -193,6 +223,8 @@ static int gt_chip_get_gesture(void *priv, struct gesture_info *gesture)
 		goto re_send_ges_cmd;
 	}
 
+	hbp_info("get gesture type:0x%02x\n", temp_data[4]);
+
 	switch (temp_data[4]) {
 	case 0xCC: //double tap
 		hbp_info("get gesture event: Double tap\n");
@@ -200,7 +232,7 @@ static int gt_chip_get_gesture(void *priv, struct gesture_info *gesture)
 		break;
 	case 0x63: // <
 		hbp_info("get gesture event: <\n");
-		gesture->type = LeftVee;
+		gesture->type = RightVee;
 		break;
 	case 0x65: // E
 		hbp_info("get gesture event: E\n");
@@ -219,7 +251,7 @@ static int gt_chip_get_gesture(void *priv, struct gesture_info *gesture)
 		break;
 	case 0x3E: // >
 		hbp_info("get gesture event: >\n");
-		gesture->type = RightVee;
+		gesture->type = LeftVee;
 		break;
 	case 0x77: // W
 		hbp_info("get gesture event: W\n");
@@ -267,10 +299,38 @@ static int gt_chip_get_gesture(void *priv, struct gesture_info *gesture)
 		hbp_info("get gesture event: single tap\n");
 		gesture->type = DoubleSwip;
 		break;
+	case GOODIX_COMPLEX_SMALL_AREA:
+		hbp_info("get gesture event: fp_grip_small_area_cnt\n");
+		hbp_dev_healthinfo_report(gt, FP_GRIP_SMALL_AREA_CNT);
+		gesture->type = FP_GESTURE_HOLD;
+		break;
+	case GOODIX_SIMPLE_AREA:
+		hbp_info("get gesture event: fp_grip_big_area_cnt\n");
+		hbp_dev_healthinfo_report(gt, FP_GRIP_BIG_AREA_CNT);
+		gesture->type = FP_GESTURE_HOLD;
+		break;
+	case GOODIX_RELEASE_HOLD:
+		hbp_info("get gesture event: fp_grip_release_cnt\n");
+		hbp_dev_healthinfo_report(gt, FP_GRIP_RELEASE_CNT);
+		gesture->type = FP_GESTURE_RELEASE;
+		break;
 	default:
 		hbp_err("not support gesture type 0x%02x\n", temp_data[4]);
 		break;
 	}
+
+	gesture->Point_start.x = le16_to_cpup((__le16 *)(ges_coor));
+	gesture->Point_start.y = le16_to_cpup((__le16 *)(ges_coor + 2));
+	gesture->Point_end.x = le16_to_cpup((__le16 *)(ges_coor + 4));
+	gesture->Point_end.y = le16_to_cpup((__le16 *)(ges_coor + 6));
+	gesture->Point_1st.x = le16_to_cpup((__le16 *)(ges_coor + 16));
+	gesture->Point_1st.y = le16_to_cpup((__le16 *)(ges_coor + 18));
+	gesture->Point_2nd.x = le16_to_cpup((__le16 *)(ges_coor + 20));
+	gesture->Point_2nd.y = le16_to_cpup((__le16 *)(ges_coor + 22));
+	gesture->Point_3rd.x = le16_to_cpup((__le16 *)(ges_coor + 24));
+	gesture->Point_3rd.y = le16_to_cpup((__le16 *)(ges_coor + 26));
+	gesture->Point_4th.x = le16_to_cpup((__le16 *)(ges_coor + 28));
+	gesture->Point_4th.y = le16_to_cpup((__le16 *)(ges_coor + 30));
 
 	goto exit;
 
@@ -371,8 +431,8 @@ static int goodix_spi_write(struct gt_core *ts_data, unsigned int addr, unsigned
 		hbp_err("spi transfer error:%d",ret);
 		goto exit;
 	}
-	mutex_unlock(&ts_data->bus_mutex);
 exit:
+	mutex_unlock(&ts_data->bus_mutex);
 	return ret;
 }
 
@@ -549,6 +609,20 @@ static int gt_dev_remove(struct platform_device *pdev)
 #endif
 }
 
+static void gt_dev_shutdown(struct platform_device *pdev)
+{
+	struct gt_core *gt = platform_get_drvdata(pdev);
+
+	if (!gt) {
+		hbp_err("gt_dev_shutdown: gt is null\n");
+		return;
+	}
+
+	hbp_info("gt99x6 shutdown start\n");
+	gt_hw_power_off(gt);
+	hbp_info("gt99x6 shutdown end\n");
+}
+
 static const struct of_device_id gt_dt_match[] = {
 	{.compatible = "goodix,gt9916", },
 	{.compatible = "goodix,gt9966", },
@@ -559,6 +633,7 @@ static const struct of_device_id gt_dt_match[] = {
 static struct platform_driver gt_dev_driver = {
 	.probe = gt_dev_probe,
 	.remove = gt_dev_remove,
+	.shutdown = gt_dev_shutdown,
 	.driver = {
 		.name = PLATFORM_DRIVER_NAME,
 		.owner = THIS_MODULE,

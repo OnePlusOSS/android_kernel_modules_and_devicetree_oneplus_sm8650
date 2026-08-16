@@ -627,7 +627,24 @@ int cam_sync_deinit_object(struct sync_table_row *table, uint32_t idx,
 
 	return 0;
 }
+#ifdef OPLUS_FEATURE_CAMERA_COMMON
+void cam_sync_util_cb_dispatch_kthread_work(struct kthread_work *cb_dispatch_work_kthread)
+{
+	struct sync_callback_info *cb_info = container_of(cb_dispatch_work_kthread,
+		struct sync_callback_info,
+		cb_dispatch_work_kthread);
+	sync_callback sync_data = cb_info->callback_func;
+	void *cb = cb_info->callback_func;
 
+	cam_common_util_thread_switch_delay_detect(
+		"cam_sync_workq", "schedule", cb,
+		cb_info->workq_scheduled_ts,
+		CAM_WORKQ_SCHEDULE_TIME_THRESHOLD);
+	sync_data(cb_info->sync_obj, cb_info->status, cb_info->cb_data);
+
+	kfree(cb_info);
+}
+#endif
 void cam_sync_util_cb_dispatch(struct work_struct *cb_dispatch_work)
 {
 	struct sync_callback_info *cb_info = container_of(cb_dispatch_work,
@@ -672,8 +689,18 @@ void cam_sync_util_dispatch_signaled_cb(int32_t sync_obj,
 			cam_generic_fence_update_monitor_array(sync_obj,
 				&sync_dev->table_lock, sync_dev->mon_data,
 				CAM_FENCE_OP_UNREGISTER_ON_SIGNAL);
+		#ifdef OPLUS_FEATURE_CAMERA_COMMON
+		if (!IS_ERR_OR_NULL(sync_dev->scheduler_worker)) {
+			kthread_queue_work(sync_dev->scheduler_worker,
+				&sync_cb->cb_dispatch_work_kthread);
+		} else{
+			queue_work(sync_dev->work_queue,
+				&sync_cb->cb_dispatch_work);
+		}
+		#else
 		queue_work(sync_dev->work_queue,
 			&sync_cb->cb_dispatch_work);
+		#endif
 	}
 
 	/* Dispatch user payloads if any were registered earlier */

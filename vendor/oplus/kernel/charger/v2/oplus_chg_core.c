@@ -336,6 +336,127 @@ bool oplus_chg_get_boot_reset_adapter_support_flags(void)
 	return ((boot_reset_adapter_support == 1) ? true : false);
 }
 
+enum sn_match_type {
+	SN_MATCH_REGION = 0,
+	MAX_MATCH_TYPE,
+};
+
+struct sn_match_ops {
+	const char *prop_name;
+	u32 (*get_target_val)(void);
+};
+
+__maybe_unused static u32 get_region_target(void)
+{
+#ifdef CONFIG_DISABLE_OPLUS_FUNCTION
+	return 0;
+#else
+	return get_Operator_Version();
+#endif
+}
+
+__maybe_unused static const struct sn_match_ops sn_match_ops_table[MAX_MATCH_TYPE] = {
+	[SN_MATCH_REGION] = {
+		.prop_name = "region",
+		.get_target_val = get_region_target,
+	},
+};
+
+__maybe_unused static bool sn_prefix_match(const struct device_node *node, const char *actual_sn)
+{
+	struct property *prop;
+	const char *prefix;
+	size_t actual_len;
+	size_t prefix_len;
+
+	if (!actual_sn || !*actual_sn) {
+		chg_info("invalid actual_sn: NULL or empty\n");
+		return true;
+	}
+
+	actual_len = strlen(actual_sn);
+
+	of_property_for_each_string(node, "sn", prop, prefix) {
+		prefix_len = strlen(prefix);
+		if (actual_len < prefix_len)
+			continue;
+		if (strncmp(actual_sn, prefix, prefix_len) == 0) {
+			chg_info("sn matched: prefix=%s, actual=%s\n", prefix, actual_sn);
+			return true;
+		}
+	}
+	return false;
+}
+
+bool battery_sn_match(struct device_node *node, const char *actual_sn)
+{
+#ifdef CONFIG_DISABLE_OPLUS_FUNCTION
+	chg_info("oplus function disabled, skip sn match\n");
+	return true;
+#else
+	struct device_node *config_node = NULL;
+	const struct sn_match_ops *ops;
+	u32 target_val, match_type = MAX_MATCH_TYPE;
+	struct device_node *child_node = NULL;
+#if (KERNEL_VERSION(6, 10, 0) > LINUX_VERSION_CODE)
+	struct property *prop;
+	const __be32 *p;
+#endif
+	u32 curr_val;
+	bool match = false;
+
+	if (!node) {
+		chg_err("invalid node: NULL\n");
+		return false;
+	}
+
+	config_node = of_get_child_by_name(node, "sn-match-config");
+	if (!config_node) {
+		chg_err("no 'sn-match-config' child\n");
+		return false;
+	}
+
+	if (of_property_read_u32(config_node, "match-type", &match_type) != 0) {
+		chg_err("sn-match-config missing 'match-type' property\n");
+		goto out;
+	}
+
+	if (match_type >= MAX_MATCH_TYPE) {
+		chg_err("invalid match-type: %u\n", match_type);
+		goto out;
+	}
+
+	ops = &sn_match_ops_table[match_type];
+	if (!ops->prop_name || !ops->get_target_val) {
+		chg_err("match-type %u not implemented\n", match_type);
+		goto out;
+	}
+
+	target_val = ops->get_target_val();
+
+	for_each_available_child_of_node(config_node, child_node) {
+#if (KERNEL_VERSION(6, 10, 0) > LINUX_VERSION_CODE)
+		of_property_for_each_u32(child_node, ops->prop_name, prop, p, curr_val) {
+#else
+		of_property_for_each_u32(child_node, ops->prop_name, curr_val) {
+#endif
+			if (curr_val == target_val) {
+				if (sn_prefix_match(child_node, actual_sn))
+					match = true;
+				chg_info("sn_match=%d\n", match);
+				goto out;
+			}
+		}
+	}
+
+	chg_info("sn not match\n");
+out:
+	of_node_put(child_node);
+	of_node_put(config_node);
+	return match;
+#endif
+}
+
 #ifdef MODULE
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0))

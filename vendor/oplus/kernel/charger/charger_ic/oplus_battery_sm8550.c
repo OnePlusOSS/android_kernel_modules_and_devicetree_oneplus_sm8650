@@ -166,6 +166,8 @@ static bool oplus_chg_wls_support_bcc(struct oplus_chg_chip *chip);
 static int oplus_chg_track_upload_adsp_err_info(
 	struct battery_chg_dev *bcdev, int err_type);
 int oplus_get_otg_online_status_with_cid_scheme(void);
+static void handle_ap_read_buffer(struct battery_chg_dev *bcdev,
+	struct oplus_ap_read_buffer_resp_msg *resp_msg, size_t len);
 
 /*extern void oplus_usb_set_none_role(void);*/
 #if defined(OPLUS_FEATURE_POWERINFO_FTM) && defined(CONFIG_OPLUS_POWERINFO_FTM)
@@ -2430,6 +2432,8 @@ static int battery_chg_callback(void *priv, void *data, size_t len)
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	else if (hdr->opcode == PPS_OPCODE_READ_BUFFER)
 		handle_pps_read_buffer(bcdev, data, len);
+	else if (hdr->opcode == AP_OPCODE_READ_BUFFER)
+		handle_ap_read_buffer(bcdev, data, len);
 #endif
 	else
 		handle_message(bcdev, data, len);
@@ -11766,6 +11770,17 @@ static int fg_bq27541_get_battery_fcc(void)
 	return fcc;
 }
 
+static int gauge_get_battery_fcc(int *fcc1, int *fcc2)
+{
+	if (!fcc1 || !fcc2)
+		return -1;
+
+	*fcc1 = fg_bq27541_get_battery_fcc();
+	*fcc2 = *fcc1;
+
+	return 0;
+}
+
 static int fg_bq27541_get_battery_cc(void)
 {
 	static int cc = 0;
@@ -11785,6 +11800,17 @@ static int fg_bq27541_get_battery_cc(void)
 	return cc;
 }
 
+static int gauge_get_battery_cc(int *cc1, int *cc2)
+{
+	if (!cc1 || !cc2)
+		return -1;
+
+	*cc1 = fg_bq27541_get_battery_cc();
+	*cc2 = *cc1;
+
+	return 0;
+}
+
 static int fg_bq27541_get_battery_soh(void)
 {
 	static int soh = 0;
@@ -11802,6 +11828,17 @@ static int fg_bq27541_get_battery_soh(void)
 	}
 
 	return soh;
+}
+
+static int gauge_get_battery_soh(int *soh1, int *soh2)
+{
+	if (!soh1 || !soh2)
+		return -1;
+
+	*soh1 = fg_bq27541_get_battery_soh();
+	*soh2 = *soh1;
+
+	return 0;
 }
 
 static bool fg_bq27541_get_battery_authenticate(void)
@@ -11993,6 +12030,251 @@ read_parameter:
 	return 0;
 }
 
+static int ap_set_message_id(struct battery_chg_dev *bcdev, u32 message_id)
+{
+	struct oplus_ap_read_req_msg req_msg = { { 0 } };
+	int rc = 0;
+
+	req_msg.message_id = message_id;
+	req_msg.hdr.owner = MSG_OWNER_BC;
+	req_msg.hdr.type = MSG_TYPE_REQ_RESP;
+	req_msg.hdr.opcode = AP_OPCODE_READ_BUFFER;
+
+	if (atomic_read(&bcdev->state) == PMIC_GLINK_STATE_DOWN) {
+		chg_err("glink state is down\n");
+		return -ENOTCONN;
+	}
+
+	reinit_completion(&bcdev->ap_read_ack[AP_MESSAGE_ACK]);
+	rc = pmic_glink_write(bcdev->client, &req_msg, sizeof(req_msg));
+	chg_err("pmic_glink_write, rc %d\n", rc);
+
+	if (!rc) {
+		rc = wait_for_completion_timeout(&bcdev->ap_read_ack[AP_MESSAGE_ACK], msecs_to_jiffies(AP_READ_WAIT_TIME_MS));
+		if (!rc) {
+			chg_err("Error, timed out sending message\n");
+			return -ETIMEDOUT;
+		}
+		rc = 0;
+	}
+
+	return rc;
+}
+
+static void handle_ap_read_buffer(struct battery_chg_dev *bcdev,
+	struct oplus_ap_read_buffer_resp_msg *resp_msg, size_t len)
+{
+	u32 buf_len;
+
+	chg_info("correct length received: %zu expected: %zu id=%u\n", len, sizeof(*bcdev->ap_read_buffer_dump), resp_msg->message_id);
+
+	if (len > sizeof(*bcdev->ap_read_buffer_dump)) {
+		chg_err("Incorrect length received: %zu expected: %zu\n", len, sizeof(*bcdev->ap_read_buffer_dump));
+		memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+		return;
+	}
+
+	buf_len = resp_msg->data_size;
+	if (buf_len > sizeof(bcdev->ap_read_buffer_dump->data_buffer)) {
+		chg_err("Incorrect buffer length: %u\n", buf_len);
+		memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+		return;
+	}
+
+	if (resp_msg->message_id == AP_MESSAGE_ACK) {
+		complete(&bcdev->ap_read_ack[resp_msg->message_id]);
+		return;
+	}
+
+	if (buf_len == 0) {
+		chg_err("Incorrect buffer length: %u\n", buf_len);
+		memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+		return;
+	}
+
+	if (resp_msg->message_id >= AP_MESSAGE_MAX_SIZE) {
+		chg_err("message_id %d invalid\n", resp_msg->message_id);
+		memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+		return;
+	}
+
+	memcpy(bcdev->ap_read_buffer_dump->data_buffer, resp_msg->data_buffer, buf_len);
+	bcdev->ap_read_buffer_dump->data_size = buf_len;
+	bcdev->ap_read_buffer_dump->message_id = resp_msg->message_id;
+	complete(&bcdev->ap_read_ack[resp_msg->message_id]);
+}
+
+static int fg_bq27541_get_info(u8 *info, int len)
+{
+	struct battery_chg_dev *bcdev = NULL;
+	struct oplus_chg_chip *chip = g_oplus_chip;
+	int index = 0;
+	int rc = 0;
+
+	if (!chip || !info) {
+		chg_err("oplus_chg_chip or info is NULL");
+		return -ENODEV;
+	}
+
+	bcdev = chip->pmic_spmi.bcdev_chip;
+	if (!bcdev || !bcdev->ap_read_buffer_dump)
+		return -ENODEV;
+
+	mutex_lock(&bcdev->ap_read_buffer_lock);
+	rc = ap_set_message_id(bcdev, AP_MESSAGE_GET_GAUGE_REG_INFO);
+	if (rc)
+		goto err;
+
+	reinit_completion(&bcdev->ap_read_ack[AP_MESSAGE_GET_GAUGE_REG_INFO]);
+	rc = wait_for_completion_timeout(&bcdev->ap_read_ack[AP_MESSAGE_GET_GAUGE_REG_INFO],
+					 msecs_to_jiffies(AP_READ_WAIT_TIME_MS));
+	if (!rc) {
+		chg_err("Error, timed out sending message\n");
+		goto err;
+	}
+
+	index = bcdev->ap_read_buffer_dump->data_size;
+	if (index >= len)
+		goto err;
+
+	memcpy(info, bcdev->ap_read_buffer_dump->data_buffer, index);
+	memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+	mutex_unlock(&bcdev->ap_read_buffer_lock);
+	return index;
+err:
+	memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+	mutex_unlock(&bcdev->ap_read_buffer_lock);
+	return -EINVAL;
+}
+
+static int fg_bq27541_get_calib_time(int *dod_calib_time, int *qmax_calib_time, int gauge_index)
+{
+	struct battery_chg_dev *bcdev = NULL;
+	struct oplus_chg_chip *chip = g_oplus_chip;
+	int rc = 0;
+	struct gauge_calib_info info = { 0 };
+
+	if (!chip || !dod_calib_time || !qmax_calib_time) {
+		chg_err("oplus_chg_chip or qmax_calib_time or dod_calib_time is NULL");
+		return -ENODEV;
+	}
+
+	bcdev = chip->pmic_spmi.bcdev_chip;
+	if (!bcdev || !bcdev->ap_read_buffer_dump) {
+		chg_err("!bcdev || !bcdev->ap_read_buffer_dump");
+		return -ENODEV;
+	}
+
+	mutex_lock(&bcdev->ap_read_buffer_lock);
+	rc = ap_set_message_id(bcdev, AP_MESSAGE_GET_GAUGE_CALIB_TIME);
+	if (rc)
+		goto err;
+
+	reinit_completion(&bcdev->ap_read_ack[AP_MESSAGE_GET_GAUGE_CALIB_TIME]);
+	rc = wait_for_completion_timeout(&bcdev->ap_read_ack[AP_MESSAGE_GET_GAUGE_CALIB_TIME],
+					 msecs_to_jiffies(AP_READ_WAIT_TIME_MS));
+	if (!rc) {
+		chg_err("Error, timed out sending message\n");
+		goto err;
+	}
+
+	memcpy(&info, bcdev->ap_read_buffer_dump->data_buffer, sizeof(struct gauge_calib_info));
+	memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+	mutex_unlock(&bcdev->ap_read_buffer_lock);
+	*dod_calib_time = info.dod_time;
+	*qmax_calib_time = info.qmax_time;
+	return 0;
+err:
+	memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+	mutex_unlock(&bcdev->ap_read_buffer_lock);
+	return -EINVAL;
+}
+
+static int oplus_adsp_gauge_get_device_name(u8 *buf, int len)
+{
+	struct battery_chg_dev *bcdev = NULL;
+	struct oplus_chg_chip *chip = g_oplus_chip;
+	int rc = 0;
+	int index = 0;
+
+	if (!chip) {
+		chg_err("oplus_chg_chip is NULL");
+		return -ENODEV;
+	}
+
+	bcdev = chip->pmic_spmi.bcdev_chip;
+	if (!bcdev || !bcdev->ap_read_buffer_dump) {
+		chg_err("!bcdev || !bcdev->ap_read_buffer_dump");
+		return -ENODEV;
+	}
+
+	mutex_lock(&bcdev->ap_read_buffer_lock);
+	rc = ap_set_message_id(bcdev, AP_MESSAGE_GET_GAUGE_DEVICE_TYPE);
+	if (rc)
+		goto err;
+
+	reinit_completion(&bcdev->ap_read_ack[AP_MESSAGE_GET_GAUGE_DEVICE_TYPE]);
+	rc = wait_for_completion_timeout(&bcdev->ap_read_ack[AP_MESSAGE_GET_GAUGE_DEVICE_TYPE],
+					 msecs_to_jiffies(AP_READ_WAIT_TIME_MS));
+	if (!rc) {
+		chg_err("Error, timed out sending message\n");
+		goto err;
+	}
+
+	index = bcdev->ap_read_buffer_dump->data_size;
+	if (index >= len)
+		goto err;
+
+	memcpy(buf, bcdev->ap_read_buffer_dump->data_buffer, index);
+	memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+	mutex_unlock(&bcdev->ap_read_buffer_lock);
+	return index;
+
+err:
+	memset(bcdev->ap_read_buffer_dump, 0, sizeof(*bcdev->ap_read_buffer_dump));
+	mutex_unlock(&bcdev->ap_read_buffer_lock);
+	return -EINVAL;
+}
+
+static void fg_bq27541_get_device_name(char *name, int len)
+{
+	struct oplus_chg_chip *chip = g_oplus_chip;
+	int retry_count = 1;
+
+	if (!chip) {
+		chg_err("oplus_chg_chip or info is NULL");
+		return;
+	}
+
+retry:
+	oplus_adsp_gauge_get_device_name(name, len);
+	chg_info("fg_bq27541_get_device_name = %s", name);
+	if (!strcmp(name, "unknown") && retry_count > 0) {
+		retry_count--;
+		msleep(200);
+		goto retry;
+	}
+	return;
+}
+
+static int fg_bq27541_get_qmax(int *qmax1, int *qmax2)
+{
+	struct battery_chg_dev *bcdev = NULL;
+	struct oplus_chg_chip *chip = g_oplus_chip;
+	int ret = 0;
+
+	if (!chip) {
+		return -1;
+	}
+
+	bcdev = chip->pmic_spmi.bcdev_chip;
+	ret = bcc_read_buffer(bcdev);
+	*qmax1 = bcdev->bcc_read_buffer_dump.data_buffer[3];
+	*qmax2 = bcdev->bcc_read_buffer_dump.data_buffer[4];
+
+	return 0;
+}
+
 static int fg_bq28z610_get_battery_balancing_status(void)
 {
 	return 0;
@@ -12025,6 +12307,13 @@ static struct oplus_gauge_operations battery_gauge_ops = {
 	.get_battery_cb_status = fg_bq28z610_get_battery_balancing_status,
 	.get_bcc_parameters = oplus_get_bcc_parameters_from_adsp,
 	.set_bcc_parameters = oplus_set_bcc_debug_parameters,
+	.get_gauge_info = fg_bq27541_get_info,
+	.get_batt_qmax = fg_bq27541_get_qmax,
+	.get_calib_time = fg_bq27541_get_calib_time,
+	.get_device_name = fg_bq27541_get_device_name,
+	.get_batt_fcc = gauge_get_battery_fcc,
+	.get_batt_cc = gauge_get_battery_cc,
+	.get_batt_soh = gauge_get_battery_soh,
 };
 #endif /* OPLUS_FEATURE_CHG_BASIC */
 
@@ -13445,6 +13734,14 @@ static int battery_chg_probe(struct platform_device *pdev)
 	init_completion(&bcdev->adsp_track_read_ack);
 	mutex_init(&bcdev->read_pmic_buffer_lock);
 	init_completion(&bcdev->read_pmic_buffer_ack);
+	mutex_init(&bcdev->ap_read_buffer_lock);
+	for (i = 0; i< AP_MESSAGE_MAX_SIZE; i++)
+		init_completion(&bcdev->ap_read_ack[i]);
+	bcdev->ap_read_buffer_dump = devm_kzalloc(&pdev->dev, sizeof(*bcdev->ap_read_buffer_dump), GFP_KERNEL);
+	if (!bcdev->ap_read_buffer_dump) {
+		chg_err("ap_read_buffer_dump is null, return \n");
+		return -ENOMEM;
+	}
 #endif
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	mutex_init(&bcdev->pps_read_buffer_lock);

@@ -6568,12 +6568,16 @@ int oplus_chg_set_pd_config(void)
 		ret = tcpm_dpm_pd_request(tcpc, 9000, 2000, NULL);
 		if (ret != TCPM_SUCCESS) {
 			printk(KERN_ERR "%s: tcpm_dpm_pd_request fail\n", __func__);
+			msleep(300);
+			oplus_chg_unsuspend_charger();
 			return -EINVAL;
 		}
 
 		ret = tcpm_inquire_pd_contract(tcpc, &vbus_mv_t, &ibus_ma_t);
 		if (ret != TCPM_SUCCESS) {
 			printk(KERN_ERR "%s: inquire current vbus_mv and ibus_ma fail\n", __func__);
+			msleep(300);
+			oplus_chg_unsuspend_charger();
 			return -EINVAL;
 		}
 
@@ -6595,12 +6599,16 @@ int oplus_chg_set_pd_config(void)
 			ret = tcpm_dpm_pd_request(tcpc, 5000, 2000, NULL);
 			if (ret != TCPM_SUCCESS) {
 				printk(KERN_ERR "%s: tcpm_dpm_pd_request fail\n", __func__);
+				msleep(300);
+				oplus_chg_unsuspend_charger();
 				return -EINVAL;
 			}
 
 			ret = tcpm_inquire_pd_contract(tcpc, &vbus_mv_t, &ibus_ma_t);
 			if (ret != TCPM_SUCCESS) {
 				printk(KERN_ERR "%s: inquire current vbus_mv and ibus_ma fail\n", __func__);
+				msleep(300);
+				oplus_chg_unsuspend_charger();
 				return -EINVAL;
 			}
 

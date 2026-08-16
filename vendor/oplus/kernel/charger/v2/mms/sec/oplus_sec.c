@@ -180,34 +180,9 @@ static int oplus_sec_test_start_rw_check(struct oplus_sec *chip)
 	return 0;
 }
 
-static const char test_supported_batt_sn[] = {0x36, 0x31, 0x31, 0x33, 0x30, 0x33, 0x30, 0x30, 0x30, 0x32, 0x34, 0x32};
-static int oplus_sec_is_support_batt(char *batt_sn, int len)
-{
-	int i;
-	int base = 2; /*valid sn start at 2*/
-
-	if (len < sizeof(test_supported_batt_sn) + base)
-		return -EINVAL;
-
-	for (i = 0; i < sizeof(test_supported_batt_sn); i++)
-		if (batt_sn[base + i] != test_supported_batt_sn[i])
-			return -EINVAL;
-
-	return 0;
-}
-
 static int oplus_sec_test_check_batt_sn(struct oplus_mms *gauge_topic)
 {
-	int rc;
-	char batt_sn[OPLUS_BATT_SERIAL_NUM_SIZE * 2] = {0};
-
-	rc = oplus_gauge_get_battinfo_sn(gauge_topic, batt_sn, sizeof(batt_sn));
-	if (rc < 0) {
-		chg_err("get battery sn error, rc=%d", rc);
-		return rc;
-	}
-	rc = oplus_sec_is_support_batt(batt_sn, sizeof(batt_sn));
-	return rc;
+	return 0;
 }
 
 static int oplus_sec_test_get_rw_check_result(struct oplus_sec *chip)

@@ -380,6 +380,10 @@
 #define BQ28Z610_BATT_USED_FLAG_WLEN		4
 #define BQ28Z610_BATT_USED_FLAG_WADDR		0x4056
 
+#define BQ28Z610_REG_DELTA_VOL                  0x4219
+#define BQ28Z610_REG_CELL0_RA                   0x4116
+#define BQ28Z610_REG_CELL1_RA                   0x4156
+
 #define U_DELAY_1_MS	1000
 #define U_DELAY_5_MS	5000
 #define M_DELAY_10_S	10000
@@ -565,6 +569,60 @@ struct oplus_gauge_sha256_auth{
 	unsigned char gauge_encode[GAUGE_SHA256_AUTH_MSG_LEN];
 };
 
+struct fcc_ra_vdelta_curve {
+	int delta_vmax;
+	int delta_cc;
+};
+
+struct fcc_ra_config {
+	int ra_vd_cc0;
+	int ra_t_cc0;
+	int ra_cc1;
+	int l_cc;
+	int ra_cnts;
+	int dbg_cc;
+};
+
+#define FCC_RA_CC_THR_NUM 5
+#define FCC_RA_DEFAULT_NUM 15
+struct ra_k_curve {
+	uint32_t k0;
+	uint32_t k1;
+	uint32_t k2;
+	uint32_t k3;
+	uint32_t k4;
+};
+
+struct fcc_ra_t_curve {
+	uint32_t cc_index;
+	uint32_t delta_cc0;
+	uint32_t delta_cc1;
+	uint32_t fcc_thr;
+	uint32_t cc_thr[FCC_RA_CC_THR_NUM];
+	uint32_t fcc0_thr[FCC_RA_CC_THR_NUM];
+	uint32_t extreme_thr[FCC_RA_CC_THR_NUM];
+	struct ra_k_curve k_curve[FCC_RA_CC_THR_NUM];
+};
+
+struct fcc_ra_res_curve {
+	uint32_t ra_default[FCC_RA_DEFAULT_NUM];
+	uint32_t ra_thr[FCC_RA_DEFAULT_NUM];
+	uint32_t ra_0[FCC_RA_DEFAULT_NUM];
+	uint32_t ra_1[FCC_RA_DEFAULT_NUM];
+	uint32_t ra_cali[FCC_RA_DEFAULT_NUM];
+};
+
+#define FCC_INFO_LEN 1023
+struct fcc_track_info {
+	unsigned char ra0_msg[FCC_INFO_LEN];
+	unsigned char vdelta_msg[FCC_INFO_LEN];
+	unsigned char ra_t_msg[FCC_INFO_LEN];
+	int ra0_index;
+	int vdelta_index;
+	int ra_t_index;
+	int ra_t_err;
+};
+
 struct chip_bq27541 {
 	struct i2c_client *client;
 	struct device *dev;
@@ -622,6 +680,7 @@ struct chip_bq27541 {
 
 	bool fcc_too_small_checking;
 	struct work_struct fcc_too_small_check_work;
+	struct work_struct imp_model_check_work;
 
 	bool modify_soc_smooth;
 	bool modify_soc_calibration;
@@ -643,6 +702,7 @@ struct chip_bq27541 {
 	unsigned int *afi_buf_len;
 	u8 *bq28z610_afi_buf;
 	int bq28z610_afi_cnt;
+	bool fast_sampling_enable;
 	bool batt_bq28z610;
 	bool batt_bq27z561;
 	bool batt_nfg8011b;
@@ -682,7 +742,7 @@ struct chip_bq27541 {
 
 	bool support_sha256_hmac;
 	bool support_extern_cmd;
-
+	bool gauge_type_error;
 	bool support_eco_design;
 
 	struct delayed_work check_iic_recover;
@@ -723,6 +783,24 @@ struct chip_bq27541 {
 	unsigned long rst_ing;
 	int gauge_type;
 	int bq28z610_seal_flag;
+	bool sn_match;
+
+	struct mutex imp_model_lock;
+	u8 *imp_model_data;
+	bool imp_model_checking;
+	struct delayed_work track_fcc_ra0_work;
+	struct delayed_work track_fcc_vdelta_work;
+	struct delayed_work track_fcc_ra_t_work;
+	bool fcc_ra0_support;
+
+	bool fcc_vdelta_support;
+	struct fcc_ra_vdelta_curve ra_vd_curve;
+
+	int fcc_ra_t_support;
+	struct fcc_ra_t_curve ra_t_curve;
+	struct fcc_ra_res_curve ra_res_curve;
+	struct fcc_ra_config ra_config;
+	struct fcc_track_info fcc_msg;
 };
 
 struct gauge_track_info_reg {
@@ -745,5 +823,14 @@ int bq27541_read_i2c_block(struct chip_bq27541 *chip, u8 cmd, u8 length, u8 *ret
 int bq27541_write_i2c_block(struct chip_bq27541 *chip, u8 cmd, u8 length, u8 *writeData);
 int bq27541_i2c_txsubcmd_onebyte(struct chip_bq27541 *chip, u8 cmd, u8 writeData);
 bool is_return_pre_value(struct chip_bq27541 *chip);
+bool bq8z610_deep_init(struct chip_bq27541 *chip);
+void bq8z610_deep_deinit(struct chip_bq27541 *chip);
+int bq27541_get_battery_cc(struct chip_bq27541 *chip);
+int bq27541_get_battery_fcc(struct chip_bq27541 *chip);
+int bq28z610_get_2cell_voltage(struct chip_bq27541 *chip);
+int bq28z610_get_qmax_parameters(struct chip_bq27541 *chip, int *batt_qmax_1,
+	int *batt_qmax_2, int *batt_qmax_passed_q);
+int bq27541_get_battery_soc(struct chip_bq27541 *chip);
+int bq27541_get_battery_temperature(struct chip_bq27541 *chip);
 
 #endif /* __OPLUS_BQ27541_H__ */

@@ -12,6 +12,7 @@ load(":test-kit/modules.bzl", "define_test_kit_module")
 load(":v1/modules.bzl", "define_oplus_chg_module")
 load(":v2/modules.bzl", "define_oplus_chg_v2_module")
 load(":v2/ufcs/modules.bzl", "define_ufcs_class_module")
+load(":oplus_chg_symbol/modules.bzl", "define_oplus_chg_symbol_module")
 
 py_binary(
     name = "v2/scripts/ic_cfg_parse",
@@ -30,6 +31,7 @@ module_list += define_test_kit_module()
 module_list += define_oplus_chg_v2_module()
 module_list += define_ufcs_class_module()
 module_list += define_oplus_chg_module()
+module_list += define_oplus_chg_symbol_module()
 
 ddk_copy_to_dist_dir(
     name = "oplus_chg_modules",

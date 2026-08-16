@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2010-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/devfreq_cooling.h>
@@ -22,7 +22,7 @@ static struct devfreq_msm_adreno_tz_data adreno_tz_data = {
 
 static void do_devfreq_suspend(struct work_struct *work);
 static void do_devfreq_resume(struct work_struct *work);
-static void do_devfreq_notify(struct work_struct *work);
+static void do_devfreq_notify(struct kthread_work *work);
 
 /*
  * These variables are used to keep the latest data
@@ -147,24 +147,25 @@ void kgsl_pwrscale_update_stats(struct kgsl_device *device)
 void kgsl_pwrscale_update(struct kgsl_device *device)
 {
 	ktime_t t;
+	struct kgsl_pwrscale *pwrscale = &device->pwrscale;
 
 	if (WARN_ON(!mutex_is_locked(&device->mutex)))
 		return;
 
-	if (!device->pwrscale.enabled)
+	if (!pwrscale->enabled)
 		return;
 
 	t = ktime_get();
-	if (ktime_compare(t, device->pwrscale.next_governor_call) < 0)
+	if (ktime_compare(t, pwrscale->next_governor_call) < 0)
 		return;
 
-	device->pwrscale.next_governor_call = ktime_add_us(t,
+	pwrscale->next_governor_call = ktime_add_us(t,
 			KGSL_GOVERNOR_CALL_INTERVAL);
 
 	/* to call update_devfreq() from a kernel thread */
 	if (device->state != KGSL_STATE_SLUMBER)
-		queue_work(device->pwrscale.devfreq_wq,
-			&device->pwrscale.devfreq_notify_ws);
+		kthread_queue_work(pwrscale->devfreq_notify_worker,
+					&pwrscale->devfreq_notify_work);
 }
 
 /*
@@ -764,6 +765,13 @@ int kgsl_pwrscale_init(struct kgsl_device *device, struct platform_device *pdev,
 		return -ENOMEM;
 	}
 
+	pwrscale->devfreq_notify_worker = kthread_create_worker(0, "kgsl_devfreq_notifier");
+	if (IS_ERR(pwrscale->devfreq_notify_worker)) {
+		ret = PTR_ERR(pwrscale->devfreq_notify_worker);
+		dev_err(device->dev, "Failed to create devfreq notify worker ret: %d\n", ret);
+		return ret;
+	}
+
 	ret = msm_adreno_tz_init();
 	if (ret) {
 		dev_err(device->dev, "Failed to add adreno tz governor: %d\n", ret);
@@ -804,8 +812,8 @@ int kgsl_pwrscale_init(struct kgsl_device *device, struct platform_device *pdev,
 
 	INIT_WORK(&pwrscale->devfreq_suspend_ws, do_devfreq_suspend);
 	INIT_WORK(&pwrscale->devfreq_resume_ws, do_devfreq_resume);
-	INIT_WORK(&pwrscale->devfreq_notify_ws, do_devfreq_notify);
-
+	kthread_init_work(&pwrscale->devfreq_notify_work, do_devfreq_notify);
+	sched_set_fifo(pwrscale->devfreq_notify_worker->task);
 	pwrscale->next_governor_call = ktime_add_us(ktime_get(),
 			KGSL_GOVERNOR_CALL_INTERVAL);
 
@@ -839,6 +847,9 @@ void kgsl_pwrscale_close(struct kgsl_device *device)
 	if (pwrscale->cooling_dev)
 		devfreq_cooling_unregister(pwrscale->cooling_dev);
 
+	if (!IS_ERR_OR_NULL(pwrscale->devfreq_notify_worker))
+		kthread_destroy_worker(pwrscale->devfreq_notify_worker);
+
 	if (pwrscale->devfreq_wq) {
 		flush_workqueue(pwrscale->devfreq_wq);
 		destroy_workqueue(pwrscale->devfreq_wq);
@@ -869,10 +880,10 @@ static void do_devfreq_resume(struct work_struct *work)
 	devfreq_resume_device(pwrscale->bus_devfreq);
 }
 
-static void do_devfreq_notify(struct work_struct *work)
+static void do_devfreq_notify(struct kthread_work *work)
 {
 	struct kgsl_pwrscale *pwrscale = container_of(work,
-			struct kgsl_pwrscale, devfreq_notify_ws);
+			struct kgsl_pwrscale, devfreq_notify_work);
 
 	mutex_lock(&pwrscale->devfreqptr->lock);
 	update_devfreq(pwrscale->devfreqptr);

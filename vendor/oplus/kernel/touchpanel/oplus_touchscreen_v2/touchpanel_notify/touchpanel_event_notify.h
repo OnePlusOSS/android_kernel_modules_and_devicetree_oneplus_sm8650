@@ -11,13 +11,18 @@
 #define EVENT_ACTION_FOR_FP_GIRP   0x03
 
 struct touchpanel_event {
-    int touchpanel_id;
-    int x;
-    int y;
-    int fid;       /* Finger ID */
-    char type;     /* 'D' - Down, 'M' - Move, 'U' - Up, */
-    int touch_state;
-    int area_rate;
+	int touchpanel_id;
+	int x;
+	int y;
+	int fid;       /* Finger ID */
+	char type;     /* 'D' - Down, 'M' - Move, 'U' - Up, */
+	int touch_state;
+	int area_rate;
+	int touch_early_down_flag;
+	long is_touch_fp_area_cnt;
+	ktime_t touch_fp_area_time;
+	ktime_t fp_down_time;
+	int tp_firmware_time;
 };
 
 struct touch_film_info {

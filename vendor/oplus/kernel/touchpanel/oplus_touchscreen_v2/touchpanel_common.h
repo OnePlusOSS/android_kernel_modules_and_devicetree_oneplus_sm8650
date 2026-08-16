@@ -35,8 +35,6 @@
 #define PDE_DATA pde_data
 #endif
 
-#define LCD_CTL_AOD_ON 0x02
-
 #define TP_SUPPORT_MAX 3
 #define TP_NAME_SIZE_MAX 30
 
@@ -366,6 +364,7 @@ typedef enum lcd_event_type {
 	LCD_CTL_IRQ_ON,
 	LCD_CTL_IRQ_OFF,
 	LCD_CTL_AOD_OFF,
+	LCD_CTL_AOD_ON,
 } lcd_event_type;
 
 typedef enum {
@@ -675,6 +674,40 @@ typedef enum {
 	HEALTH_SIMULATE_BIT_IC_HEALTHINFO = 5,
 	HEALTH_SIMULATE_BIT_FW_UPDATE,
 } health_simulate_bit;
+
+typedef enum {
+	REPORT_FPS_DEFAULT = 0,
+	REPORT_FPS_60HZ,
+	REPORT_FPS_125HZ,
+	REPORT_FPS_180HZ,
+	REPORT_FPS_240HZ,
+	REPORT_FPS_288Hz, /* actually 300hz */
+	REPORT_FPS_360HZ,
+	REPORT_FPS_720HZ,
+	REPORT_FPS_70HZ,
+	REPORT_FPS_140HZ,
+	REPORT_FPS_140HZ_INSERT,
+	REPORT_FPS_250HZ_INSERT,
+	REPORT_FPS_144HZ, /* actually 150hz */
+	REPORT_FPS_165HZ, /* actually 173hz */
+	REPORT_FPS_330HZ, /* actually 347hz */
+	REPORT_FPS_90HZ,
+	REPORT_FPS_180HZ_INSERT,
+	REPORT_FPS_RATE_70  = 70,
+	REPORT_FPS_RATE_120 = 120,
+	REPORT_FPS_RATE_140 = 140,
+	REPORT_FPS_RATE_140_INSERT = 141,
+	REPORT_FPS_RATE_144 = 144,
+	REPORT_FPS_RATE_180 = 180,
+	REPORT_FPS_RATE_180_INSERT = 181,
+	REPORT_FPS_RATE_240 = 240,
+	REPORT_FPS_RATE_240_INSERT = 241,
+	REPORT_FPS_RATE_288 = 288,
+	REPORT_FPS_RATE_300 = 300,
+	REPORT_FPS_RATE_360 = 360,
+	REPORT_FPS_RATE_600 = 600,
+	REPORT_FPS_RATE_720 = 720,
+} ReportFps;
 
 struct point_state_monitor {
 	u64 time_counter;
@@ -1024,6 +1057,7 @@ struct touchpanel_data {
 	bool wireless_charger_support;                      /*wireless_charger support feature*/
 	bool headset_pump_support;                          /*headset_pump support feature*/
 	bool fw_edge_limit_support;                         /*edge_limit by FW support feature*/
+	bool report_rate_v2_support;                         /*report rate support feature*/
 	bool esd_handle_support;                            /*esd handle support feature*/
 	bool gesture_test_support;                          /*indicate test black gesture or not*/
 	bool game_switch_support;                           /*indicate game switch support or not*/
@@ -1125,6 +1159,7 @@ struct touchpanel_data {
 	/******For gesture area********/
 	bool disable_gesture_ctrl;                          /*when lcd_trigger_load_tp_fw start no need to control gesture*/
 	int irq_need_dev_resume_time;                       /*control setting of wait resume time*/
+	int bus_ready_wait_dev_spend_time;                  /*bus_ready setting of wait dev spend time*/
 	int gesture_enable;                                 /*control state of black gesture*/
 	struct gesture_info    gesture;                     /*gesture related info*/
 	int gesture_enable_indep;                         /*independent control state of black gesture*/
@@ -1180,6 +1215,7 @@ struct touchpanel_data {
 	struct touchpanel_snr   snr[MAX_FINGER_NUM];        /*snr data*/
 	struct touchpanel_last_x_y_point   last_x_y_point[MAX_FINGER_NUM];        /*last_x_y_point data*/
 	struct exception_data    exception_data;			/*exception_data monitor data*/
+	struct irq_desc *tp_irq_desc;
 
 	/******For Game Hot Zone*******/
 	struct tp_aiunit_game_info tp_ic_aiunit_game_info[MAX_AIUNIT_SET_NUM];    /*tp ic aiunit game info*/
@@ -1231,6 +1267,7 @@ struct touchpanel_data {
 	int high_frame_value;
 	int limit_enable;                                   /*control state of limit enable */
 	int edge_limit_switch_write_value;                  /*control limit_switch enable */
+	int report_rate_write_value;                        /*report rate, 90: 90HZ, 120:120HZ, 240:240HZ*/
 	int tp_ic_touch_num;                                 /*tp ic get touch num */
 	int last_tp_ic_touch_num;                            /*last tp ic get touch num */
 	int pen_mode_tp_state;
@@ -1253,6 +1290,7 @@ struct touchpanel_data {
 	bool tp_scene_para_switch_support;
 	bool bus_ready_check_support;                       /*not transfer if bus_ready false*/
 	bool tp_lcd_suspend_in_lp_support;                  /*tp suspend before lcd set lp(aod) mode*/
+	bool ili_use_new_driver_version;                    /*use new driver version*/
 	bool is_pen_attracted;                              /*state of pen attract*/
 	bool is_pen_connected;                              /*state of pen connect*/
 	struct pen_config		pen_config;
@@ -1473,6 +1511,7 @@ struct oplus_touchpanel_operations {
 	bool (*tp_irq_throw_away)(void *chip_data);
 	void (*rate_white_list_ctrl)(void *chip_data, int value);
 	void (*edge_limit_switch_write)(void *chip_data, int value);
+	void (*report_rate)(void *chip_data, int value);
 	int (*smooth_lv_set)(void *chip_data, int level);
 	int (*sensitive_lv_set)(void *chip_data, int level);
 	int (*pen_sensitive_lv_set)(void *chip_data, int level);
@@ -1534,6 +1573,7 @@ struct debug_info_proc_operations {
 	void (*get_delta_data)(void *chip_data, int32_t *deltadata);
 	void (*delta_snr_read)(struct seq_file *s, void *chip_data, uint32_t count);
 	void (*tp_data_record_write)(void *chip_data, int32_t count);
+	void (*tp_data_debug_info_print)(void *chip_data);
 };
 
 /*********PART3:function or variables for other files**********************/

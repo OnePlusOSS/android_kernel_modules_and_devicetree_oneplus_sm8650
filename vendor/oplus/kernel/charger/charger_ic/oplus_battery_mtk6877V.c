@@ -5259,7 +5259,9 @@ uint32_t pd_svooc_abnormal_adapter[] = {
 
 int oplus_get_adapter_svid(void)
 {
-	int i = 0, j = 0;
+	int i = 0;
+	int j = 0;
+	int ret = 0;
 	uint32_t vdos[VDO_MAX_NR] = {0};
 	struct tcpc_device *tcpc_dev = tcpc_dev_get_by_name("type_c_port0");
 	struct tcpm_svid_list svid_list = {0, {0}};
@@ -5267,6 +5269,18 @@ int oplus_get_adapter_svid(void)
 	if (tcpc_dev == NULL || !g_oplus_chip) {
 		chg_err("tcpc_dev is null return\n");
 		return -1;
+	}
+
+	if (!g_oplus_chip->pd_svooc) {
+		ret = tcpm_dpm_vdm_discover_id(tcpc_dev, NULL);
+		if (ret != TCPM_SUCCESS) {
+			chg_err("Failed to discover id\n");
+		}
+
+		ret = tcpm_dpm_vdm_discover_svid(tcpc_dev, NULL);
+		if (ret != TCPM_SUCCESS) {
+			chg_err("Failed to discover svid\n");
+		}
 	}
 
 	tcpm_inquire_pd_partner_svids(tcpc_dev, &svid_list);

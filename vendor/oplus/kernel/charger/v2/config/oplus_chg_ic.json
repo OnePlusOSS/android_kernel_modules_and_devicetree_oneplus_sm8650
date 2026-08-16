@@ -238,6 +238,30 @@
                         "zh": "虚拟电平转换芯片"
                     },
                     "str": "virtual level_shift"
+                },
+                {
+                    "lable": "OPLUS_CHG_IC_REVERSE",
+                    "desc": {
+                        "en": "REVERSE",
+                        "zh": "反向充电协议栈"
+                    },
+                    "str": "reverse"
+                },
+                {
+                    "lable": "OPLUS_CHG_IC_VIRTUAL_REVERSE",
+                    "desc": {
+                        "en": "virtual reverse",
+                        "zh": "虚拟反向充电协议栈"
+                    },
+                    "str": "virtual_reverse"
+                },
+                {
+                    "lable": "OPLUS_CHG_IC_VIRTUAL_BOOST",
+                    "desc": {
+                        "en": "virtual boost",
+                        "zh": "虚拟放电抬压芯片"
+                    },
+                    "str": "dischg_boost"
                 }
             ]
         },
@@ -431,6 +455,34 @@
                         "zh": "加密结果更新"
                     },
                     "str": "hmac_update"
+                },
+                {
+                    "lable": "OPLUS_IC_VIRQ_POWER_ROLE_STATUS",
+                    "desc": {
+                        "zh": "POWER_ROLE角色"
+                    },
+                    "str": "power_role_state"
+                },
+                {
+                    "lable": "OPLUS_IC_VIRQ_REVERSE_ENABLE",
+                    "desc": {
+                        "zh": "反充使能中断"
+                    },
+                    "str": "reverse_enable"
+                },
+                {
+                    "lable": "OPLUS_IC_VIRQ_HIGH_REVERSE_ENABLE",
+                    "desc": {
+                        "zh": "高功率反充使能中断"
+                    },
+                    "str": "high_reverse_enable"
+                },
+                {
+                    "lable": "OPLUS_IC_VIRQ_SINK_REQ_MSG",
+                    "desc": {
+                        "zh": "反充 msg 通信中断处理"
+                    },
+                    "str": "reverse_chg_msg_handle"
                 }
             ]
         },
@@ -811,6 +863,41 @@
                     "str": "qcom_cali_info"
                 },
                 {
+                    "lable": "TRACK_GAGUE_ERR_BATT_CELLS_DAMAGE",
+                    "desc": {
+                        "zh": "并联双电芯电池电芯损坏"
+                    },
+                    "str": "batt_cells_damage"
+                },
+                {
+                    "lable": "TRACK_GAUGE_ERR_IMP_MODEL",
+                    "desc": {
+                        "zh": "电量计阻抗模型异常"
+                    },
+                    "str": "gauge_imp_model"
+                },
+                {
+                    "lable": "TRACK_GAGUE_FCC_RA0_ERR_INFO",
+                    "desc": {
+                        "zh": "FCC偏小RA0修改信息"
+                    },
+                    "str": "charge_ra0_info"
+                },
+                {
+                    "lable": "TRACK_GAGUE_FCC_VDELTA_ERR_INFO",
+                    "desc": {
+                        "zh": "FCC偏小delta voltage修改信息"
+                    },
+                    "str": "charge_delta_volt"
+                },
+                {
+                    "lable": "TRACK_GAGUE_FCC_RA_T_ERR_INFO",
+                    "desc": {
+                        "zh": "FCC偏小阻抗修改信息"
+                    },
+                    "str": "charge_ra_t_info"
+                },
+                {
                     "lable": "TRACK_GAGUE_ERR_MAX",
                     "desc": {
                         "zh": "异常上限"
@@ -828,6 +915,7 @@
                 "OPLUS_CHG_SPEC_VER_UNKNOW",
                 "OPLUS_CHG_SPEC_VER_V3P6",
                 "OPLUS_CHG_SPEC_VER_V3P7",
+                "OPLUS_CHG_SPEC_VER_V3P7_1",
                 "OPLUS_CHG_SPEC_VER_MAX"
             ]
         },
@@ -857,6 +945,13 @@
                         "zh": "eco design需求支持区域"
                     },
                     "str": "oplus,eco_region_list"
+                },
+                {
+                    "lable": "COMMON_CHG_SUPPORT_REGION",
+                    "desc": {
+                        "zh": "common chg认证需求支持区域"
+                    },
+                    "str": "oplus,common_chg_region_list"
                 },
                 {
                     "lable": "REGION_INDEX_MAX",
@@ -1102,6 +1197,13 @@
                     "str": "wait"
                 },
                 {
+                    "lable": "PLC_STATUS_TIMEOUT",
+                    "desc": {
+                        "zh": "旁路超时"
+                    },
+                    "str": "timeout"
+                },
+                {
                     "lable": "PLC_STATUS_MAX",
                     "desc": {
                         "zh": "旁路未知状态"
@@ -1277,6 +1379,20 @@
                         "zh": "CP 使能失败"
                     },
                     "str": "err_cp_en_fail"
+                },
+                {
+                    "lable": "TRACK_CP_ERR_POWER_NG",
+                    "desc": {
+                        "zh": "CP 供电异常"
+                    },
+                    "str": "err_cp_power_ng"
+                },
+                {
+                    "lable": "TRACK_CP_ERR_VOUT_REVERSE",
+                    "desc": {
+                        "zh": "CP 反充电压异常"
+                    },
+                    "str": "err_cp_vout_reverse"
                 }
             ]
         },
@@ -1437,6 +1553,8 @@
         "ic/pps.json",
         "ic/batt_bal.json",
         "ic/gauge2.json",
-        "ic/sec.json"
+        "ic/sec.json",
+        "ic/reverse_chg.json",
+        "ic/dischg_boost.json"
     ]
 }

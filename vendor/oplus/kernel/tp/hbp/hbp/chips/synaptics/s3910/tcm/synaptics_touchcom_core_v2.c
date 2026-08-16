@@ -79,13 +79,56 @@ static int syna_tcm_v2_execute_cmd_request(struct tcm_dev *tcm_dev,
  * @return
  *    none.
  */
+static int syna_tcm_v2_set_max_wr_size(struct tcm_dev *tcm_dev, unsigned int wr_size)
+{
+	if (wr_size != tcm_dev->max_wr_size) {
+		if (tcm_dev->max_wr_size == 0)
+			tcm_dev->max_wr_size = wr_size;
+		else
+			tcm_dev->max_wr_size =
+				MIN(wr_size, tcm_dev->max_wr_size);
+
+		LOGD("set max write length to %d bytes\n",
+			tcm_dev->max_wr_size);
+	}
+	return 0;
+}
+
+static int syna_tcm_v2_set_max_rd_size(struct tcm_dev *tcm_dev, unsigned int rd_size)
+{
+	int retval;
+	unsigned char data[2] = { 0 };
+
+	if (rd_size != tcm_dev->max_rd_size) {
+		if (tcm_dev->max_rd_size == 0)
+			tcm_dev->max_rd_size = rd_size;
+		else
+			tcm_dev->max_rd_size =
+				MIN(rd_size, tcm_dev->max_rd_size);
+
+		data[0] = (unsigned char)tcm_dev->max_rd_size;
+		data[1] = (unsigned char)(tcm_dev->max_rd_size >> 8);
+
+		retval = syna_tcm_v2_execute_cmd_request(tcm_dev,
+				CMD_TCM2_SET_MAX_READ_LENGTH,
+				data,
+				sizeof(data));
+		if (retval < 0) {
+			hbp_err("Fail to set max read size\n");
+			return retval;
+		}
+
+		LOGD("set max read length to %d bytes\n", tcm_dev->max_rd_size);
+	}
+	return 0;
+}
+
 static int syna_tcm_v2_set_max_rw_size(struct tcm_dev *tcm_dev)
 {
 	int retval;
 	unsigned int rd_size = 0;
 	unsigned int wr_size = 0;
 	struct tcm_identification_info *id_info;
-	unsigned char data[2] = { 0 };
 
 	if (!tcm_dev) {
 		hbp_err("Invalid tcm device handle\n");
@@ -108,41 +151,26 @@ static int syna_tcm_v2_set_max_rw_size(struct tcm_dev *tcm_dev)
 	}
 
 	/* set max write size */
-	if (wr_size != tcm_dev->max_wr_size) {
-		if (tcm_dev->max_wr_size == 0)
-			tcm_dev->max_wr_size = wr_size;
-		else
-			tcm_dev->max_wr_size =
-				MIN(wr_size, tcm_dev->max_wr_size);
-
-		LOGD("set max write length to %d bytes\n",
-			tcm_dev->max_wr_size);
-	}
+	syna_tcm_v2_set_max_wr_size(tcm_dev, wr_size);
 
 	/* set max read size */
-	if (rd_size != tcm_dev->max_rd_size) {
-		if (tcm_dev->max_rd_size == 0)
-			tcm_dev->max_rd_size = rd_size;
-		else
-			tcm_dev->max_rd_size =
-				MIN(rd_size, tcm_dev->max_rd_size);
+	retval = syna_tcm_v2_set_max_rd_size(tcm_dev, rd_size);
 
-		data[0] = (unsigned char)tcm_dev->max_rd_size;
-		data[1] = (unsigned char)(tcm_dev->max_rd_size >> 8);
+	return retval;
+}
 
-		retval = syna_tcm_v2_execute_cmd_request(tcm_dev,
-				CMD_TCM2_SET_MAX_READ_LENGTH,
-				data,
-				sizeof(data));
-		if (retval < 0) {
-			hbp_err("Fail to set max read size\n");
-			return retval;
-		}
+static int syna_tcm_v2_xfer_len(unsigned int payload_len)
+{
+	int xfer_len = 0;
 
-		LOGD("set max read length to %d bytes\n", tcm_dev->max_rd_size);
-	}
+	if (payload_len > 0)
+		xfer_len = payload_len + TCM_MSG_CRC_LENGTH;
+	else
+		xfer_len = payload_len;
 
-	return 0;
+	xfer_len += sizeof(struct tcm_v2_message_header);
+
+	return xfer_len;
 }
 
 /**
@@ -456,11 +484,7 @@ static int syna_tcm_v2_read(struct tcm_dev *tcm_dev, unsigned int rd_length,
 	max_rd_size = tcm_dev->max_rd_size;
 
 	/* continued packet crc if containing payload data */
-	if (rd_length > 0)
-		xfer_len = rd_length + TCM_MSG_CRC_LENGTH;
-	else
-		xfer_len = rd_length;
-	xfer_len += sizeof(struct tcm_v2_message_header);
+	xfer_len = syna_tcm_v2_xfer_len(rd_length);
 
 	if ((max_rd_size != 0) && (xfer_len > max_rd_size)) {
 		hbp_err("Invalid xfer length, len: %d, max_rd_size: %d\n",
@@ -571,12 +595,7 @@ static int syna_tcm_v2_write(struct tcm_dev *tcm_dev, unsigned char command,
 	max_wr_size = tcm_dev->max_wr_size;
 
 	/* continued packet crc if containing payload data */
-	if (payload_len > 0)
-		xfer_len = payload_len + TCM_MSG_CRC_LENGTH;
-	else
-		xfer_len = payload_len;
-
-	xfer_len += sizeof(struct tcm_v2_message_header);
+	xfer_len = syna_tcm_v2_xfer_len(payload_len);
 
 	if ((max_wr_size != 0) && (xfer_len > max_wr_size)) {
 		hbp_err("Invalid xfer length, len: %d, max_wr_size: %d\n",

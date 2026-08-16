@@ -204,6 +204,11 @@ static ssize_t sf_device_write(struct file *file, const char __user * buf,
 	char tmp[256] = {0};
 	struct ssc_interactive *ssc_cxt = g_ssc_cxt;
 
+
+	if (count >= sizeof(tmp)) {
+		DEVINFO_LOG("sf_device_write: Input error count: %lu\n", count);
+		return -EINVAL;
+	}
 	if (copy_from_user(tmp, buf, count)) {
 		DEVINFO_LOG("sf_device_write: Failed to copy data from user\n");
 		return -EFAULT;
@@ -245,12 +250,16 @@ static int mtk_lcdinfo_callback(struct notifier_block *nb, unsigned long event,
 	case MTK_DISP_EVENT_BLANK:
 		val = *(int*)data;
 		if (val != ssc_cxt->a_info.blank_mode) {
-			ssc_cxt->a_info.blank_mode = val;
+			if (ssc_cxt->a_info.blank_mode != OPLUS_DOZE_AND_DOZE_SUSPEND_SWITCH) {
+				ssc_cxt->a_info.blank_mode = val;
+			}
 			if (ssc_cxt->support_bri_to_scp) {
 				ssc_interactive_lcdinfo_to_scp();
 			}
 			if (ssc_cxt->support_bri_to_hal) {
-				ssc_interactive_lcdinfo_to_hal(LCM_BLANK_MODE_TYPE, val);
+				if (ssc_cxt->a_info.blank_mode != OPLUS_DOZE_AND_DOZE_SUSPEND_SWITCH) {
+					ssc_interactive_lcdinfo_to_hal(LCM_BLANK_MODE_TYPE, val);
+				}
 				ssc_interactive_lcdinfo_to_hal(LCM_BRIGHTNESS_TYPE, ssc_cxt->a_info.rt_bri);
 			}
 		}
@@ -322,6 +331,15 @@ static int lcdinfo_callback(struct notifier_block *nb, unsigned long event,
 		if (ssc_cxt->need_to_sync_lcd_rate) {
 			ssc_cxt->a_info.fps = val;
 			ssc_interactive_lcdinfo_to_scp();
+		}
+		break;
+	case OPLUS_POWER_STATUS:
+		val = *(int*)data;
+		if (val == OPLUS_DOZE || val == OPLUS_DOZE_SUSPEND) {
+			ssc_cxt->a_info.blank_mode = OPLUS_DOZE_AND_DOZE_SUSPEND_SWITCH;
+			if (ssc_cxt->support_bri_to_hal) {
+				ssc_interactive_lcdinfo_to_hal(LCM_BLANK_MODE_TYPE, OPLUS_DOZE_AND_DOZE_SUSPEND_SWITCH);
+			}
 		}
 		break;
 	default:

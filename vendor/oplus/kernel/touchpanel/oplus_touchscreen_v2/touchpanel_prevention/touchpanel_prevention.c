@@ -1626,6 +1626,14 @@ static void init_latest_data(struct kernel_grip_info *grip_info, uint8_t index, 
 	return;     //return because of latest data have been inited in init_filter_data function
 }
 
+static void init_point_status(struct kernel_grip_info *grip_info, uint8_t index, struct point_info *point)
+{
+	grip_info->point_touchZ_stability_status[index] = 0;
+	grip_info->middle_bottom_long_press_match_times[index] = 0;
+	grip_info->middle_bottom_small_press_match_times[index] = 0;
+	grip_info->middle_bottom_exit_yfsr_coupling_times[index] = 0;
+}
+
 static void start_makeup_timer(struct kernel_grip_info *grip_info, uint8_t index)
 {
 	int ret = 0, up_id = 0;
@@ -2488,6 +2496,104 @@ static bool large_shape_matched(struct kernel_grip_info *grip_info, struct point
 	}
 
 	return false;
+}
+
+static bool middle_bottom_long_press_mached(struct kernel_grip_info *grip_info, struct point_info *points, int index)
+{
+	struct point_info cur_p = points[index];
+	uint16_t long_width_min_thd = grip_info->middle_bottom_long_press_width_min_thd;
+	uint8_t long_match_times_thd = grip_info->middle_bottom_long_press_match_times_thd;
+	uint16_t small_width_max_thd = grip_info->middle_bottom_small_press_width_max_thd;
+	uint16_t small_er_min_thd = grip_info->middle_bottom_small_press_er_min_thd;
+	uint8_t small_match_times_thd = grip_info->middle_bottom_small_press_match_times_thd;
+	uint16_t long_press_time_thd = grip_info->middle_bottom_long_press_time_thd;
+	int64_t delta_time_ms = grip_info->uniform_make_up_point_last_down_time[index] - grip_info->first_point[index].time_ms;
+	uint16_t pos = grip_info->points_pos[index];
+
+	if (pos != POS_VERTICAL_MIDDLE_BOTTOM) {
+		return false;
+	}
+
+	if (!grip_info->is_curved_screen_v4_3 || !grip_info->large_middle_bottom_exit_quickly_support) {
+		return false;
+	}
+
+	if (cur_p.tx_press >= long_width_min_thd) {
+		grip_info->middle_bottom_long_press_match_times[index]++;
+	} else {
+		grip_info->middle_bottom_long_press_match_times[index] = 0;
+	}
+
+	if (grip_info->middle_bottom_long_press_match_times[index] > long_match_times_thd && delta_time_ms > long_press_time_thd) {
+		TPD_INFO("%s: middle_bottom_long_press matched(%d) (%d %d %d %d %d %d)", __func__, index, cur_p.x, cur_p.y, \
+				cur_p.tx_press, cur_p.rx_press, cur_p.tx_er, cur_p.rx_er);
+		return true;
+	}
+
+	if (cur_p.tx_press <= small_width_max_thd && cur_p.tx_er > small_er_min_thd) {
+		grip_info->middle_bottom_small_press_match_times[index]++;
+	} else {
+		grip_info->middle_bottom_small_press_match_times[index] = 0;
+	}
+
+	if (grip_info->middle_bottom_small_press_match_times[index] > small_match_times_thd && delta_time_ms > long_press_time_thd) {
+		TPD_INFO("%s: middle_bottom_small_press matched(%d) (%d %d %d %d %d %d)", __func__, index, cur_p.x, cur_p.y, \
+				cur_p.tx_press, cur_p.rx_press, cur_p.tx_er, cur_p.rx_er);
+		return true;
+	}
+
+	return false;
+}
+
+static bool large_exit_matched_for_middle_bottom(struct kernel_grip_info *grip_info, struct point_info *points, int index)
+{
+	bool ret = false;
+	struct point_info cur_p = points[index];
+	struct grip_point_info first_p = grip_info->first_point[index];
+	uint16_t pos = grip_info->points_pos[index];
+	uint16_t middle_match_x_dis_percent_thd = grip_info->middle_bottom_match_exit_x_dis_percent_thd;
+	uint16_t middle_yfsr_coupling_thd = grip_info->middle_bottom_short_exit_yfsr_coupling_thd;
+	uint16_t middle_yfsr_coupling_times_thd = grip_info->middle_bottom_exit_yfsr_coupling_times_thd;
+	uint8_t middle_normal_press_thd = grip_info->middle_bottom_normal_press_thd;
+	uint16_t single_tx_pix = grip_info->max_x / grip_info->tx_num;
+	uint16_t x_dis_thd = grip_info->middle_bottom_exit_x_dis_thd;
+	uint16_t y_dis_thd = grip_info->middle_bottom_exit_y_dis_thd;
+	uint16_t yfsr_coupling = cur_p.tx_press * cur_p.tx_er;
+
+	if (pos != POS_VERTICAL_MIDDLE_BOTTOM) {
+		return ret;
+	}
+
+	if (!grip_info->is_curved_screen_v4_3 || !grip_info->large_middle_bottom_exit_quickly_support) {
+		return false;
+	}
+
+	if (cur_p.tx_press > middle_normal_press_thd) {
+		x_dis_thd = middle_match_x_dis_percent_thd * single_tx_pix * cur_p.tx_press / 100;
+		y_dis_thd = grip_info->middle_bottom_match_exit_y_dis_thd;
+		middle_yfsr_coupling_thd = grip_info->middle_bottom_long_exit_yfsr_coupling_thd;
+	}
+
+	if (yfsr_coupling <= middle_yfsr_coupling_thd) {
+		grip_info->middle_bottom_exit_yfsr_coupling_times[index] += (middle_yfsr_coupling_thd / yfsr_coupling);
+	} else {
+		grip_info->middle_bottom_exit_yfsr_coupling_times[index] = 0;
+	}
+	if (grip_info->middle_bottom_exit_yfsr_coupling_times[index] > middle_yfsr_coupling_times_thd) {
+		TPD_INFO("%s: middle_bottom_long_press yfsr_coupling matched(%d) (%d %d %d %d %d %d)", __func__, index, cur_p.x, cur_p.y, \
+				cur_p.tx_press, cur_p.rx_press, cur_p.tx_er, cur_p.rx_er);
+		ret = true;
+		return ret;
+	}
+
+	if (abs(cur_p.y - first_p.y) > y_dis_thd || abs(cur_p.x - first_p.x) > x_dis_thd) {
+		TPD_INFO("%s: middle_bottom_long_press exit move dis matched(%d) (%d %d %d %d) thd:(%d %d)", __func__, index, cur_p.x, cur_p.y, \
+		first_p.x, first_p.y, x_dis_thd, y_dis_thd);
+		ret = true;
+		return ret;
+	}
+
+	return ret;
 }
 
 static void finger_max_rx_matched(struct kernel_grip_info *grip_info, struct point_info *points, int id)
@@ -3371,15 +3477,28 @@ static enum large_judge_status large_shape_judged_V2(struct kernel_grip_info *gr
 			GRIP_TP_INFO("%s: id(%d) judge around short large shape.\n", __func__, index);
 			return judge_status;
 		}
+		if (grip_info->is_curved_screen_v4_3 && middle_bottom_long_press_mached(grip_info, points, index)) {
+			judge_status = JUDGE_LARGE_OK;
+			grip_info->large_finger_status[index] = TYPE_PALM_SHORT_SIZE;
+			TPD_INFO("%s: id(%d) judge middle bottom long press mached.\n", __func__, index);
+			return judge_status;
+		}
 
 		/*judge whether we should exit the reject status*/
 		if (large_exit_matched_v4(grip_info, points, index)) {
 			judge_status = JUDGE_LARGE_TIMEOUT;
 			GRIP_TP_INFO("%s: id(%d) judge middle shape exit.\n", __func__, index);
 			return judge_status;
-	    }
-		/*judge the stable status*/
+		}
 
+		/*judge whether we should exit the reject status*/
+		if (grip_info->is_curved_screen_v4_3 && large_exit_matched_for_middle_bottom(grip_info, points, index)) {
+			judge_status = JUDGE_LARGE_TIMEOUT;
+			TPD_INFO("%s: id(%d) judge for middle bottom exit.\n", __func__, index);
+			return judge_status;
+		}
+
+		/*judge the stable status*/
 		if (grip_info->point_stability_judgment_check_support && grip_info->is_curved_screen_v4_3) {
 			tx_er_jitter_thd = (grip_info->point_stability_er_jitter_thd > grip_info->point_stability_er_jitter_percent_thd * cur_p.tx_er / 100) ? \
 				grip_info->point_stability_er_jitter_thd : grip_info->point_stability_er_jitter_percent_thd * cur_p.tx_er / 100;
@@ -3504,6 +3623,10 @@ static bool large_area_judged_V2(struct kernel_grip_info *grip_info, struct poin
 			result = true;
 			GRIP_TP_INFO("%s: id(%d) judge middle top exit.\n", __func__, index);
 		}
+		if (grip_info->is_curved_screen_v4_3 && large_exit_matched_for_middle_bottom(grip_info, points, index)) {
+			result = true;
+			TPD_INFO("%s: id(%d) judge middle bottom exit.\n", __func__, index);
+		}
 	} else {
 		result = true;
 	}
@@ -3521,6 +3644,7 @@ static bool touchup_judged_V2(struct kernel_grip_info *grip_info, int index)
 	uint16_t short_start_coupling_thd = grip_info->short_start_coupling_thd;
 	uint16_t long_hold_maxfsr_gap = grip_info->current_data.long_hold_maxfsr_gap, short_hold_maxfsr_gap = grip_info->short_hold_maxfsr_gap;
 	s64 delta_time_ms = ktime_to_ms(ktime_get()) - grip_info->first_point[index].time_ms;
+	int64_t touch_down_time_ms = grip_info->uniform_make_up_point_last_down_time[index] - grip_info->first_point[index].time_ms;
 
 	if (delta_time_ms < grip_info->normal_tap_min_time_ms) {
 		GRIP_TP_INFO("%s: id(%d) short click mistouch.\n", __func__, index);
@@ -3588,6 +3712,11 @@ static bool touchup_judged_V2(struct kernel_grip_info *grip_info, int index)
 			return false;
 		}
 	} else if ((POS_VERTICAL_MIDDLE_TOP == pos) || (POS_VERTICAL_MIDDLE_BOTTOM == pos)) {
+		if (grip_info->is_curved_screen_v4_3 && grip_info->large_middle_bottom_exit_quickly_support
+			&& POS_VERTICAL_MIDDLE_BOTTOM == pos && (touch_down_time_ms < grip_info->middle_bottom_long_press_time_thd)) {
+			ret = true;
+			return ret;
+		}
 		if ((STATUS_CENTER_DOWN == grip_info->points_center_down[index]) && !grip_info->point_unmoved[index]) {
 			short_start_coupling_thd = grip_info->short_strict_start_coupling_thd;
 		}
@@ -3672,6 +3801,7 @@ static int curved_large_handle_V2(struct kernel_grip_info *grip_info, int obj_at
 				grip_info->large_point_status[m_index] = DOWN_POINT;                         //set down status
 				init_filter_data(grip_info, m_index, points[m_index]);
 				init_latest_data(grip_info, m_index, points[m_index]);
+				init_point_status(grip_info, m_index, &points[m_index]);
 				record_point_info(grip_info, TYPE_START_POINT, m_index, points[m_index]);
 				record_point_info(grip_info, TYPE_INIT_TX_POINT, m_index, points[m_index]);
 				record_point_info(grip_info, TYPE_INIT_RX_POINT, m_index, points[m_index]);
@@ -4104,6 +4234,7 @@ static const struct key_addr key_addr_arrays[] = {
 	{"corner_angle_max_range_thd",	(u64)&(((struct kernel_grip_info *)0)->corner_angle_max_range_thd)},
 	{"point_edge_degree_check_support",	(u64)&(((struct kernel_grip_info *)0)->point_edge_degree_check_support)},
 	{"corner_point_edge_percent_thd",	(u64)&(((struct kernel_grip_info *)0)->corner_point_edge_percent_thd)},
+	{"bottom_corner_point_edge_percent_thd",	(u64)&(((struct kernel_grip_info *)0)->bottom_corner_point_edge_percent_thd)},
 	{"corner_point_edge_min_channel_thd",	(u64)&(((struct kernel_grip_info *)0)->corner_point_edge_min_channel_thd)},
 	{"top_trx_corner_point_edge_percent_thd",	(u64)&(((struct kernel_grip_info *)0)->top_trx_corner_point_edge_percent_thd)},
 	{"bottom_trx_corner_point_edge_percent_thd",	(u64)&(((struct kernel_grip_info *)0)->bottom_trx_corner_point_edge_percent_thd)},
@@ -4124,6 +4255,27 @@ static const struct key_addr key_addr_arrays[] = {
 	{"uniform_max_make_up_time",	(u64)&(((struct kernel_grip_info *)0)->uniform_max_make_up_time)},
 	{"uniform_make_up_last_point_percent_limit",	(u64)&(((struct kernel_grip_info *)0)->uniform_make_up_last_point_percent_limit)},
 	/*add for curved_screen_v4.3  end*/
+	/*add for curved_screen_v4.4  begin*/
+	{"touch_point_stability_max_time",	(u64)&(((struct kernel_grip_info *)0)->touch_point_stability_max_time)},
+	{"middle_bottom_long_press_time_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_long_press_time_thd)},
+	{"middle_bottom_long_press_width_min_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_long_press_width_min_thd)},
+	{"middle_bottom_long_press_minor_max_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_long_press_minor_max_thd)},
+	{"middle_bottom_long_press_match_times_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_long_press_match_times_thd)},
+	{"large_middle_bottom_exit_quickly_support",	(u64)&(((struct kernel_grip_info *)0)->large_middle_bottom_exit_quickly_support)},
+	{"middle_bottom_small_press_width_max_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_small_press_width_max_thd)},
+	{"middle_bottom_small_press_er_min_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_small_press_er_min_thd)},
+	{"middle_bottom_small_press_peakdelta_max_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_small_press_peakdelta_max_thd)},
+	{"middle_bottom_small_press_minor_max_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_small_press_minor_max_thd)},
+	{"middle_bottom_small_press_match_times_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_small_press_match_times_thd)},
+	{"middle_bottom_exit_x_dis_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_exit_x_dis_thd)},
+	{"middle_bottom_exit_y_dis_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_exit_y_dis_thd)},
+	{"middle_bottom_match_exit_x_dis_percent_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_match_exit_x_dis_percent_thd)},
+	{"middle_bottom_match_exit_y_dis_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_match_exit_y_dis_thd)},
+	{"middle_bottom_short_exit_yfsr_coupling_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_short_exit_yfsr_coupling_thd)},
+	{"middle_bottom_long_exit_yfsr_coupling_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_long_exit_yfsr_coupling_thd)},
+	{"middle_bottom_normal_press_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_normal_press_thd)},
+	{"middle_bottom_exit_yfsr_coupling_times_thd",	(u64)&(((struct kernel_grip_info *)0)->middle_bottom_exit_yfsr_coupling_times_thd)},
+	/*add for curved_screen_v4.4  end*/
 	/*add for curved_screen_v4.5  begin*/
 	{"is_curved_screen_v4_5",	(u64)&(((struct kernel_grip_info *)0)->is_curved_screen_v4_5)},
 	{"long_press_top_corner_point_edge_percent_thd",	(u64)&(((struct kernel_grip_info *)0)->long_press_top_corner_point_edge_percent_thd)},
@@ -5525,7 +5677,7 @@ static int kernel_grip_init_v4_3(struct kernel_grip_info *grip_info, struct devi
 		grip_info->one_frame_down_check_support = temp_array[0];
 	}
 
-	ret = of_property_read_u32_array(dev->of_node, (char *)"prevention,uniform_make_up_point_v2", temp_array, 1);
+	ret = of_property_read_u32_array(dev->of_node, (char *)"prevention,uniform_make_up_point_v2", temp_array, 5);
 	if (ret) {
 		grip_info->uniform_make_up_point_num = 10;
 		grip_info->uniform_make_up_exit_point_num = 2;
@@ -5545,6 +5697,74 @@ static int kernel_grip_init_v4_3(struct kernel_grip_info *grip_info, struct devi
 		grip_info->uniform_make_up_point_num_status[m_index] = 0;
 	}
 	grip_info->uniform_make_up_point_upid_status = 0;
+
+
+	ret = of_property_read_u32_array(dev->of_node, (char *)"prevention,touch_point_stability_check", temp_array, 5);
+	if (ret) {
+		grip_info->touch_point_stability_max_time = 100;
+		grip_info->middle_bottom_long_press_time_thd = 500;
+		TPD_INFO("touch_point_stability_check using default.\n");
+	} else {
+		grip_info->touch_point_stability_max_time = temp_array[0];
+		grip_info->middle_bottom_long_press_time_thd = temp_array[1];
+	}
+	ret = of_property_read_u32_array(dev->of_node, (char *)"prevention,middle_bottom_long_press_check", temp_array, 5);
+	if (ret) {
+		grip_info->middle_bottom_long_press_width_min_thd = 6;
+		grip_info->middle_bottom_long_press_minor_max_thd = 140;
+		grip_info->middle_bottom_long_press_match_times_thd = 10;
+		grip_info->large_middle_bottom_exit_quickly_support = 0;
+		TPD_INFO("middle_bottom_long_press_check using default.\n");
+	} else {
+		grip_info->middle_bottom_long_press_width_min_thd = temp_array[0];
+		grip_info->middle_bottom_long_press_minor_max_thd = temp_array[1];
+		grip_info->middle_bottom_long_press_match_times_thd = temp_array[2];
+		grip_info->large_middle_bottom_exit_quickly_support = temp_array[4];
+	}
+
+	ret = of_property_read_u32_array(dev->of_node, (char *)"prevention,middle_bottom_small_press_check", temp_array, 5);
+	if (ret) {
+		grip_info->middle_bottom_small_press_width_max_thd = 4;
+		grip_info->middle_bottom_small_press_er_min_thd = 70;
+		grip_info->middle_bottom_small_press_peakdelta_max_thd = 550;
+		grip_info->middle_bottom_small_press_minor_max_thd = 140;
+		grip_info->middle_bottom_small_press_match_times_thd = 10;
+		TPD_INFO("middle_bottom_small_press_check using default.\n");
+	} else {
+		grip_info->middle_bottom_small_press_width_max_thd = temp_array[0];
+		grip_info->middle_bottom_small_press_er_min_thd = temp_array[1];
+		grip_info->middle_bottom_small_press_peakdelta_max_thd = temp_array[2];
+		grip_info->middle_bottom_small_press_minor_max_thd = temp_array[3];
+		grip_info->middle_bottom_small_press_match_times_thd = temp_array[4];
+	}
+
+	ret = of_property_read_u32_array(dev->of_node, (char *)"prevention,middle_bottom_exit_dis", temp_array, 5);
+	if (ret) {
+		grip_info->middle_bottom_exit_x_dis_thd = 960;
+		grip_info->middle_bottom_exit_y_dis_thd = 640;
+		grip_info->middle_bottom_match_exit_x_dis_percent_thd = 20;
+		grip_info->middle_bottom_match_exit_y_dis_thd = 640;
+		TPD_INFO("middle_bottom_exit_dis using default.\n");
+	} else {
+		grip_info->middle_bottom_exit_x_dis_thd = temp_array[0];
+		grip_info->middle_bottom_exit_y_dis_thd = temp_array[1];
+		grip_info->middle_bottom_match_exit_x_dis_percent_thd = temp_array[2];
+		grip_info->middle_bottom_match_exit_y_dis_thd = temp_array[3];
+	}
+
+	ret = of_property_read_u32_array(dev->of_node, (char *)"prevention,middle_bottom_yfsr_coupling_thd", temp_array, 5);
+	if (ret) {
+		grip_info->middle_bottom_short_exit_yfsr_coupling_thd = 90;
+		grip_info->middle_bottom_long_exit_yfsr_coupling_thd = 60;
+		grip_info->middle_bottom_normal_press_thd = 5;
+		grip_info->middle_bottom_exit_yfsr_coupling_times_thd = 10;
+		TPD_INFO("middle_bottom_yfsr_coupling_thd using default.\n");
+	} else {
+		grip_info->middle_bottom_short_exit_yfsr_coupling_thd = temp_array[0];
+		grip_info->middle_bottom_long_exit_yfsr_coupling_thd = temp_array[1];
+		grip_info->middle_bottom_normal_press_thd = temp_array[2];
+		grip_info->middle_bottom_exit_yfsr_coupling_times_thd = temp_array[3];
+	}
 
 	return 0;
 }

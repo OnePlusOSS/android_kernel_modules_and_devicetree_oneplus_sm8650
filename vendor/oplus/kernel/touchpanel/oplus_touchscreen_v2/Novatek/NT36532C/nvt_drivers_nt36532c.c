@@ -1056,6 +1056,8 @@ static int nvt_get_chip_info(void *chip_data)
 	if (ret) {
 		TPD_INFO("chip is not identified\n");
 		ret = -EINVAL;
+	} else {
+		nvt_bootloader_reset(chip_info);
 	}
 
 	return ret;

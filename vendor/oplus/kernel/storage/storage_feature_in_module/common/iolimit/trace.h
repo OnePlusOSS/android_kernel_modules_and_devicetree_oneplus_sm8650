@@ -54,7 +54,7 @@ TRACE_EVENT(iolimit_write_control,
 #endif /* _TRACE_UNISOC_IO_H */
 
 #undef TRACE_INCLUDE_PATH
-#define TRACE_INCLUDE_PATH ../../../../../kernel_device_modules-6.6/drivers/soc/oplus/storage/common/iolimit/
+#define TRACE_INCLUDE_PATH .
 #define TRACE_INCLUDE_FILE trace
 
 #include <trace/define_trace.h>

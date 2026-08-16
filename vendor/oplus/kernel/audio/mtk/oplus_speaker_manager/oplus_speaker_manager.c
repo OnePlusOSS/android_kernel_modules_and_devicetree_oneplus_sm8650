@@ -25,6 +25,7 @@
 
 static struct list_head oplus_speaker_list = LIST_HEAD_INIT(oplus_speaker_list);
 static DEFINE_MUTEX(list_mutex);
+static DEFINE_MUTEX(probe_mutex);
 
 static struct oplus_amp_status *contrl_status = NULL;
 
@@ -598,6 +599,18 @@ int oplus_speaker_pa_remove(void *node)
 	return 0;
 }
 EXPORT_SYMBOL(oplus_speaker_pa_remove);
+
+void oplus_speaker_probe_lock(void)
+{
+	mutex_lock(&probe_mutex);
+}
+EXPORT_SYMBOL(oplus_speaker_probe_lock);
+
+void oplus_speaker_probe_unlock(void)
+{
+	mutex_unlock(&probe_mutex);
+}
+EXPORT_SYMBOL(oplus_speaker_probe_unlock);
 
 static int __init oplus_pa_manager_init(void)
 {

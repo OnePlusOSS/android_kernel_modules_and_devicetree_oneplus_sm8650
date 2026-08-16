@@ -22,6 +22,7 @@ enum ufcs_topic_item {
 	UFCS_ITEM_EMARK_POWER,
 	UFCS_ITEM_ADAPTER_POWER,
 	UFCS_ITEM_ERR_TYPE,
+	UFCS_ITEM_TEST_MODE,
 };
 
 enum ufcs_fastchg_type {

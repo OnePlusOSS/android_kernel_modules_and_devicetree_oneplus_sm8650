@@ -82,11 +82,6 @@ struct syna_tcm_ioctl_data_compat {
 };
 #endif
 
-typedef struct hbp_driver_info_s {
-	int system_power_state;
-	int short_frame_waiting;
-} hbp_driver_info_t;
-
 #define CHAR_DEVICE_NAME "tcm"
 //#define CHAR_DEVICE_NAME "tcm_hbp"
 #define PLATFORM_DRIVER_NAME "synaptics_tcm_hbp"
@@ -209,17 +204,6 @@ static int g_sysfs_has_remove = 0;
 #define MINIMUM_WAITING_TIME			(10)
 
 #define SYNA_RETRY_CNT 60
-/* Define a data structure that contains a list_head */
-struct fifo_queue {
-	struct list_head next;
-	unsigned char *fifo_data;
-	unsigned int data_length;
-#ifdef REPLACE_KTIME
-	struct timespec64 timestamp;
-#else
-	struct timeval timestamp;
-#endif
-};
 
 /* Define a data structure for driver parameters configurations
  *
@@ -310,31 +294,7 @@ int syna_sysfs_create_dir(struct syna_tcm *tcm,
 
 	return 0;
 }
-/**
- * syna_sysfs_remove_dir()
- *
- * Remove the allocate sysfs directory
- *
- * @param
- *    [ in] tcm: the driver handle
- *
- * @return
- *    on success, 0; otherwise, negative value on error.
- */
-void syna_sysfs_remove_dir(struct syna_tcm *tcm)
-{
-	if (!tcm) {
-		hbp_err("Invalid tcm device handle\n");
-		return;
-	}
 
-	if (tcm->sysfs_dir) {
-		sysfs_remove_group(tcm->sysfs_dir, &attr_group);
-
-		kobject_put(tcm->sysfs_dir);
-	}
-
-}
 /**
  * syna_cdev_ioctl_do_hw_reset()
  *
@@ -507,6 +467,14 @@ exit:
  * @return
  *    on success, 0; otherwise, negative value on error.
  */
+static unsigned int syna_delay_ms_resp(void)
+{
+	if (g_sysfs_io_polling_interval == RESP_IN_ATTN)
+		return RESP_IN_ATTN;
+	else
+		return g_sysfs_io_polling_interval;
+}
+
 static int syna_cdev_ioctl_send_message(struct syna_tcm *tcm,
 		const unsigned char *ubuf_ptr, unsigned int buf_size,
 		unsigned int *msg_size)
@@ -555,10 +523,7 @@ static int syna_cdev_ioctl_send_message(struct syna_tcm *tcm,
 	hbp_info("Command = 0x%02x, payload length = %d data:%*ph\n",
 		data[0], payload_length, payload_length, &data[3]);
 
-	if (g_sysfs_io_polling_interval == RESP_IN_ATTN)
-		delay_ms_resp = RESP_IN_ATTN;
-	else
-		delay_ms_resp = g_sysfs_io_polling_interval;
+	delay_ms_resp = syna_delay_ms_resp();
 
 	retval = syna_tcm_send_command(tcm->tcm_dev,
 			data[0],
@@ -648,7 +613,7 @@ exit:
  * @return
  *    on success, 0; otherwise, negative value on error.
  */
-/*
+
 static int syna_cdev_ioctl_enable_irq(struct syna_tcm *tcm,
 		const unsigned char *ubuf_ptr, unsigned int buf_size,
 		unsigned int data_size)
@@ -656,21 +621,11 @@ static int syna_cdev_ioctl_enable_irq(struct syna_tcm *tcm,
 	int retval = 0;
 	unsigned int data;
 
-	if (!tcm->is_connected) {
-		hbp_err("Not connected\n");
-		return -ENXIO;
-	}
-
 	if ((buf_size < sizeof(data)) || (buf_size > PAGE_SIZE)
                 || (data_size < sizeof(data)) || (data_size > PAGE_SIZE)) {
 		hbp_err("Invalid sync data size, buf_size:%d, data_size:%d\n",
 		    buf_size, data_size);
 		return -EINVAL;
-	}
-
-	if (!tcm->hw_if->ops_enable_irq) {
-		LOGW("Not support irq control\n");
-		return -EFAULT;
 	}
 
 	retval = copy_from_user(&data, ubuf_ptr, sizeof(data));
@@ -681,11 +636,7 @@ static int syna_cdev_ioctl_enable_irq(struct syna_tcm *tcm,
 
 	switch (data) {
 	case SYSFS_DISABLED_INTERRUPT:
-		retval = tcm->hw_if->ops_enable_irq(tcm->hw_if, false);
-		if (retval < 0) {
-			hbp_err("Fail to disable interrupt\n");
-			return retval;
-		}
+		hbp_dev_set_irq_status(tcm, false);
 
 		g_sysfs_io_polling_interval =
 			tcm->tcm_dev->msg_data.default_resp_reading;
@@ -694,11 +645,7 @@ static int syna_cdev_ioctl_enable_irq(struct syna_tcm *tcm,
 
 		break;
 	case SYSFS_ENABLED_INTERRUPT:
-		retval = tcm->hw_if->ops_enable_irq(tcm->hw_if, true);
-		if (retval < 0) {
-			hbp_err("Fail to enable interrupt\n");
-			return retval;
-		}
+		hbp_dev_set_irq_status(tcm, true);
 
 		g_sysfs_io_polling_interval = RESP_IN_ATTN;
 
@@ -707,11 +654,7 @@ static int syna_cdev_ioctl_enable_irq(struct syna_tcm *tcm,
 		break;
 	default:
 		// recover the interrupt and also assign the polling interval
-		retval = tcm->hw_if->ops_enable_irq(tcm->hw_if, true);
-		if (retval < 0) {
-			hbp_err("Fail to enable interrupt\n");
-			return retval;
-		}
+		hbp_dev_set_irq_status(tcm, true);
 
 		g_sysfs_io_polling_interval = data;
 		if (g_sysfs_io_polling_interval < RESP_IN_POLLING)
@@ -726,7 +669,7 @@ static int syna_cdev_ioctl_enable_irq(struct syna_tcm *tcm,
 
 	return 0;
 }
-*/
+
 /**
  * syna_cdev_ioctl_store_pid()
  *
@@ -1056,10 +999,8 @@ static int syna_cdev_ioctl_config(struct syna_tcm *tcm,
 	if (tcm->tcm_dev) {
 		/* config the read/write chunk, if user provided */
 		if (param->bus_chunk_size > 0) {
-			if (tcm->tcm_dev->max_rd_size != param->bus_chunk_size)
-				tcm->tcm_dev->max_rd_size = param->bus_chunk_size;
-			if (tcm->tcm_dev->max_wr_size != param->bus_chunk_size)
-				tcm->tcm_dev->max_wr_size = param->bus_chunk_size;
+			tcm->tcm_dev->max_rd_size = param->bus_chunk_size;
+			tcm->tcm_dev->max_wr_size = param->bus_chunk_size;
 		}
 		/* config the feature of predict reading */
 		enable = (param->feature_predict_reads == 1);
@@ -1108,8 +1049,8 @@ static int syna_cdev_ioctl_dispatch(struct syna_tcm *tcm,
 				ubuf_ptr, ubuf_size, *data_size);
 		break;
 	case STD_ENABLE_IRQ_ID:
-		/*retval = syna_cdev_ioctl_enable_irq(tcm,
-				ubuf_ptr, ubuf_size, *data_size);*/
+		retval = syna_cdev_ioctl_enable_irq(tcm,
+				ubuf_ptr, ubuf_size, *data_size);
 		hbp_err("STD_ENABLE_IRQ_ID not support\n");
 		break;
 	case STD_RAW_WRITE_ID:
@@ -1220,42 +1161,19 @@ static int syna_cdev_ioctl_old_dispatch(struct syna_tcm *tcm,
 			break;
 		}
 
-		/*retval = tcm->dev_set_up_app_fw(tcm);
-		if (retval < 0) {
-			hbp_err("Fail to set up app fw\n");
-			break;
-		}*/
 		syna_tcm_get_app_info(tcm->tcm_dev, &tcm->tcm_dev->app_info);
 
 		break;
 	case OLD_SET_IRQ_MODE_ID:
-		/*
-		if (!tcm->hw_if->ops_enable_irq) {
-			retval = -EFAULT;
-			break;
-		}
-
-		if (arg == 0)
-			retval = tcm->hw_if->ops_enable_irq(tcm->hw_if,
-					false);
-		else if (arg == 1)
-			retval = tcm->hw_if->ops_enable_irq(tcm->hw_if,
-					true);
-		*/
-		if (arg == 0)
-			tcm->char_dev_irq_disabled = true;
-		else if (arg == 1)
-			tcm->char_dev_irq_disabled = false;
+		tcm->char_dev_irq_disabled = !arg;
 		hbp_info("OLD_SET_IRQ_MODE_ID, char_dev_irq_disabled = %u\n", tcm->char_dev_irq_disabled);
 		break;
+
 	case OLD_SET_RAW_MODE_ID:
 		hbp_info("OLD_SET_RAW_MODE_ID, arg=%lu\n", arg);
-		if (arg == 0)
-			tcm->is_attn_redirecting = false;
-		else if (arg == 1)
-			tcm->is_attn_redirecting = true;
-
+		tcm->is_attn_redirecting = !!arg;
 		break;
+
 	case OLD_CONCURRENT_ID:
 		hbp_info("OLD_CONCURRENT_ID\n");
 		retval = 0;
@@ -1835,42 +1753,4 @@ err_add_chardev:
 err_alloc_chrdev_region:
 err_register_chrdev_region:
 	return retval;
-}
-/**
- * syna_cdev_remove_sysfs()
- *
- * Remove the allocate cdev device node and release the resource
- *
- * @param
- *    [ in] tcm: the driver handle
- *
- * @return
- *    none.
- */
-void syna_cdev_remove_sysfs(struct syna_tcm *tcm)
-{
-	if (!tcm) {
-		hbp_err("Invalid tcm driver handle\n");
-		return;
-	}
-	syna_sysfs_remove_dir(tcm);
-
-	tcm->char_dev_ref_count = 0;
-	tcm->proc_pid = 0;
-
-	if (tcm->device) {
-		device_destroy(tcm->device_class, tcm->char_dev_num);
-		class_destroy(tcm->device_class);
-		cdev_del(&tcm->char_dev);
-		unregister_chrdev_region(tcm->char_dev_num, 1);
-	}
-
-	syna_tcm_buf_release(&g_cdev_cbuf);
-
-	syna_pal_mutex_free(&tcm->extif_mutex);
-
-	tcm->device_class = NULL;
-
-	tcm->device = NULL;
-	g_sysfs_has_remove = 1;
 }

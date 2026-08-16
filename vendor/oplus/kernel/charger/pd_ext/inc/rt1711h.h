@@ -65,6 +65,7 @@
 #define SC2150A_DID		0x0000
 #define SC2150A_DID_B		0x0001
 #define SC6607_DID		0x0001
+#define SC6607A_DID		0x0010
 /*
  * RT1711H_REG_PHY_CTRL1			(0x80)
  */

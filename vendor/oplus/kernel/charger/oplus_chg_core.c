@@ -756,6 +756,15 @@ static int __init oplus_chg_modules_init(void)
 {
 	int rc;
 
+#if __and(IS_MODULE(CONFIG_OPLUS_CHG), IS_MODULE(CONFIG_OPLUS_CHG_V2))
+	struct device_node *node;
+
+	node = of_find_node_by_path("/soc/oplus_chg_core");
+	if (node != NULL &&
+	    of_property_read_bool(node, "oplus,chg_framework_v2"))
+		return 0;
+#endif /* CONFIG_OPLUS_CHG_V2 */
+
 	rc = oplus_chg_section_modules_init(OPLUS_CHG_MODULE_CORE_MAGIC);
 	if (rc < 0)
 		return rc;

@@ -788,6 +788,9 @@ int pd_reset_protocol_layer(struct pd_port *pd_port, bool sop_only)
 	pd_port->msg_id_pr_swap_last = 0xff;
 #endif	/* CONFIG_USB_PD_IGNORE_PS_RDY_AFTER_PR_SWAP */
 
+#ifdef OPLUS_FEATURE_CHG_BASIC
+	pe_data->vdm_state_timer = PD_TIMER_NR;
+#endif
 	return 0;
 }
 

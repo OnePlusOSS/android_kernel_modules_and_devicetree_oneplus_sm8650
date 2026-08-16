@@ -1,5 +1,8 @@
 &oplus_mms_gauge {
 	silicon_x24 {
+		oplus,fcl_support;
+		oplus,fcl_index = <0>;
+		oplus,vb_offset = <30>;
 		deep_spec,support;
 		deep_spec,uv_thr = <3000>;
 		deep_spec,count_thr = <50>;
@@ -239,16 +242,9 @@
 
 &oplus_chg_comm {
 	silicon_x24 {
-		oplus_spec,dec-vol-cc-thr = <0 400 800>;
-		oplus_spec,dec-vol-fv-mv = <0  0  0  0  0  0  0  0  0
-					    20 20 20 20 20 20 20 0  0
-					    40 40 40 40 40 40 20 0  0>;
-		oplus_spec,dec-vol-wired-ffc-mv = <0  0  0
-						   20 20 20
-						   40 40 20>;
-		oplus_spec,dec-vol-wls-ffc-mv = <0  0  0
-						 20 20 20
-						 40 40 20>;
+		oplus_spec,dec_step = <20>;
+		oplus_spec,dec-vol-cc-full-thr = <0 400 600 800 1000 1200>;
+		oplus_spec,dec-vol-fv-full-mv = <0 20 20 40 40 40>;
 		oplus_spec,batt-them-thr = <(-100) 0 50 120 160 350 450 530>;
 		oplus_spec,iterm-ma = <316>;
 		oplus_spec,removed_bat_decidegc = <390>;
@@ -311,6 +307,8 @@
 		oplus_spec,current_limit_of_drop_soc_2 = <700>;
 		oplus_spec,volt_of_fast_drop_soc_1 = <2900>;
 		oplus_spec,support_uisoc_low_battery_control;
+
+		oplus_spec,batt_full_time = <300>;
 	};
 };
 
@@ -1864,11 +1862,12 @@
 
 &oplus_monitor {
 	silicon_x24 {
-		track,fast_chg_break_t_thd = <1400>;
+		track,fast_chg_break_t_thd = <2500>;
 		track,general_chg_break_t_thd = <300>;
 		track,voocphy_type = <TRACK_AP_DUAL_CP_VOOCPHY>;
 		track,wired_max_power = <80000>;
 		track,wired_fast_chg_scheme = <TRACK_WIRED_SCHEME_SINGLE_60W_67W>;
+		track,track_ver = <TRACK_VER_4_0>;
 
 		track,gauge_status_ctrl;
 		track,nominal_qmax1 = <6579>;

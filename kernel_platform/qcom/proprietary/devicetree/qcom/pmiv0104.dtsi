@@ -353,7 +353,11 @@
 			};
 
 			socd_trip:socd-trip {
-				temperature = <90>;
+//#ifdef OPLUS_FEATURE_CHG_BASIC
+				temperature = <100>;
+//#else
+//				temperature = <90>;
+//#endif
 				hysteresis = <0>;
 				type = "passive";
 			};

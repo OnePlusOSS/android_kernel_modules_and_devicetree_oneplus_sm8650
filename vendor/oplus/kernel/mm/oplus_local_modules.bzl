@@ -37,9 +37,19 @@ def define_oplus_local_modules():
         ]),
         ko_deps = [
             "//vendor/oplus/kernel/mm:oplus_bsp_zsmalloc",
+            "//vendor/oplus/kernel/mm:oplus_bsp_zstdn",
+            "//vendor/oplus/kernel/mm:oplus_bsp_zstdn_o",
         ],
         includes = ["."],
-        local_defines = ["CONFIG_HYBRIDSWAP","CONFIG_HYBRIDSWAP_SWAPD","CONFIG_HYBRIDSWAP_CORE","CONFIG_CRYPTO_LZ4K","CONFIG_KCOMPRESSD"],
+        local_defines = [
+            "CONFIG_HYBRIDSWAP",
+            "CONFIG_HYBRIDSWAP_SWAPD",
+            "CONFIG_HYBRIDSWAP_CORE",
+            "CONFIG_CRYPTO_LZ4K",
+            "CONFIG_KCOMPRESSD",
+            "CONFIG_CRYPTO_ZSTDN",
+            "CONFIG_CRYPTO_ZSTDN_O"
+        ],
         conditional_defines = {
              "qcom":  ["CONFIG_QCOM_PANEL_EVENT_NOTIFIER"],
              "mtk":  ["CONFIG_OPLUS_MTK_DRM_GKI_NOTIFY"],
@@ -206,6 +216,93 @@ def define_oplus_local_modules():
         }),
     )
 
+    define_oplus_ddk_module(
+        name = "oplus_bsp_zstdn",
+        srcs = native.glob([
+            "**/*.h",
+            "hybridswap_zram/zstd/include/*.h",
+            "hybridswap_zram/zstd/common/*.h",
+            "hybridswap_zram/zstd/compress/*.h",
+            "hybridswap_zram/zstd/decompress/*.h",
+            "hybridswap_zram/zstd/crypto_zstd.c",
+            "hybridswap_zram/zstd/zstd_compress_module.c",
+            "hybridswap_zram/zstd/xxhash.c",
+            "hybridswap_zram/zstd/common/debug.c",
+            "hybridswap_zram/zstd/common/entropy_common.c",
+            "hybridswap_zram/zstd/common/error_private.c",
+            "hybridswap_zram/zstd/common/fse_decompress.c",
+            "hybridswap_zram/zstd/common/zstd_common.c",
+            "hybridswap_zram/zstd/compress/fse_compress.c",
+            "hybridswap_zram/zstd/compress/hist.c",
+            "hybridswap_zram/zstd/compress/huf_compress.c",
+            "hybridswap_zram/zstd/compress/zstd_compress.c",
+            "hybridswap_zram/zstd/compress/zstd_compress_literals.c",
+            "hybridswap_zram/zstd/compress/zstd_compress_sequences.c",
+            "hybridswap_zram/zstd/compress/zstd_compress_superblock.c",
+            "hybridswap_zram/zstd/compress/zstd_double_fast.c",
+            "hybridswap_zram/zstd/compress/zstd_fast.c",
+            "hybridswap_zram/zstd/compress/zstd_lazy.c",
+            "hybridswap_zram/zstd/compress/zstd_ldm.c",
+            "hybridswap_zram/zstd/compress/zstd_opt.c",
+            "hybridswap_zram/zstd/zstd_decompress_module.c",
+            "hybridswap_zram/zstd/decompress/huf_decompress.c",
+            "hybridswap_zram/zstd/decompress/zstd_ddict.c",
+            "hybridswap_zram/zstd/decompress/zstd_decompress.c",
+            "hybridswap_zram/zstd/decompress/zstd_decompress_block.c"
+        ]),
+        includes = ["."],
+    )
+
+    define_oplus_ddk_module(
+        name = "oplus_bsp_zstdn_o",
+        srcs = native.glob([
+            "**/*.h",
+            "zstd_o/include/*.h",
+            "zstd_o/common/*.h",
+            "zstd_o/compress/*.h",
+            "zstd_o/decompress/*.h",
+            "zstd_o/crypto_zstd.c",
+            "zstd_o/zstd_compress_module.c",
+            "zstd_o/xxhash.c",
+            "zstd_o/common/debug.c",
+            "zstd_o/common/entropy_common.c",
+            "zstd_o/common/error_private.c",
+            "zstd_o/common/fse_decompress.c",
+            "zstd_o/common/zstd_common.c",
+            "zstd_o/compress/fse_compress.c",
+            "zstd_o/compress/hist.c",
+            "zstd_o/compress/huf_compress.c",
+            "zstd_o/compress/zstd_compress.c",
+            "zstd_o/compress/zstd_compress_literals.c",
+            "zstd_o/compress/zstd_compress_sequences.c",
+            "zstd_o/compress/zstd_compress_superblock.c",
+            "zstd_o/compress/zstd_double_fast.c",
+            "zstd_o/compress/zstd_fast.c",
+            "zstd_o/compress/zstd_lazy.c",
+            "zstd_o/compress/zstd_ldm.c",
+            "zstd_o/compress/zstd_opt.c",
+            "zstd_o/zstd_decompress_module.c",
+            "zstd_o/decompress/huf_decompress.c",
+            "zstd_o/decompress/zstd_ddict.c",
+            "zstd_o/decompress/zstd_decompress.c",
+            "zstd_o/decompress/zstd_decompress_block.c"
+        ]),
+        includes = ["."],
+    )
+
+    define_oplus_ddk_module(
+        name = "oplus_bsp_fg_protect",
+        srcs = native.glob([
+            "**/*.h",
+            "levelprotect/fgprotect.c",
+        ]),
+        ko_deps = [
+            "//vendor/oplus/kernel/mm:oplus_bsp_hybridswap_zram",
+        ],
+        includes = ["."],
+        local_defines = ["CONFIG_OPLUS_FG_PROTECT"],
+    )
+
     ddk_copy_to_dist_dir(
         name = "oplus_bsp_mm",
         module_list = [
@@ -214,15 +311,17 @@ def define_oplus_local_modules():
             "oplus_bsp_zram_opt",
             "oplus_exit_mm_optimize",
             "oplus_bsp_level_protect",
+            "oplus_bsp_fg_protect",
             "oplus_bsp_proactive_compact",
             "oplus_bsp_hybridswap_zram",
             "oplus_bsp_zsmalloc",
             "oplus_bsp_lz4k",
             "oplus_bsp_kswapd_opt",
             "oplus_bsp_kshrink_slabd",
+            "oplus_bsp_zstdn",
+            "oplus_bsp_zstdn_o",
             # TODO: qcom convert to GKI implementation
-            #"oplus_bsp_uxmem_opt",
-            #"oplus_bsp_dynamic_readahead",
+            "oplus_bsp_uxmem_opt",
+            "oplus_bsp_dynamic_readahead",
         ],
     )
-

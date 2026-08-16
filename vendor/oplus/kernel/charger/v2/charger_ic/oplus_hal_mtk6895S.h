@@ -26,6 +26,7 @@
 #ifdef OPLUS_FEATURE_CHG_BASIC
 #include <oplus_chg_ic.h>
 #include <oplus_chg_pps.h>
+#include <oplus_reverse_chg.h>
 #endif
 
 #define CHARGING_INTERVAL 10
@@ -286,6 +287,7 @@ typedef enum {
 	NTC_USB_BTB,
 	NTC_MASTER_CP_BTB,
 	NTC_SLAVE_CP_BTB,
+	NTC_VBAT_PWR_BTB,
 } NTC_TYPE;
 
 struct temp_param {
@@ -355,18 +357,32 @@ enum oplus_sub_btb_adc_index {
 	OPLUS_SUB_BTB_MAX,
 };
 
+#if IS_ENABLED(CONFIG_HORAE_FLASH_LED_THERMAL)
+struct oplus_ntc_switch {
+	bool ntc_switch_charge_ic;
+};
+#endif
+
 struct mtk_charger {
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	struct oplus_chg_ic_dev *ic_dev;
 	struct oplus_chg_ic_dev *gauge_ic_dev;
 	struct oplus_chg_ic_dev *pps_ic;
+	struct oplus_chg_ic_dev *reverse_chg_ic_dev;
 	bool wls_boost_soft_start;
 	int wls_set_boost_vol;
 	struct oplus_mms *gauge_topic;
 	struct oplus_mms  *err_topic;
+	struct oplus_mms *vooc_topic;
+	struct oplus_mms *wired_topic;
+	struct mms_subscribe *vooc_subs;
 	int low_batt_otg_boost_curr_ua;
 	struct ntc_temp_parameters subboard_parameters;
 	struct temp_param *support_subboard_table;
+	enum oplus_dpdm_switch_mode dpdm_switch_mode;
+#if IS_ENABLED(CONFIG_HORAE_FLASH_LED_THERMAL)
+	struct oplus_ntc_switch ntc_switch_gpio;
+#endif /* CONFIG_HORAE_FLASH_LED_THERMAL */
 #endif
 
 	struct platform_device *pdev;
@@ -413,6 +429,7 @@ struct mtk_charger {
 	int pd_type;
 	bool pd_reset;
 	bool otg_enable;
+	bool oplus_pd_sdp_svid;
 	struct mutex ta_lock;
 
 	u32 bootmode;
@@ -428,6 +445,15 @@ struct mtk_charger {
 
 	struct mutex cable_out_lock;
 	int cable_out_cnt;
+
+	/* reverse charger	*/
+	bool reverse_enable;
+	bool high_reverse_enable;
+	uint32_t reverse_chg_svid;
+	bool source_plug_out;
+	int pre_source_vbus;
+	int power_role;
+	enum reverse_chg_msg_type msg_type;
 
 	/* system lock */
 	spinlock_t slock;
@@ -531,6 +557,8 @@ struct mtk_charger {
 	struct iio_channel	*usb_btb_temp_chan;
 	struct iio_channel	*master_cp_chan;
 	struct iio_channel	*slave_cp_chan;
+	struct iio_channel	*vbus_chan;
+	struct iio_channel	*vbat_pwr_chan;
 
 #ifdef CONFIG_THERMAL
 	struct thermal_zone_device *master_cp_temp_tzd;
@@ -540,6 +568,9 @@ struct mtk_charger {
 	struct thermal_zone_device *subboard_temp_tzd;
 	struct thermal_zone_device *bat_btb_temp_tzd;
 	struct thermal_zone_device *bat_sub_btb_temp_tzd;
+#if IS_ENABLED(CONFIG_HORAE_FLASH_LED_THERMAL)
+	struct thermal_zone_device *charger_ic_temp_tzd;
+#endif
 #endif
 
 	int ccdetect_gpio;
@@ -552,6 +583,7 @@ struct mtk_charger {
 	int chargeric_temp_volt;
 	int chargeric_temp;
 	int i_sub_board_temp;
+	int vbat_pwr_vol;
 	bool support_ntc_01c_precision;
 	bool ntc_temp_volt_1840mv;
 	bool cp_sub_btb_temp_share;
@@ -587,6 +619,9 @@ struct mtk_charger {
 	struct delayed_work charger_suspend_recovery_work;
 	struct delayed_work	publish_close_cp_item_work;
 	struct delayed_work svid_check_work;
+	struct delayed_work reverse_chg_svid_check_work;
+	struct delayed_work sink_request_check_work;
+	struct delayed_work source_pdo_check_work;
 	pd_msg_data pdo[PPS_PDO_MAX];
 	int cap_nr;
 	int sub_btb_valid_adc[OPLUS_SUB_BTB_MAX];

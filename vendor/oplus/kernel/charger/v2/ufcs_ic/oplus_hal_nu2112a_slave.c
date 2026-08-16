@@ -42,6 +42,8 @@
 #include <oplus_chg_monitor.h>
 #include "../voocphy/oplus_voocphy.h"
 #include "oplus_hal_nu2112a.h"
+#include <oplus_mms_wired.h>
+#include <oplus_chg_vooc.h>
 #define DEFAULT_OVP_REG_CONFIG	0x5C
 #define DEFAULT_OCP_REG_CONFIG	0x24
 #define TRACK_REG_ADDR_START	NU2112A_REG_07
@@ -214,12 +216,38 @@ static void nu2112a_slave_update_data(struct oplus_voocphy_manager *chip)
 		pr_info("data_block[%d] = %u\n", i, data_block[i]);
 	}
 	chip->slave_cp_ichg = ((data_block[0] << 8) | data_block[1]) * NU2112A_IBUS_ADC_LSB;
+	if (oplus_voocphy_mg)
+		oplus_voocphy_mg->slave_cp_ichg = chip->slave_cp_ichg;
 	pr_info("slave cp_ichg = %d int_flag = %d", chip->slave_cp_ichg, int_flag);
 }
 /*********************************************************************/
+static int oplus_chg_get_vooc_charging(void)
+{
+	int vooc_charging_status = 0;
+	struct oplus_mms *vooc_topic;
+	union mms_msg_data data = { 0 };
+	int rc;
+
+	vooc_topic = oplus_mms_get_by_name("vooc");
+	if (!vooc_topic)
+		return 0;
+
+	rc = oplus_mms_get_item_data(vooc_topic, VOOC_ITEM_VOOC_CHARGING, &data, true);
+	if (!rc)
+		vooc_charging_status = data.intval;
+
+	return vooc_charging_status;
+}
+
 int nu2112a_slave_get_ichg(struct oplus_voocphy_manager *chip)
 {
 	u8 slave_cp_enable;
+
+	if (oplus_chg_get_vooc_charging()) {
+		if (oplus_voocphy_mg)
+			return oplus_voocphy_mg->slave_cp_ichg;
+	}
+
 	nu2112a_slave_update_data(chip);
 
 	nu2112a_slave_get_chg_enable(chip, &slave_cp_enable);
@@ -335,28 +363,25 @@ static int nu2112a_slave_get_voocphy_enable(struct oplus_voocphy_manager *chip, 
 	return ret;
 }
 
-static int nu2112a_slave_set_chg_pmid2out(bool enable, int reason)
+static int nu2112a_slave_set_chg_pmid2out(struct oplus_voocphy_manager *chip, bool enable, int reason)
 {
-	if (!oplus_voocphy_mg)
-		return 0;
-
 	chg_err("nu2112a_slave_set_chg_pmid2out\n");
 
 	if (enable) {
 		if (reason == SETTING_REASON_SVOOC)
-			return nu2112a_slave_write_byte(oplus_voocphy_mg->slave_client, NU2112A_REG_05,
+			return nu2112a_slave_write_byte(chip->slave_client, NU2112A_REG_05,
 							0x31); /*PMID/2-VOUT < 10%VOUT*/
 		else if (reason == SETTING_REASON_VOOC)
-			return nu2112a_slave_write_byte(oplus_voocphy_mg->slave_client, NU2112A_REG_05,
+			return nu2112a_slave_write_byte(chip->slave_client, NU2112A_REG_05,
 							0x33);
 		else
 			chg_err("no type for slave_set_chg_pmid2out\n");
 	} else {
 		if (reason == SETTING_REASON_SVOOC)
-			return nu2112a_slave_write_byte(oplus_voocphy_mg->slave_client, NU2112A_REG_05,
+			return nu2112a_slave_write_byte(chip->slave_client, NU2112A_REG_05,
 							0xB1); /*PMID/2-VOUT < 10%VOUT*/
 		else if (reason == SETTING_REASON_VOOC)
-			return nu2112a_slave_write_byte(oplus_voocphy_mg->slave_client, NU2112A_REG_05,
+			return nu2112a_slave_write_byte(chip->slave_client, NU2112A_REG_05,
 							0xA3);
 		else
 			chg_err("no type for slave_set_chg_pmid2out\n");
@@ -365,17 +390,12 @@ static int nu2112a_slave_set_chg_pmid2out(bool enable, int reason)
 	return 0;
 }
 
-static bool nu2112a_slave_get_chg_pmid2out(void)
+static bool nu2112a_slave_get_chg_pmid2out(struct oplus_voocphy_manager *chip)
 {
 	int ret = 0;
 	u8 data = 0;
 
-	if (!oplus_voocphy_mg) {
-		chg_err("Failed\n");
-		return false;
-	}
-
-	ret = nu2112a_slave_read_byte(oplus_voocphy_mg->slave_client, NU2112A_REG_05, &data);
+	ret = nu2112a_slave_read_byte(chip->slave_client, NU2112A_REG_05, &data);
 	if (ret < 0) {
 		chg_err("read NU2112A_SLAVE_REG_05 error\n");
 		return false;

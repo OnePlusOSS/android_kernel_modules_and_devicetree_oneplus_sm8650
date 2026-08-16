@@ -32,3 +32,9 @@ config OPLUS_FEATURE_SENSOR_FEEDBACK
 	help
 	 Say 'y' or 'm' to support saving sensor minidump
 	 Say 'n' to not support saving sensor minidump
+
+config OPLUS_SENSOR_MAG_MATCH_NFC
+	tristate "CONFIG_OPLUS_SENSOR_MAG_MATCH_NFC"
+	help
+	 Say 'y' or 'm' to support mag match nfc
+	 Say 'n' to not support mag match nfc

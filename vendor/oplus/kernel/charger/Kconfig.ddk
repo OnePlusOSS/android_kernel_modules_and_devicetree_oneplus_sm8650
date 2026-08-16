@@ -193,9 +193,15 @@ source "$(KCONFIG_EXT_PREFIX)debug-kit/Kconfig.ddk"
 source "$(KCONFIG_EXT_PREFIX)config/Kconfig.ddk"
 source "$(KCONFIG_EXT_PREFIX)wireless_pen/Kconfig.ddk"
 source "$(KCONFIG_EXT_PREFIX)gauge_i2c_rst/Kconfig.ddk"
+source "$(KCONFIG_EXT_PREFIX)oplus_chg_symbol/Kconfig.ddk"
 
 config OPLUS_FEATURE_OLC
         tristate "Add for oplus log core"
         default n
         help
           Add for oplus log core.
+
+config OPLUS_MT6789_CHARGER
+	bool "MTK6789 support"
+	help
+	  Say Y here to declare MTK6789 support

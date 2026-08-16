@@ -26,6 +26,7 @@
 #ifdef OPLUS_FEATURE_CHG_BASIC
 #include <oplus_chg_ic.h>
 #include <oplus_chg_pps.h>
+#include <oplus_reverse_chg.h>
 #endif
 
 #define CHARGING_INTERVAL	10
@@ -312,6 +313,7 @@ typedef enum {
 	NTC_USB_BTB,
 	NTC_MASTER_CP_BTB,
 	NTC_SLAVE_CP_BTB,
+	NTC_VBAT_PWR_BTB,
 } NTC_TYPE;
 
 struct temp_param {
@@ -375,6 +377,7 @@ struct mtk_charger {
 	struct oplus_chg_ic_dev *ic_dev;
 	struct oplus_chg_ic_dev *gauge_ic_dev;
 	struct oplus_chg_ic_dev *pps_ic;
+	struct oplus_chg_ic_dev *reverse_chg_ic_dev;
 	bool wls_boost_soft_start;
 	int wls_set_boost_vol;
 	struct oplus_mms *gauge_topic;
@@ -432,6 +435,7 @@ struct mtk_charger {
 	int pd_type;
 	bool pd_reset;
 	bool otg_enable;
+	bool oplus_pd_sdp_svid;
 	struct mutex ta_lock;
 
 	u32 bootmode;
@@ -446,6 +450,13 @@ struct mtk_charger {
 
 	struct mutex cable_out_lock;
 	int cable_out_cnt;
+
+	/* reverse charger	*/
+	bool reverse_enable;
+	bool high_reverse_enable;
+	bool source_plug_out;
+	u32 reverse_chg_svid;
+	int pre_source_vbus;
 
 	/* system lock */
 	spinlock_t slock;
@@ -549,6 +560,7 @@ struct mtk_charger {
 	struct iio_channel	*usb_btb_temp_chan;
 	struct iio_channel	*master_cp_chan;
 	struct iio_channel	*slave_cp_chan;
+	struct iio_channel	*vbat_pwr_chan;
 
 #ifdef CONFIG_THERMAL
 	struct thermal_zone_device *master_cp_temp_tzd;
@@ -568,6 +580,7 @@ struct mtk_charger {
 	int chargeric_temp_volt;
 	int chargeric_temp;
 	int i_sub_board_temp;
+	int vbat_pwr_vol;
 	bool support_ntc_01c_precision;
 	bool ntc_temp_volt_1840mv;
 	bool support_subboard_ntc;
@@ -575,10 +588,12 @@ struct mtk_charger {
 
 	struct tcpc_device *tcpc;
 	struct adapter_power_cap srccap;
+	enum reverse_chg_msg_type msg_type;
 
 	bool chrdet_state;
 	bool wd0_detect;
 	int typec_state;
+	bool sink_request_enable;
 	struct delayed_work status_keep_clean_work;
 	struct delayed_work hvdcp_detect_work;
 	struct delayed_work detach_clean_work;
@@ -602,6 +617,9 @@ struct mtk_charger {
 	struct delayed_work charger_suspend_recovery_work;
 	struct delayed_work publish_close_cp_item_work;
 	struct delayed_work svid_check_work;
+	struct delayed_work reverse_chg_svid_check_work;
+	struct delayed_work sink_request_check_work;
+	struct delayed_work source_pdo_check_work;
 	pd_msg_data pdo[PPS_PDO_MAX];
 	int cap_nr;
 #endif

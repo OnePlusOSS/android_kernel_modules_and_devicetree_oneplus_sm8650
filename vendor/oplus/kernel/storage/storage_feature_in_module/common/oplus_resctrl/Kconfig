@@ -1,0 +1,13 @@
+config OPLUS_RESCTRL
+	tristate "oplus resctrl module"
+	depends on BLOCK
+	default y
+	help
+	  Support oplus resctrl
+
+config OPLUS_RESCTRL_DEBUG
+	bool "oplus resctrl debug"
+	depends on OPLUS_RESCTRL
+	default n
+	help
+	  use oplus resctrl debug log

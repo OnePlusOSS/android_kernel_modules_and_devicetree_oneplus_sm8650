@@ -47,13 +47,16 @@ struct sc6607 {
 	s32 chip_id;
 	bool error_reported;
 	bool vac_support;
+	bool shutdown_pending;
 	bool work_start;
+	bool is_sc6607a;
 	enum oplus_cp_work_mode cp_work_mode;
 	enum oplus_dpdm_switch_mode dpdm_switch_mode;
 	int charge_type;
 	int interrupt_flag;
 	int ovp_reg;
 	int ocp_reg;
+	int vac_vbus_ovp_reg;
 	struct device *dev;
 	struct i2c_client *client;
 	struct oplus_voocphy_manager *voocphy;
@@ -316,6 +319,24 @@ static s32 sc6607_voocphy_write_word(struct i2c_client *client, u8 reg, u16 val)
 	return 0;
 }
 
+static int oplus_voocphy_get_fastchg_commu_ing(void)
+{
+	int fastchg_commu_ing = 0;
+	struct oplus_mms *vooc_topic;
+	union mms_msg_data data = { 0 };
+	int rc;
+
+	vooc_topic = oplus_mms_get_by_name("vooc");
+	if (!vooc_topic)
+		return 0;
+
+	rc = oplus_mms_get_item_data(vooc_topic, VOOC_ITEM_FASTCHG_COMMU_ING, &data, true);
+	if (!rc)
+		fastchg_commu_ing = data.intval;
+
+	return fastchg_commu_ing;
+}
+
 static const u32 sy6607_adc_step[] = {
 	2500, 3750, 5000, 1250, 1250, 1220, 1250, 9766, 9766, 5, 156,
 };
@@ -348,6 +369,7 @@ static int sc6607_hk_get_adc(struct sc6607 *chip, enum SC6607_ADC_MODULE id)
 	u32 reg = SC6607_REG_HK_IBUS_ADC + id * SC6607_ADC_REG_STEP;
 	u8 val[2] = { 0 };
 	u64 ret;
+	int rc = 0;
 	u8 adc_open = 0;
 
 	if (!chip)
@@ -361,10 +383,10 @@ static int sc6607_hk_get_adc(struct sc6607 *chip, enum SC6607_ADC_MODULE id)
 
 	mutex_lock(&chip->adc_read_lock);
 	sc6607_field_write(chip, F_ADC_FREEZE, 1);
-	ret = sc6607_bulk_read(chip, reg, val, sizeof(val));
+	rc = sc6607_bulk_read(chip, reg, val, sizeof(val));
 	sc6607_field_write(chip, F_ADC_FREEZE, 0);
 	mutex_unlock(&chip->adc_read_lock);
-	if (ret < 0) {
+	if (rc < 0) {
 		return -EINVAL;
 	}
 	ret = val[1] + (val[0] << 8);
@@ -373,35 +395,19 @@ static int sc6607_hk_get_adc(struct sc6607 *chip, enum SC6607_ADC_MODULE id)
 	}  else {
 		ret *= sy6607_adc_step[id];
 	}
-	return ret;
+	return (int)ret;
 }
 
 static int sc6607_adc_read_ibus(struct sc6607 *chip)
 {
 	int ibus = 0;
-	int slave_ibus = 0;
-	int ibus_devation = 0;
-	bool reset_read_ibus = false;
 
 	if (!chip || !chip->voocphy)
 		return -EINVAL;
 
-	ibus = chip->voocphy->master_cp_ichg;
-	if (chip->voocphy->voocphy_dual_cp_support) {
-		slave_ibus = chip->voocphy->slave_cp_ichg;
-		ibus_devation = abs(ibus - slave_ibus);
-		if (ibus_devation > chip->voocphy->cp_ibus_devation)
-			reset_read_ibus = true;
-	}
-
-	if (chip->voocphy->fastchg_commu_ing && !reset_read_ibus) {
-		chg_info("svooc in communication\n");
-		return ibus;
-	} else {
-		ibus = sc6607_hk_get_adc(chip, SC6607_ADC_IBUS);
-		ibus /= SC6607_UA_PER_MA;
-		return ibus;
-	}
+	ibus = sc6607_hk_get_adc(chip, SC6607_ADC_IBUS);
+	ibus /= SC6607_UA_PER_MA;
+	return ibus;
 }
 
 static int sc6607_adc_read_vbus_volt(struct sc6607 *chip)
@@ -411,7 +417,7 @@ static int sc6607_adc_read_vbus_volt(struct sc6607 *chip)
 	if (!chip || !chip->voocphy)
 		return -EINVAL;
 
-	if (chip->voocphy != NULL && chip->voocphy->fastchg_commu_ing) {
+	if (oplus_voocphy_get_fastchg_commu_ing()) {
 		chg_info("svooc in communication\n");
 		return chip->voocphy ->cp_vbus;
 	}
@@ -426,6 +432,11 @@ static int sc6607_adc_read_vac(struct sc6607 *chip)
 	int vac_vol = 0;
 	if (!chip)
 		return -EINVAL;
+
+	if (chip->voocphy && oplus_voocphy_get_fastchg_commu_ing()) {
+		chg_info("svooc in communication\n");
+		return chip->voocphy->cp_vac;
+	}
 
 	vac_vol = sc6607_hk_get_adc(chip, SC6607_ADC_VAC);
 	vac_vol /= SC6607_UV_PER_MV;
@@ -529,6 +540,7 @@ static void sc6607_voocphy_update_data(struct oplus_voocphy_manager *voocphy)
 	voocphy->cp_vsys = sc6607_hk_get_adc(chip, SC6607_ADC_VSYS);
 	voocphy->cp_vsys /= SC6607_UV_PER_MV;
 
+	voocphy->master_cp_ichg = voocphy->cp_ichg;
 	chg_info("ichg=%d vbus=%d vac=%d vbat=%d vsys=%d int_flag=%d tsbus=%d tsbat=%d\n",
 			voocphy->cp_ichg, voocphy->cp_vbus, voocphy->cp_vac, voocphy->cp_vbat,
 			voocphy->cp_vsys, chip->interrupt_flag, voocphy->cp_tsbus, voocphy->cp_tsbat);
@@ -558,11 +570,27 @@ static int sc6607_voocphy_get_cp_ichg(struct oplus_voocphy_manager *voocphy)
 	int cp_ichg = 0;
 	u8 cp_enable = 0;
 	struct sc6607 *chip;
+	bool reset_read_ibus = false;
+	int ibus_devation = 0;
+	int slave_ibus = 0;
 
 	if (!voocphy || !voocphy->priv_data)
 		return 0;
 
 	chip = voocphy->priv_data;
+
+	if (voocphy->voocphy_dual_cp_support) {
+		slave_ibus = voocphy->slave_cp_ichg;
+		ibus_devation = abs(voocphy->cp_ichg - slave_ibus);
+		if (ibus_devation > voocphy->cp_ibus_devation) {
+			chg_info("ibus_devation is %d\n" , ibus_devation);
+			reset_read_ibus = true;
+		}
+	}
+	if (oplus_voocphy_get_fastchg_commu_ing() && !reset_read_ibus) {
+		chg_info("svooc in communication\n");
+		return voocphy->master_cp_ichg;
+	}
 
 	sc6607_voocphy_get_chg_enable(voocphy, &cp_enable);
 
@@ -663,7 +691,7 @@ static int sc6607_adc_read_vbat(struct sc6607 *chip)
 	if (!chip || !chip->voocphy)
 		return -EINVAL;
 
-	if (chip->voocphy->fastchg_commu_ing) {
+	if (oplus_voocphy_get_fastchg_commu_ing()) {
 		chg_info("svooc in communication\n");
 		return chip->voocphy->cp_vbat;
 	}
@@ -769,6 +797,48 @@ static bool sc6607_voopchy_get_pd_svooc_config(struct oplus_voocphy_manager *voo
 		return false;
 }
 
+static int sc6607a_set_chg_pmid2vout(struct oplus_voocphy_manager *chip, bool enable, int reason)
+{
+	if (!chip) {
+		chg_err("Failed\n");
+		return 0;
+	}
+
+	if (enable) {
+		if (reason == SETTING_REASON_SVOOC || reason == SETTING_REASON_VOOC)
+			return sc6607_voocphy_write_byte(chip->client, SC6607_REG_PMID2OUT_OVP,
+			    SC6607A_REG_PMID2OUT_OVP_600MV);
+		else
+			chg_err("no type for set_chg_pmid2out\n");
+	}
+
+	return 0;
+}
+
+static bool sc6607a_get_chg_pmid2vout(struct oplus_voocphy_manager *chip)
+{
+	int ret = 0;
+	u8 data = 0;
+
+	if (!chip) {
+		chg_err("Failed\n");
+		return false;
+	}
+
+	ret = sc6607_voocphy_read_byte(chip->client, SC6607_REG_PMID2OUT_OVP, &data);
+	if (ret < 0) {
+		chg_err("read SC6607A REG_PMID2OUT_OVP error\n");
+		return false;
+	}
+
+	chg_info("SC6607A REG_PMID2OUT_OVP = 0x%0x\n", data);
+
+	if (data == SC6607A_REG_PMID2OUT_OVP_600MV)
+		return true;
+	else
+		return false;
+}
+
 static int sc6607_voocphy_set_adc_enable(struct oplus_voocphy_manager *voocphy, bool enable)
 {
 	struct sc6607 *chip;
@@ -818,6 +888,17 @@ static int sc6607_set_charge_watchdog_timer(struct sc6607 *voocphy, u32 timeout)
 
 static void sc6607_voocphy_send_handshake(struct oplus_voocphy_manager *voocphy)
 {
+	struct sc6607 *chip;
+
+	if (!voocphy || !voocphy->priv_data)
+		return;
+
+	chip = voocphy->priv_data;
+	if (chip->shutdown_pending) {
+		chg_info("skip handshake pulse in shutdown state\n");
+		return;
+	}
+
 	chg_info("\n");
 	sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_PHY_CTRL, 0x81);
 }
@@ -835,15 +916,18 @@ static int sc6607_voocphy_reset_voocphy(struct oplus_voocphy_manager *voocphy)
 	chg_info("reset\n");
 	sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_VOOCPHY_IRQ, 0x7F);
 	/* close CP */
-	sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_CP_CTRL, 0x80);
+	if (chip->is_sc6607a) {
+		sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_CP_CTRL, 0x40);
+		sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_DPDM_CTRL_2, 0x00);
+		sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_DPDM_NONSTD_STAT, 0x00);
+	} else {
+		sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_CP_CTRL, 0x80);
+	}
 
 	/* hwic config with plugout */
 	reg_data = 0x20 | (voocphy->ovp_reg & 0x1f);
 	sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_VBATSNS_OVP, reg_data); /*Vbat ovp 4.65V*/
-	if (chip->chip_id == SC6607_1P0_CHIP_ID)
-		sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_VAC_VBUS_OVP, 0x21); /*Vac ovp 6.5V,Vbus OVP 10V*/
-	else
-		sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_VAC_VBUS_OVP, 0x01); /*Vac ovp 12V,Vbus OVP 10V*/
+	sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_VAC_VBUS_OVP, chip->vac_vbus_ovp_reg); /*Vac ovp 12V,Vbus OVP 10V*/
 	sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_IBUS_OCP_UCP, 0x6B); /*ucp deglitch1 160ms,IBUS OCP 3.75A*/
 
 	/* clear tx data */
@@ -893,10 +977,7 @@ static int sc6607_voocphy_init_device(struct oplus_voocphy_manager *voocphy)
 
 	chip = voocphy->priv_data;
 
-	if (chip->chip_id == SC6607_1P0_CHIP_ID)
-		sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_VAC_VBUS_OVP, 0x11); /*Vac ovp 6.5V	 Vbus_ovp 10V*/
-	else
-		sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_VAC_VBUS_OVP, 0x01); /*Vac ovp 12V	 Vbus_ovp 10V*/
+	sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_VAC_VBUS_OVP, chip->vac_vbus_ovp_reg); /*Vac ovp 12V	 Vbus_ovp 10V*/
 	reg_data = 0x20 | (voocphy->ovp_reg & 0x1f);
 	sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_VBATSNS_OVP, reg_data); /*VBAT_OVP:4.65V */
 	sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_IBUS_OCP_UCP, 0x6B); /* IBUS_OCP_UCP:3.75A */
@@ -922,7 +1003,13 @@ static int sc6607_voocphy_init_vooc(struct oplus_voocphy_manager *voocphy)
 	sc6607_voocphy_init_device(voocphy);
 
 	sc6607_voocphy_write_word(voocphy->client, SC6607_REG_PREDATA_VALUE, 0x0);
-	sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_DPDM_CTRL, 0x24); /*dp dm pull down 20k*/
+	if (chip->is_sc6607a) {
+		sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_DPDM_CTRL, 0xB4);
+		sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_DPDM_CTRL_2, 0x39);
+		sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_DPDM_NONSTD_STAT, 0x08);
+	} else {
+		sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_DPDM_CTRL, 0x24); /*dp dm pull down 20k*/
+	}
 	sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_T5_T7_SETTING, 0xD1); /*T5~T7 setting*/
 	sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_VOOCPHY_IRQ, 0x05); /*mask rx start and txdone flag*/
 
@@ -962,16 +1049,17 @@ static int sc6607_voocphy_svooc_hw_setting(struct oplus_voocphy_manager *voocphy
 
 	chip = voocphy->priv_data;
 
-	if (chip->chip_id == SC6607_1P0_CHIP_ID)
-		ret = sc6607_field_write(chip, F_VAC_OVP, 0x02); /*VAC_OVP:12v VBUS_OVP:10v*/
-	else
-		ret = sc6607_field_write(chip, F_VAC_OVP, 0x00); /*VAC_OVP:12v VBUS_OVP:10v*/
+	ret = sc6607_field_write(chip, F_VAC_OVP, 0x00); /*VAC_OVP:12v VBUS_OVP:10v*/
 	ret = sc6607_field_write(chip, F_VBUS_OVP, 0x02);
 	reg_data = voocphy->ocp_reg & 0xff;
 	ret = sc6607_field_write(chip, F_IBUS_OCP, reg_data); /*IBUS_OCP_UCP:4.25A*/
 	ret = sc6607_set_charge_watchdog_timer(chip, 1000);
 	ret = sc6607_field_write(chip, F_MODE, 0x0);
-	ret = sc6607_field_write(chip, F_PMID2OUT_OVP, 0x07);
+	if (chip->is_sc6607a)
+		ret = sc6607_voocphy_write_byte(voocphy->client,
+		    SC6607_REG_PMID2OUT_OVP, 0x26); /*REG_PMID2OUT_OVP set 2000mv */
+	else
+		ret = sc6607_field_write(chip, F_PMID2OUT_OVP, 0x07);
 	ret = sc6607_field_write(chip, F_CHG_EN, true);
 	ret = sc6607_field_write(chip, F_PERFORMANCE_EN, true);
 	sc6607_voocphy_read_byte(voocphy->client, SC6607_REG_CP_CTRL, &data);
@@ -991,10 +1079,7 @@ static int sc6607_voocphy_vooc_hw_setting(struct oplus_voocphy_manager *voocphy)
 
 	chip = voocphy->priv_data;
 
-	if (chip->chip_id == SC6607_1P0_CHIP_ID)
-		ret = sc6607_field_write(chip, F_VAC_OVP, 0); /*VAC_OVP:6.5v VBUS_OVP:6v*/
-	else
-		ret = sc6607_field_write(chip, F_VAC_OVP, 2); /*VAC_OVP:6.5v VBUS_OVP:6v*/
+	ret = sc6607_field_write(chip, F_VAC_OVP, 2); /*VAC_OVP:6.5v VBUS_OVP:6v*/
 	ret = sc6607_field_write(chip, F_VBUS_OVP, 0);
 	ret = sc6607_field_write(chip, F_IBUS_OCP, 0x0F); /*IBUS_OCP_UCP:4.8A,160ms UCP*/
 	ret = sc6607_set_charge_watchdog_timer(chip, 1000);
@@ -1002,6 +1087,9 @@ static int sc6607_voocphy_vooc_hw_setting(struct oplus_voocphy_manager *voocphy)
 	ret = sc6607_field_write(chip, F_MODE, 0x1);
 	ret = sc6607_field_write(chip, F_CHG_EN, true);
 	ret = sc6607_field_write(chip, F_PERFORMANCE_EN, true);
+	if (chip->is_sc6607a)
+		ret = sc6607_voocphy_write_byte(voocphy->client,
+		    SC6607_REG_PMID2OUT_OVP, 0x26); /*REG_PMID2OUT_OVP set 2000mv */
 	sc6607_voocphy_set_sstimeout_ucp_enable(voocphy, false);
 	return 0;
 }
@@ -1017,10 +1105,7 @@ static int sc6607_voocphy_5v2a_hw_setting(struct oplus_voocphy_manager *voocphy)
 
 	chip = voocphy->priv_data;
 
-	if (chip->chip_id == SC6607_1P0_CHIP_ID)
-		ret = sc6607_field_write(chip, F_VAC_OVP, 0); /*VAC_OVP:6.5v VBUS_OVP:6v*/
-	else
-		ret = sc6607_field_write(chip, F_VAC_OVP, 2); /*VAC_OVP:6.5v VBUS_OVP:6v*/
+	ret = sc6607_field_write(chip, F_VAC_OVP, 2); /*VAC_OVP:6.5v VBUS_OVP:6v*/
 	ret = sc6607_field_write(chip, F_VBUS_OVP, 0);
 	ret = sc6607_field_write(chip, F_MODE, 0x0); /*close CPx*/
 	ret = sc6607_field_write(chip, F_CP_EN, 0x0);
@@ -1046,10 +1131,7 @@ static int sc6607_voocphy_pdqc_hw_setting(struct oplus_voocphy_manager *voocphy)
 
 	reg_data = 0x20 | (voocphy->ovp_reg & 0x1f);
 	sc6607_voocphy_write_byte(voocphy->client, SC6607_REG_VBATSNS_OVP, reg_data); /* VBAT_OVP:4.65V */
-	if (chip->chip_id == SC6607_1P0_CHIP_ID)
-		ret = sc6607_field_write(chip, F_VAC_OVP, 2); /*VAC_OVP:12v VBUS_OVP:10v*/
-	else
-		ret = sc6607_field_write(chip, F_VAC_OVP, 0); /*VAC_OVP:12v VBUS_OVP:10v*/
+	ret = sc6607_field_write(chip, F_VAC_OVP, 0); /*VAC_OVP:12v VBUS_OVP:10v*/
 	ret = sc6607_field_write(chip, F_VBUS_OVP, 1);
 	ret = sc6607_field_write(chip, F_PHY_EN, 0x0); /* close CP*/
 	ret = sc6607_field_write(chip, F_MODE, 0x0);
@@ -1168,6 +1250,22 @@ static int sc6607_voocphy_set_sstimeout_ucp_enable(struct oplus_voocphy_manager 
 	return rc;
 }
 
+static int sc6607a_get_chip_id(struct oplus_voocphy_manager *chip)
+{
+	struct sc6607 *dev;
+	dev = chip->priv_data;
+
+	if (!dev) {
+		chg_err("sc6607 chip is NULL\n");
+		return CHIP_ID_DEFAULT;
+	}
+
+	if (dev->is_sc6607a)
+		return CHIP_ID_SC6607A;
+	else
+		return CHIP_ID_DEFAULT;
+}
+
 static struct oplus_voocphy_operations sc6607_voocphy_ops = {
 	.hardware_init = sc6607_voocphy_hardware_init,
 	.hw_setting = sc6607_voocphy_hw_setting,
@@ -1190,6 +1288,9 @@ static struct oplus_voocphy_operations sc6607_voocphy_ops = {
 	.set_pd_svooc_config = sc6607_voopchy_set_pd_svooc_config,
 	.get_pd_svooc_config = sc6607_voopchy_get_pd_svooc_config,
 	.get_voocphy_enable = sc6607_get_voocphy_enable,
+	.get_chip_id = sc6607a_get_chip_id,
+	.set_chg_pmid2out = sc6607a_set_chg_pmid2vout,
+	.get_chg_pmid2out = sc6607a_get_chg_pmid2vout,
 	.dump_voocphy_reg = sc6607_voocphy_dump_reg_in_err_issue,
 	.check_cp_int_happened = sc6607_voocphy_check_cp_int_happened,
 	.set_sstimeout_ucp_enable = sc6607_voocphy_set_sstimeout_ucp_enable,
@@ -1360,16 +1461,16 @@ static int sc6607_vooc_hw_setting(struct sc6607 *chip)
 	chg_info("\n");
 	ret = sc6607_field_write(chip, F_VBATSNS_OVP, chip->ovp_reg); /*VBAT_OVP:4.8V*/
 	ret = sc6607_field_write(chip, F_IBUS_OCP, chip->ocp_reg); /*IBUS_OCP_UCP:4.75A*/
-	if (chip->chip_id == SC6607_1P0_CHIP_ID)
-		ret = sc6607_field_write(chip, F_VAC_OVP, 0); /*VAC_OVP:6.5v VBUS_OVP:6v*/
-	else
-		ret = sc6607_field_write(chip, F_VAC_OVP, 2); /*VAC_OVP:6.5v VBUS_OVP:6v*/
+	ret = sc6607_field_write(chip, F_VAC_OVP, 2); /*VAC_OVP:6.5v VBUS_OVP:6v*/
 	ret = sc6607_field_write(chip, F_VBUS_OVP, 0); /*VBUS_OVP:6v*/
 	ret = sc6607_field_write(chip, F_MODE, 0x1); /*bypass*/
 	ret = sc6607_field_write(chip, F_CP_EN, 0x0);
 	ret = sc6607_field_write(chip, F_PHY_EN, 0x0); /*VOOC_disable*/
 	ret = sc6607_field_write(chip, F_CHG_EN, true); /*performance mode disable , CP mode*/
 	ret = sc6607_field_write(chip, F_PERFORMANCE_EN, true);
+	if (chip->is_sc6607a)
+		ret = sc6607_voocphy_write_byte(chip->client,
+		    SC6607_REG_PMID2OUT_OVP, 0x26); /*REG_PMID2OUT_OVP set 2000mv */
 	return ret;
 }
 
@@ -1383,16 +1484,17 @@ static int sc6607_svooc_hw_setting(struct sc6607 *chip)
 	chg_info("\n");
 	ret = sc6607_field_write(chip, F_VBATSNS_OVP, chip->ovp_reg); /*VBAT_OVP:4.8V*/
 	ret = sc6607_field_write(chip, F_IBUS_OCP, chip->ocp_reg); /*IBUS_OCP_UCP:4750A*/
-	if (chip->chip_id == SC6607_1P0_CHIP_ID)
-		ret = sc6607_field_write(chip, F_VAC_OVP, 2); /*VAC_OVP:12v VBUS_OVP:10v*/
-	else
-		ret = sc6607_field_write(chip, F_VAC_OVP, 0); /*VAC_OVP:12v VBUS_OVP:10v*/
+	ret = sc6607_field_write(chip, F_VAC_OVP, 0); /*VAC_OVP:12v VBUS_OVP:10v*/
 	ret = sc6607_field_write(chip, F_VBUS_OVP, 2);    /*VBUS_OVP:12v*/
 	ret = sc6607_field_write(chip, F_PHY_EN, 0x0); /* close CP*/
 	ret = sc6607_field_write(chip, F_MODE, 0x0);
 	ret = sc6607_field_write(chip, F_CHG_EN, true); /*performance mode disable , CP mode*/
 	ret = sc6607_field_write(chip, F_PERFORMANCE_EN, true);
-	ret = sc6607_field_write(chip, F_PMID2OUT_OVP, 0x06); /*F_PMID2OUT_OVP set 600mv */
+	if (chip->is_sc6607a)
+		ret = sc6607_voocphy_write_byte(chip->client,
+		    SC6607_REG_PMID2OUT_OVP, 0x26); /*REG_PMID2OUT_OVP set 2000mv */
+	else
+		ret = sc6607_field_write(chip, F_PMID2OUT_OVP, 0x06); /*F_PMID2OUT_OVP set 550mv */
 	return ret;
 }
 
@@ -1778,33 +1880,18 @@ static int sc6607_cp_get_work_status(struct oplus_chg_ic_dev *ic_dev, bool *star
 	}
 	chip = oplus_chg_ic_get_priv_data(ic_dev);
 
-	rc = sc6607_field_read(chip, F_CP_EN, &data);
+	if (!chip) {
+		chg_err("chip is NULL\n");
+		return -ENODEV;
+	}
+
+	rc = sc6607_field_read(chip, F_SWITCHING_STAT, &data);
 	if (rc < 0) {
-		chg_err("read F_CP_EN error, rc=%d\n", rc);
+		chg_err("read F_SWITCHING_STAT error, rc=%d\n", rc);
 		return rc;
 	}
 
 	*start = data & BIT(0);
-
-	return 0;
-}
-
-static int sc6607_cp_adc_enable(struct oplus_chg_ic_dev *ic_dev, bool en)
-{
-	struct sc6607 *chip;
-	int rc;
-
-	if (ic_dev == NULL) {
-		chg_err("oplus_chg_ic_dev is NULL");
-		return -ENODEV;
-	}
-	chip = oplus_chg_ic_get_priv_data(ic_dev);
-
-	rc = sc6607_field_write(chip, F_ADC_EN, en);
-	if (rc < 0) {
-		chg_err("read F_ADC_EN error, rc=%d\n", rc);
-		return rc;
-	}
 
 	return 0;
 }
@@ -1861,6 +1948,40 @@ static int sc6607_cp_set_ucp_disable(struct oplus_chg_ic_dev *ic_dev, bool disab
 
 	chg_info("%s %s\n", chip->dev->of_node->name, disable ? "disable" : "enable");
 	sc6607_field_write(chip, F_IBUS_UCP_DIS, disable);
+	return 0;
+}
+
+static int sc6607_cp_set_pmid2vout_ovp_enable(struct oplus_chg_ic_dev *ic_dev, bool enable)
+{
+	struct sc6607 *chip;
+	int rc;
+	u8 data = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_priv_data(ic_dev);
+
+	if (!chip->is_sc6607a)
+		return 0;
+
+	rc = sc6607_voocphy_read_byte(chip->client, SC6607_REG_PMID2OUT_OVP, &data);
+	if (rc < 0) {
+		chg_err("read SC6607A REG_PMID2OUT_OVP error\n");
+		return -EIO;
+	}
+
+	chg_info("SC6607A REG_PMID2OUT_OVP = 0x%0x, enable = %d\n", data, enable);
+
+	if (enable && (data != SC6607A_REG_PMID2OUT_OVP_600MV)) {
+		rc = sc6607_voocphy_write_byte(chip->client, SC6607_REG_PMID2OUT_OVP, SC6607A_REG_PMID2OUT_OVP_600MV);
+		if (rc < 0) {
+			chg_err("write SC6607A REG_PMID2OUT_OVP error\n");
+			return -EIO;
+		}
+	}
+
 	return 0;
 }
 
@@ -1927,9 +2048,6 @@ static void *sc6607_cp_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_chg_
 	case OPLUS_IC_FUNC_CP_GET_WORK_STATUS:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_GET_WORK_STATUS, sc6607_cp_get_work_status);
 		break;
-	case OPLUS_IC_FUNC_CP_SET_ADC_ENABLE:
-		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_ADC_ENABLE, sc6607_cp_adc_enable);
-		break;
 	case OPLUS_IC_FUNC_CP_WATCHDOG_RESET:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_WATCHDOG_RESET, sc6607_cp_watchdog_reset);
 		break;
@@ -1941,6 +2059,9 @@ static void *sc6607_cp_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_chg_
 		break;
 	case OPLUS_IC_FUNC_CP_SET_SSTIMEOUT_UCP_ENABLE:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_SSTIMEOUT_UCP_ENABLE, sc6607_cp_set_sstimeout_ucp_enable);
+		break;
+	case OPLUS_IC_FUNC_CP_SET_PMID2VOUT_OVP_ENABLE:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_PMID2VOUT_OVP_ENABLE, sc6607_cp_set_pmid2vout_ovp_enable);
 		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);
@@ -2225,23 +2346,32 @@ static void sc6607_subscribe_error_topic(struct oplus_mms *topic, void *prv_data
 
 static int sc6607_check_device_id(struct sc6607 *chip)
 {
-	s32 chip_id;
+	int ret;
+	u8 chip_id;
 
 	if (!chip)
 		return -EINVAL;
 
-	chip_id = sc6607_voocphy_read_word(chip->client, SC6607_REG_DEVICE_ID);
-	if (chip_id < 0) {
-		chip->chip_id = SC6607_1P0_CHIP_ID;
-		return chip_id;
+	chip->is_sc6607a = false;
+	ret = sc6607_voocphy_read_byte(chip->client, SC6607_REG_DEVICE_ID, &chip_id);
+	if (ret < 0) {
+		return ret;
 	}
+
+	if (chip_id == SC6607A_CHIP_ID)
+		chip->is_sc6607a = true;
+
 	chip->chip_id = chip_id;
 	chg_info("chip_id:%d\n", chip->chip_id);
 
 	return 0;
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 3, 0))
+static int sc6607_voocphy_probe(struct i2c_client *client)
+#else
 static int sc6607_voocphy_probe(struct i2c_client *client, const struct i2c_device_id *id)
+#endif
 {
 	struct sc6607 *chip;
 	struct oplus_voocphy_manager *voocphy;
@@ -2294,6 +2424,11 @@ static int sc6607_voocphy_probe(struct i2c_client *client, const struct i2c_devi
 
 	chip->vac_support = of_property_read_bool(chip->dev->of_node, "oplus,vac_support");
 	chg_info("vac_support=%d\n", chip->vac_support);
+
+	ret = of_property_read_u32(chip->dev->of_node, "vac_vbus_ovp_reg", &chip->vac_vbus_ovp_reg);
+	if(ret < 0)
+		chip->vac_vbus_ovp_reg = 0x01;
+	chg_info("vac_vbus_ovp_reg = 0x%2x\n", chip->vac_vbus_ovp_reg);
 
 	voocphy->ops = &sc6607_voocphy_ops;
 	ret = oplus_register_voocphy(voocphy);
@@ -2414,6 +2549,15 @@ static int sc6607_voocphy_remove(struct i2c_client *client)
 
 static void sc6607_voocphy_shutdown(struct i2c_client *client)
 {
+	struct oplus_voocphy_manager *voocphy = i2c_get_clientdata(client);
+	struct sc6607 *chip;
+
+	if (!voocphy || !voocphy->priv_data)
+		return;
+
+	chip = voocphy->priv_data;
+	chip->shutdown_pending = true;
+	chg_info("set shutdown flag, block handshake pulse\n");
 	return;
 }
 

@@ -349,7 +349,7 @@
 		/* SW Support Feature Control */
 		tp_data_record_support;
 		stats_upload_support;
-
+		fingerprint_not_report_in_suspend;
 		S3910_PANEL7 {
 			touchpanel,tx-rx-num = <18 40>;
 		};

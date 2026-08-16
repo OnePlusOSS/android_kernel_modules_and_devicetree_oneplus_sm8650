@@ -253,7 +253,8 @@ static void inr_strategy_ref_region_thr_update(
 {
 	int i;
 
-	memcpy(strategy->dynamic_data, strategy->default_data, strategy->data_num);
+	for (i = 0; i < strategy->data_num; i++)
+		strategy->dynamic_data[i] = strategy->default_data[i];
 
 	if ((pre_index > curr_index) &&
 	    (pre_index - curr_index == 1) &&

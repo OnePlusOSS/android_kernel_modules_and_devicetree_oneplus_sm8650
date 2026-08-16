@@ -17,6 +17,17 @@ struct dfu_ota_data *bat_data = NULL;
 struct dfu_ota_data *bin_data = NULL;
 struct dfu_ota_data *tp_data = NULL;
 
+static int handle_firmware_validation(const struct firmware **fw_entry_ptr,
+                                     u32 *fw_data_count, const unsigned char **firmware_data,
+                                     u32 *checksum, int *version);
+static int handle_dfu_ota_update(const unsigned char *firmware_data, u32 fw_data_count);
+static int handle_standard_ota_update(const unsigned char *firmware_data, u32 fw_data_count,
+                                     u32 checksum, int version);
+static int handle_tp_ota_update(const unsigned char *firmware_data, u32 fw_data_count);
+static int handle_kb_ota_update(const unsigned char *firmware_data, u32 fw_data_count);
+static void cleanup_resources(const struct firmware *fw_entry);
+static void cleanup_dfu_data(void);
+
 // calulator crc32
 static u32 dfu_crc32(u8 const * p_data, size_t size, u32 const * p_crc)
 {
@@ -422,6 +433,22 @@ static inline struct dfu_ota_data *get_fw_data(const unsigned char *fw_data, u32
     return data;
 }
 
+static void cleanup_dfu_data(void)
+{
+    if (bat_data) {
+        kfree(bat_data);
+        bat_data = NULL;
+    }
+    if (bin_data) {
+        kfree(bin_data);
+        bin_data = NULL;
+    }
+    if (tp_data) {
+        kfree(tp_data);
+        tp_data = NULL;
+    }
+}
+
 static int kpd_fw_dfu_isvalid(const unsigned char *fw_data, u32 count)
 {
     u32 fwinfo_addr = 0;
@@ -665,7 +692,7 @@ static int kpd_fw_dfu_update(const unsigned char *fw_data, u32 count, u32 checks
     msleep(50);
     //send TP data or KB data end,set heartbeat timeout to 2s
     if (type != 1) {
-        max_disconnect_count = 40; //2s
+        max_disconnect_count = DFU_DISCONNECT_COUNT; //2s
     }
     ret = pogo_keyboard_dfu_start_end(len, 0, checksum, type, 0);
     if (ret) {
@@ -892,7 +919,7 @@ do_restart:
         return ret;
     }
     msleep(50);
-    max_disconnect_count = 40; //2s
+    max_disconnect_count = DFU_DISCONNECT_COUNT; //2s
 
     ret = tp_dfu_end(tp_package_count, checksum);
     if (ret) {
@@ -900,6 +927,161 @@ do_restart:
         return ret;
     }
     return ret;
+}
+
+static int handle_firmware_validation(const struct firmware **fw_entry_ptr,
+                                     u32 *fw_data_count, const unsigned char **firmware_data,
+                                     u32 *checksum, int *version)
+{
+    if (pogo_keyboard_client->ota_firmware_name == NULL) {
+        kb_err("ota_firmware_name is NULL!!!\n");
+        return -EINVAL;
+    }
+
+    *fw_entry_ptr = get_fw_firmware(pogo_keyboard_client, pogo_keyboard_client->ota_firmware_name);
+    if (*fw_entry_ptr == NULL) {
+        kb_err("fw request firmware fail\n");
+        return -EINVAL;
+    }
+
+    *fw_data_count = (u32)(*fw_entry_ptr)->size;
+    *firmware_data = (*fw_entry_ptr)->data;
+    kb_info("fw count 0X%x\n", *fw_data_count);
+    if (pogo_keyboard_client->pogopin_ota_dfu) {
+        return kpd_fw_dfu_isvalid(*firmware_data, *fw_data_count);
+    } else {
+        return kpd_fw_isvalid(*firmware_data, *fw_data_count, checksum, version);
+    }
+}
+
+static int handle_tp_ota_success(void)
+{
+    tp_ota_status = OTA_STATUS_ACTIVE;
+    max_disconnect_count = TP_OTA_START_DISCONNECT_COUNT; // 15s
+
+    // TP OTA need > 12s
+    do {
+        msleep(OTA_SLEEP_INTERVAL);
+        pogo_keyboard_client->fw_update_progress += TP_OTA_PROGRESS_INCREMENT;
+        kb_debug("fw_update_progress:%d\n", pogo_keyboard_client->fw_update_progress);
+    } while ((tp_ota_status == OTA_STATUS_ACTIVE) &&
+            (pogo_keyboard_client->fw_update_progress <= FW_PROGRESS_50 * FW_PERCENTAGE_100) &&
+            (pogo_keyboard_client->fw_update_progress >= FW_PROGRESS_25 * FW_PERCENTAGE_100));
+
+    if ((pogo_keyboard_client->fw_update_progress < FW_PROGRESS_25 * FW_PERCENTAGE_100) ||
+        (pogo_keyboard_client->fw_update_progress > FW_PROGRESS_50 * FW_PERCENTAGE_100)) {
+        kb_info("maybe KB plugout or be changed\n");
+        pogo_keyboard_client->kpd_fw_status = FW_UPDATE_FAIL;
+        pogo_keyboard_client->fw_update_progress = FW_PROGERSS_0;
+        tp_ota_status = OTA_STATUS_INACTIVE;
+        return -EIO;
+    } else if (tp_ota_status == OTA_STATUS_INACTIVE) {
+        kb_info("tp ota success!!!\n");
+        max_disconnect_count = DEFAULT_DISCONNECT_COUNT;
+    }
+
+    return 0;
+}
+
+static int handle_tp_ota_failure(void)
+{
+    kb_err("tp firmware ota fail!!!\n");
+    if (pogo_keyboard_client->kpdmcu_mcu_version > KBMCU_VESION_1_0_7) {
+        pogo_keyboard_client->kpd_fw_status = FW_UPDATE_FAIL;
+        pogo_keyboard_client->fw_update_progress = FW_PROGERSS_0;
+        max_disconnect_count = DEFAULT_DISCONNECT_COUNT;
+        return -EIO;
+    } else {
+        kb_info("kb version < 1.0.8, pass tp ota!!!\n");
+    }
+    return 0;
+}
+
+static int handle_tp_ota_update(const unsigned char *firmware_data, u32 fw_data_count)
+{
+    int ret;
+
+    pogo_keyboard_client->fw_update_progress = FW_PROGRESS_6 * FW_PERCENTAGE_100;
+    ret = tp_fw_dfu_update(firmware_data, fw_data_count, tp_data->checksum,
+                            tp_data->start_addr, tp_data->file_len);
+
+    if (ret == 0) {
+        return handle_tp_ota_success();
+    } else if (ret < 0) {
+        return handle_tp_ota_failure();
+    }
+
+    return 0;
+}
+
+static int handle_kb_ota_update(const unsigned char *firmware_data, u32 fw_data_count)
+{
+    int ret;
+
+    pogo_keyboard_client->fw_update_progress = FW_PROGRESS_50 * FW_PERCENTAGE_100;
+    ret = kpd_fw_dfu_update(firmware_data, fw_data_count, bin_data->checksum,
+                          bin_data->start_addr, bin_data->file_len, bin_data->type);
+
+    if (ret == 0) {
+        max_disconnect_count = DFU_RESET_DISCONNECT_COUNT; // 20s
+        dfu_boot = 1;
+
+        // DFU boot need > 6s
+        do {
+            msleep(OTA_SLEEP_INTERVAL);
+            pogo_keyboard_client->fw_update_progress += KB_OTA_PROGRESS_INCREMENT;
+            kb_debug("fw_update_progress:%d\n", pogo_keyboard_client->fw_update_progress);
+        } while ((pogo_keyboard_client->fw_update_progress <= FW_PROGRESS_99 * FW_PERCENTAGE_100) &&
+                (pogo_keyboard_client->fw_update_progress >= FW_PROGRESS_96 * FW_PERCENTAGE_100));
+
+        if (pogo_keyboard_client->fw_update_progress > FW_PROGRESS_99 * FW_PERCENTAGE_100) {
+            kb_info("kb ota not rest,maybe KB plugout\n");
+            pogo_keyboard_client->kpd_fw_status = FW_UPDATE_FAIL;
+            pogo_keyboard_client->fw_update_progress = FW_PROGERSS_0;
+            max_disconnect_count = DEFAULT_DISCONNECT_COUNT;
+            return -EIO;
+        }
+    }
+
+    return ret;
+}
+
+static int handle_dfu_ota_update(const unsigned char *firmware_data, u32 fw_data_count)
+{
+    int ret;
+
+    if (!bat_data || !bin_data || !tp_data) {
+        kb_err("bat_data or bin_data or tp_data is NULL\n");
+        return -EINVAL;
+    }
+
+    ret = kpd_fw_dfu_update(firmware_data, fw_data_count, bat_data->checksum,
+                          bat_data->start_addr, bat_data->file_len, bat_data->type);
+    if (ret != 0) {
+        return ret;
+    }
+
+    ret = handle_tp_ota_update(firmware_data, fw_data_count);
+    if (ret != 0) {
+        return ret;
+    }
+
+    ret = handle_kb_ota_update(firmware_data, fw_data_count);
+    return ret;
+}
+
+static int handle_standard_ota_update(const unsigned char *firmware_data, u32 fw_data_count,
+                                     u32 checksum, int version)
+{
+    return kpd_fw_update(firmware_data, fw_data_count, checksum, version);
+}
+
+static void cleanup_resources(const struct firmware *fw_entry)
+{
+    if (fw_entry) {
+        release_firmware(fw_entry);
+    }
+    cleanup_dfu_data();
 }
 
 void kpdmcu_fw_data_version_thread(struct work_struct *work)
@@ -919,6 +1101,8 @@ void kpdmcu_fw_data_version_thread(struct work_struct *work)
         return;
     }
 
+    cleanup_dfu_data();
+
     fw_entry = get_fw_firmware(pogo_keyboard_client, pogo_keyboard_client->ota_firmware_name);
     if(fw_entry != NULL) {
         pogo_keyboard_client->kpdmcu_fw_cnt = (u32)(fw_entry->size / 1024);
@@ -929,6 +1113,7 @@ void kpdmcu_fw_data_version_thread(struct work_struct *work)
             ret = kpd_fw_isvalid(fw_entry->data, fw_entry->size, &checksum, &version);
         if (ret) {
             kb_err("%s %d kpd fw is not valid!!!\n", __func__, __LINE__);
+            cleanup_dfu_data();
         }
     } else {
         kb_err("%s %d kpd mcu request firmware fail\n", __func__, __LINE__);
@@ -937,6 +1122,20 @@ void kpdmcu_fw_data_version_thread(struct work_struct *work)
 
     release_firmware(fw_entry);
     fw_entry = NULL;
+}
+
+static int ensure_lcd_state(struct pogo_keyboard_data *client)
+{
+    int ret = 0;
+    if ((client->pogo_keyboard_status & KEYBOARD_LCD_ON_STATUS) == 0) {
+        ret = pogo_keyboard_set_lcd_state(true);
+        if (ret) {
+            kb_err("pogo_keyboard_set_lcd_state err!\n");
+            client->kpd_fw_status = FW_UPDATE_FAIL;
+            return ret;
+        }
+    }
+    return 0;
 }
 
 void kpdmcu_fw_update_thread(struct work_struct *work)
@@ -948,7 +1147,7 @@ void kpdmcu_fw_update_thread(struct work_struct *work)
     const struct firmware *fw_entry = NULL;
     int ret = 0;
 
-    if(pogo_keyboard_client == NULL) {
+    if (pogo_keyboard_client == NULL) {
         pogo_keyboard_client->kpd_fw_status = FW_UPDATE_READY;
         return;
     }
@@ -957,127 +1156,51 @@ void kpdmcu_fw_update_thread(struct work_struct *work)
         __pm_stay_awake(pogo_keyboard_client->pogopin_wakelock);
     mutex_lock(&pogo_keyboard_client->mutex);
 
+    cleanup_dfu_data();
+
     pogo_keyboard_client->kpd_fw_status = FW_UPDATE_START;
     pogo_keyboard_client->kpdmcu_update_end = false;
-
     pogo_keyboard_client->fw_update_progress = FW_PROGERSS_1 * FW_PERCENTAGE_100;
 
-    if(pogo_keyboard_client->is_kpdmcu_need_fw_update == false && pogo_keyboard_client->kpdmcu_fw_update_force == false) {
-        kb_debug("%s %d, not need fw update\n", __func__, __LINE__);
-    } else {
-        if(pogo_keyboard_client->ota_firmware_name == NULL) {
-            kb_err("%s %d ota_firmware_name is NULL!!!\n", __func__, __LINE__);
-            goto out;
-        }
-        fw_entry = get_fw_firmware(pogo_keyboard_client, pogo_keyboard_client->ota_firmware_name);
-        if(fw_entry != NULL) {
-            fw_data_count = (u32)fw_entry->size;
-            firmware_data = fw_entry->data;
-            kb_debug("%s %d, fw count 0X%x\n", __func__, __LINE__, fw_data_count);
-            if (pogo_keyboard_client->pogopin_ota_dfu)
-                ret = kpd_fw_dfu_isvalid(firmware_data, fw_data_count);
-            else
-                ret = kpd_fw_isvalid(firmware_data, fw_data_count, &checksum, &version);
-            if (ret) {
-                kb_debug("%s %d This bin file is not right!!!\n", __func__, __LINE__);
-                pogo_keyboard_client->kpd_fw_status = FW_UPDATE_FAIL;
-                goto out1;
-            }
-        } else {
-            kb_err("%s %d, fw request firmware fail\n", __func__, __LINE__);
-            pogo_keyboard_client->kpd_fw_status = FW_UPDATE_FAIL;
-            goto out;
-        }
-
-        pogo_keyboard_client->fw_update_progress = FW_PROGRESS_2 * FW_PERCENTAGE_100;
-
-        if (pogo_keyboard_client->pogopin_ota_dfu) {
-            if (!bat_data || !bin_data || !tp_data) {
-                kb_err("%s %d, bat_data or bin_data or tp_data is NULL\n", __func__, __LINE__);
-                goto out1;
-            }
-            ret = kpd_fw_dfu_update(firmware_data, fw_data_count, bat_data->checksum,
-                                bat_data->start_addr, bat_data->file_len, bat_data->type);
-            if (ret == 0) {
-                //do tp firmware data send
-                pogo_keyboard_client->fw_update_progress = FW_PROGRESS_6 * FW_PERCENTAGE_100;
-                ret = tp_fw_dfu_update(firmware_data, fw_data_count, tp_data->checksum,
-                                tp_data->start_addr, tp_data->file_len);
-                if (ret == 0) {
-                    tp_ota_status = 1;
-                    max_disconnect_count = 300; //15s
-                    //tp ota need > 12s
-                    do {
-                        msleep(50);
-                        pogo_keyboard_client->fw_update_progress += 10;
-                        kb_debug("%s %d, fw_update_progress:%d\n", __func__, __LINE__, pogo_keyboard_client->fw_update_progress);
-                    } while ((tp_ota_status == 1) &&
-                            (pogo_keyboard_client->fw_update_progress <= FW_PROGRESS_50 * FW_PERCENTAGE_100) &&
-                            (pogo_keyboard_client->fw_update_progress >= FW_PROGRESS_25 * FW_PERCENTAGE_100));
-                    if ((pogo_keyboard_client->fw_update_progress < FW_PROGRESS_25 * FW_PERCENTAGE_100) ||
-                        (pogo_keyboard_client->fw_update_progress > FW_PROGRESS_50 * FW_PERCENTAGE_100)) {
-                        kb_debug("%s %d, maybe KB plugout or be changed\n", __func__, __LINE__);
-                        pogo_keyboard_client->kpd_fw_status = FW_UPDATE_FAIL;
-                        pogo_keyboard_client->fw_update_progress = 0;
-                        tp_ota_status = 0;
-                        goto out1;
-                    } else if (tp_ota_status == 0) {
-                        kb_debug("%s %d, tp ota success!!!\n", __func__, __LINE__);
-                        max_disconnect_count = 10;
-                    }
-                } else if (ret < 0) {
-                    kb_debug("%s %d, tp firmware ota fail!!!\n", __func__, __LINE__);
-                    if (pogo_keyboard_client->kpdmcu_mcu_version > 0x0107) {
-                        pogo_keyboard_client->kpd_fw_status = FW_UPDATE_FAIL;
-                        pogo_keyboard_client->fw_update_progress = 0;
-                        max_disconnect_count = 10;
-                        goto out1;
-                    } else {
-                        kb_debug("%s %d, kb version < 1.0.8, pass tp ota!!!\n", __func__, __LINE__);
-                    }
-                }
-                //do kb firmware data send
-                pogo_keyboard_client->fw_update_progress = FW_PROGRESS_50 * FW_PERCENTAGE_100;
-                ret = kpd_fw_dfu_update(firmware_data, fw_data_count, bin_data->checksum,
-                                bin_data->start_addr, bin_data->file_len, bin_data->type);
-                if (ret == 0) {
-                    max_disconnect_count = 400; //20s
-                    dfu_boot = 1;
-                    //dfu boot need > 6s
-                    do {
-                        msleep(50);
-                        pogo_keyboard_client->fw_update_progress += 1;
-                        kb_debug("%s %d, fw_update_progress:%d\n", __func__, __LINE__, pogo_keyboard_client->fw_update_progress);
-                    } while ((pogo_keyboard_client->fw_update_progress <= FW_PROGRESS_99 * FW_PERCENTAGE_100) &&
-                        (pogo_keyboard_client->fw_update_progress >= FW_PROGRESS_96 * FW_PERCENTAGE_100));
-                    if (pogo_keyboard_client->fw_update_progress > FW_PROGRESS_99 * FW_PERCENTAGE_100) {
-                        kb_debug("%s %d, kb ota not rest,maybe KB plugout\n", __func__, __LINE__);
-                        pogo_keyboard_client->kpd_fw_status = FW_UPDATE_FAIL;
-                        pogo_keyboard_client->fw_update_progress = 0;
-                        max_disconnect_count = 10;
-                        goto out1;
-                    }
-                }
-            }
-        } else {
-            ret = kpd_fw_update(firmware_data, fw_data_count, checksum, version);
-        }
-        if(ret) {
-            pogo_keyboard_client->kpd_fw_status = FW_UPDATE_FAIL;
-            goto out1;
-        }
-        pogo_keyboard_client->kpdmcu_update_end = true;
+    if (pogo_keyboard_client->is_kpdmcu_need_fw_update == false &&
+        pogo_keyboard_client->kpdmcu_fw_update_force == false) {
+        kb_info("not need fw update\n");
+        goto success;
     }
 
+    ret = handle_firmware_validation(&fw_entry, &fw_data_count, &firmware_data, &checksum, &version);
+    if (ret) {
+        pogo_keyboard_client->kpd_fw_status = FW_UPDATE_FAIL;
+        goto cleanup;
+    }
+
+    if (ensure_lcd_state(pogo_keyboard_client) != 0) {
+        goto cleanup;
+    }
+
+    pogo_keyboard_client->fw_update_progress = FW_PROGRESS_2 * FW_PERCENTAGE_100;
+
+    if (pogo_keyboard_client->pogopin_ota_dfu) {
+        ret = handle_dfu_ota_update(firmware_data, fw_data_count);
+    } else {
+        ret = handle_standard_ota_update(firmware_data, fw_data_count, checksum, version);
+    }
+
+    if (ret) {
+        pogo_keyboard_client->kpd_fw_status = FW_UPDATE_FAIL;
+        goto cleanup;
+    }
+
+    pogo_keyboard_client->kpdmcu_update_end = true;
+
+success:
     pogo_keyboard_client->kpd_fw_status = FW_UPDATE_SUC;
     pogo_keyboard_client->fw_update_progress = FW_PROGRESS_100 * FW_PERCENTAGE_100;
-    max_disconnect_count = 10;
-    kb_debug("%s %d, fw update success!\n", __func__, __LINE__);
-out1:
-    release_firmware(fw_entry);
-    fw_entry = NULL;
-    firmware_data = NULL;
-out:
+    max_disconnect_count = DEFAULT_DISCONNECT_COUNT;
+    kb_info("fw update success!\n");
+
+cleanup:
+    cleanup_resources(fw_entry);
     mutex_unlock(&pogo_keyboard_client->mutex);
     if (pogo_keyboard_client->pogopin_wakelock)
         __pm_relax(pogo_keyboard_client->pogopin_wakelock);

@@ -16,6 +16,18 @@ config OPLUS_CHG_MMS_DEBUG
 	help
 	  Say Y here to declare message subscription layer debug interface
 
+config OPLUS_CHG_MMS_PUBLISH_USERSPACE
+	bool "Deliver messages to user space through uevent"
+	default n
+	help
+	  Say Y to enable
+
+config OPLUS_DEBUG_AUTH
+	bool "Debug authentication"
+	default n
+	help
+	  Say Y to enable debug authentication
+
 config OPLUS_SMART_CHARGE
 	bool "smart charge"
 	help
@@ -102,11 +114,22 @@ config OPLUS_MT6835_CHARGER
         help
           Say Y here to declare MTK6835 support
 
+config OPLUS_MT6769_CHARGER
+        bool "MTK6769 support"
+        help
+          Say Y here to declare MTK6769 support
+
 config OPLUS_GAUGE_MPC7022
 	bool "GAUGE MPC7022 support"
 	default n
 	help
 	  Say Y here to declare GAUGE MPC7022 support
+
+config OPLUS_GAUGE_SH366002
+	bool "GAUGE SH366002 support"
+	default n
+	help
+	  Say Y here to declare GAUGE SH366002 support
 
 config OPLUS_GAUGE_BQ27Z561
 	bool "GAUGE BQ27Z561 support"
@@ -122,6 +145,12 @@ config OPLUS_GAUGE_NFG8011B
 	bool "GAUGE NFG8011B support"
 	help
 	  Say Y here to declare GAUGE NFG8011B support
+
+config OPLUS_GAUGE_BQ28Z610_RA
+	bool "GAUGE BQ28Z610 RA support"
+	default n
+	help
+	  Say Y here to declare GAUGE BQ28Z610 RA support
 
 config OPLUS_GAUGE_CW2217B
 	bool "GAUGE CW2217B support"
@@ -171,6 +200,16 @@ config OPLUS_PHY_SC8547D
 	help
 	  Say Y here to declare sc8547d voocphy && ufcs phy support
 
+config OPLUS_BOOST_SC83107
+	bool "enable hybrid boost sc83107"
+	help
+	  Say Y here to declare hybrid boost sc83107 support
+
+config OPLUS_VOOCPHY_SC8527
+	bool "enable REG CP sc8527"
+	help
+	  Say Y here to declare REG CP sc8527 support
+
 config OPLUS_WIRELESS_NU1619
 	bool "oplus wireless nu1619 support"
 	help
@@ -218,6 +257,18 @@ config OPLUS_HL7603_CHARGER
 	bool "hl7603 support"
 	help
 	  Say Y here to declare hl7603 support
+
+menuconfig OPLUS_CHG_RECOVERY
+	bool "oplus charge recovery module"
+	help
+	  Say Y here to enable oplus charge recovery module
+
+if OPLUS_CHG_RECOVERY
+config OPLUS_CHG_STATE_KEEP
+	bool "state keep support"
+	help
+	  Say Y here to enable state keep support
+endif #OPLUS_CHG_RECOVERY
 
 menuconfig OPLUS_CHG_VOOCPHY
 	bool "OPLUS charging voocphy"
@@ -295,6 +346,12 @@ config OPLUS_UFCS_SLAVE_NU2112A
 	help
 	  Say Y here to declare slave cp nu2112A support
 
+config OPLUS_UFCS_MASTER_NU2118A
+	bool "master cp nu2118A support"
+	depends on OPLUS_UFCS_CLASS && OPLUS_CHG_VOOCPHY_CHGLIB && OPLUS_CHG_AP_VOOCPHY
+	help
+	  Say Y here to declare master cp nu2118A support
+
 config OPLUS_CHARGER_OPTIGA
 	bool "OPLUS OPTIGA soc node"
 	help
@@ -321,9 +378,19 @@ config OPLUS_SEC_IC_SC5891
         help
           Say Y here to declare encryption ic sc5891 support
 
+config OPLUS_DUAL_CELLS_PROTECTION
+	bool "enable dual cells protection support"
+	help
+	  Say Y here to declare dual cells protection support
+
 endif #OPLUS_CHG_VOOCPHY
 
 config OPLUS_LIQUID_DETECTION
 	bool "liquid detection support"
 	help
 	  Say Y here to declare liquid detection support
+
+config OPLUS_CANCEL_USB_SWITCH
+	bool "cancel usb switch support"
+	help
+	  Say Y here to declare cancel usb switch support

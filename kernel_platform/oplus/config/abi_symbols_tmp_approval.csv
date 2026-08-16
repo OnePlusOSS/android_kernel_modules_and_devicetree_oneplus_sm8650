@@ -28,3 +28,4 @@ tcf_block_put, 80393944
 tcf_classify, 80393944
 qdisc_watchdog_init, 80393944
 __tracepoint_android_vh_init_adjust_zone_wmark, 80351790
+__tracepoint_android_vh_throttle_direct_reclaim_bypass

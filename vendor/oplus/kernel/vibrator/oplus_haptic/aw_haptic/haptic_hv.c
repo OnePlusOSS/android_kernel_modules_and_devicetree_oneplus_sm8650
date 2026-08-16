@@ -205,6 +205,7 @@ int i2c_w_bits(struct aw_haptic *aw_haptic, uint8_t reg_addr, uint32_t mask,
 	return 0;
 }
 
+/*
 #if IS_ENABLED(CONFIG_OPLUS_FEATURE_BSP_DRV_VND_INJECT_TEST)
 int aw869xx_i2c_r_byte(uint8_t reg_addr, uint8_t *buf)
 {
@@ -235,6 +236,7 @@ int aw869xx_i2c_w_byte(uint8_t reg_addr, uint8_t *buf)
 }
 EXPORT_SYMBOL(aw869xx_i2c_w_byte);
 #endif
+*/
 
 static void hw_reset(struct aw_haptic *aw_haptic)
 {

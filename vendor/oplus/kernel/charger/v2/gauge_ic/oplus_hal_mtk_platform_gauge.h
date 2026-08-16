@@ -49,7 +49,7 @@
 #define M_DELAY_10_S	10000
 
 #define OPLUS_CHG_TRACK_MTK_CALI_INFO_LEN	300
-
+#define TERM_VOL_COUNT				6
 #ifndef OPLUS_FEATURE_GAUGE_CALI_TRACK /*define in mtk_battery.h*/
 struct gauge_track_cali_info_s{};
 enum oplus_gauge_track_type {
@@ -124,6 +124,10 @@ struct chip_mt6375_gauge {
 	int max_vol_pre;
 	int min_vol_pre;
 	int batt_num;
+	int vbatt_full_cv;
+	int term_vol_base[TERM_VOL_COUNT];
+	int term_vol_temp_range[TERM_VOL_COUNT - 1];
+	bool term_vol_support;
 
 	bool modify_soc_smooth;
 	bool modify_soc_calibration;

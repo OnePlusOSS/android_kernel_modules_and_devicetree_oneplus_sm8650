@@ -289,8 +289,9 @@ static void oplus_comm_update_misc_config(
 			chg_err("get oplus_spec,fcc-gear-thr-mv data error, rc=%d\n", rc);
 			break;
 		}
-		spec->fcc_gear_thr_mv = le32_to_cpu(buf[0]);
-		chg_info("[TEST]:fcc_gear_thr_mv = %d\n", spec->fcc_gear_thr_mv);
+		for (i = 0; i < spec->temp_region_max; i++)
+			spec->fcc_gear_thr_mv[FCC_GEAR_LOW][i] = le32_to_cpu(buf[0]);
+		chg_info("[TEST]:fcc_gear_thr_mv[LOW] = %d\n", spec->fcc_gear_thr_mv[FCC_GEAR_LOW][0]);
 		break;
 	}
 
@@ -326,15 +327,16 @@ static void oplus_comm_update_misc_config(
 			break;
 		}
 		for (i = 0; i < ARRAY_SIZE(buf); i++) {
-			spec->fcc_gear_shake_mv[i] = le32_to_cpu(buf[oplus_comm_temp_region_map(i)]);
+			spec->fcc_gear_shake_mv[FCC_GEAR_LOW][i] =
+				le32_to_cpu(buf[oplus_comm_temp_region_map(i)]);
 			if (g_log_buf) {
 				index += snprintf(g_log_buf + index, LOG_BUF_SIZE - index - 1, "%s%d",
-					(i == 0) ? "" : ", ", spec->fcc_gear_shake_mv[i]);
+					(i == 0) ? "" : ", ", spec->fcc_gear_shake_mv[FCC_GEAR_LOW][i]);
 				g_log_buf[index] = 0;
 			}
 		}
 		if (g_log_buf)
-			chg_info("[TEST]:fcc_gear_shake_mv = { %s }\n", g_log_buf);
+			chg_info("[TEST]:fcc_gear_shake_mv[LOW] = { %s }\n", g_log_buf);
 		break;
 	}
 }

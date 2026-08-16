@@ -64,7 +64,8 @@ enum switch_vendor {
     HL5281,
     DIO4480,
     WAS4780,
-    BCT4480
+    BCT4480,
+    ET74801
 };
 
 #ifdef OPLUS_ARCH_EXTENDS
@@ -87,6 +88,7 @@ struct fsa4480_priv {
 	int hs_det_level;
 	//#endif /*OPLUS_ARCH_EXTENDS*/
 	enum switch_vendor vendor;
+	bool hp_det_state;
 	bool plug_state;
 	bool b_dynamic_sense_to_ground;
 
@@ -108,6 +110,7 @@ struct fsa4480_priv {
 #ifdef OPLUS_ARCH_EXTENDS
 	struct delayed_work hp_work;
 #endif
+	struct delayed_work hp_check_status_work;
 };
 
 #ifdef OPLUS_ARCH_EXTENDS
@@ -177,7 +180,7 @@ static void fsa4480_usbc_update_settings(struct fsa4480_priv *fsa_priv,
     if (fsa_priv->vendor == DIO4480) {
         return;
     }
-	
+
 	regmap_write(fsa_priv->regmap, FSA4480_SWITCH_SETTINGS, 0x80);
 	regmap_write(fsa_priv->regmap, FSA4480_SWITCH_CONTROL, switch_control);
 	/* FSA4480 chip hardware requirement */
@@ -233,12 +236,19 @@ static int fsa4480_usbc_event_changed(struct notifier_block *nb,
 			pm_stay_awake(fsa_priv->dev);
 			cancel_work_sync(&fsa_priv->usbc_analog_work);
 			schedule_work(&fsa_priv->usbc_analog_work);
+
+			if (fsa_priv->hp_det_state) {
+				dev_info(dev, "%s: Enable the headphone status detection\n", __func__);
+				cancel_delayed_work_sync(&fsa_priv->hp_check_status_work);
+				schedule_delayed_work(&fsa_priv->hp_check_status_work, msecs_to_jiffies(200));
+			}
 		} else if (fsa_priv->plug_state == true
 			&& noti->typec_state.new_state == TYPEC_UNATTACHED) {
 			/* AUDIO plug out */
 			dev_info(dev, "%s: audio plug out\n", __func__);
 			fsa_priv->plug_state = false;
 			pm_stay_awake(fsa_priv->dev);
+			cancel_delayed_work_sync(&fsa_priv->hp_check_status_work);
 			cancel_work_sync(&fsa_priv->usbc_analog_work);
 			schedule_work(&fsa_priv->usbc_analog_work);
 		}
@@ -327,7 +337,7 @@ static int fsa4480_usbc_analog_setup_switches(struct fsa4480_priv *fsa_priv)
 			regmap_write(fsa_priv->regmap, FSA4480_FUN_EN, 0x5D);
 			msleep(400);
 			dev_info(dev, "%s: set HL5281 reg[0x%x] done.\n", __func__, FSA4480_FUN_EN);
-		} else if (fsa_priv->vendor == WAS4780){
+		} else if ((fsa_priv->vendor == WAS4780) || (fsa_priv->vendor == ET74801)) {
 			fsa4480_usbc_update_settings(fsa_priv, 0x00, 0x9F);
 			usleep_range(1000, 1005);
 			regmap_write(fsa_priv->regmap, FSA4480_FUN_EN, 0X0D);
@@ -339,7 +349,7 @@ static int fsa4480_usbc_analog_setup_switches(struct fsa4480_priv *fsa_priv)
 				}
 			}
 			if (switch_status == 0X0D) {
-				pr_err("%s: [WAS4780]Audio jack detection fail.\n", __func__);
+				pr_err("%s: Audio jack detection fail.\n", __func__);
 				return -EINVAL;
 			}
 			for (i = 4 ;i <= 7 ;i++) {
@@ -688,6 +698,9 @@ static int fsa4480_parse_dt(struct fsa4480_priv *fsa_priv,
 	pr_info("%s: hp_bypass %d\n", __func__, hp_bypass);
 #endif /*OPLUS_ARCH_EXTENDS*/
 
+	fsa_priv->hp_det_state = of_property_read_bool(dNode, "fsa4480,hp-det-flag");
+	pr_info("%s: hp_det_state %d\n", __func__, fsa_priv->hp_det_state);
+
 	fsa_priv->hs_det_pin = of_get_named_gpio(dNode,
 	        "fsa4480,hs-det-gpio", 0);
 	if (!gpio_is_valid(fsa_priv->hs_det_pin)) {
@@ -892,6 +905,37 @@ static void hp_work_callback(struct work_struct *work)
 }
 #endif
 
+static void hp_check_status_work_callback(struct work_struct *work)
+{
+	struct fsa4480_priv *fsa_priv = g_fsa_priv;
+
+	if (!fsa_priv || !fsa_priv->regmap || !fsa_priv->tcpc_dev) {
+		pr_info("%s: parameters abnormal\n", __func__);
+		return;
+	}
+
+	if (!fsa_priv->plug_state) {
+		pr_info("%s: plug out, stop detection\n", __func__);
+		return;
+	}
+
+	if (fsa_priv->vendor == HL5280) {
+		if (fsa_priv->plug_state && tcpm_inquire_typec_attach_state(fsa_priv->tcpc_dev) == TYPEC_ATTACHED_AUDIO) {
+			regmap_read(fsa_priv->regmap, 4, &debug_reg[4]);
+
+			if (debug_reg[4] == 0x98) {
+				pr_info("%s: setup switches again\n", __func__);
+				cancel_work_sync(&fsa_priv->usbc_analog_work);
+				schedule_work(&fsa_priv->usbc_analog_work);
+			}
+		}
+	}
+
+	if (fsa_priv->plug_state) {
+		schedule_delayed_work(&fsa_priv->hp_check_status_work, msecs_to_jiffies(500));
+	}
+}
+
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
 static int fsa4480_probe(struct i2c_client *i2c,
 			 const struct i2c_device_id *id)
@@ -962,6 +1006,9 @@ static int fsa4480_probe(struct i2c_client *i2c)
         } else if (0x11 == reg_value) {
 		dev_info(fsa_priv->dev, "%s: switch chip is WAS4780\n", __func__);
 		fsa_priv->vendor = WAS4780;
+        } else if (0x59 == reg_value) {
+		dev_info(fsa_priv->dev, "%s: switch chip is ET74801\n", __func__);
+		fsa_priv->vendor = ET74801;
 	} else {
 		dev_info(fsa_priv->dev, "%s: switch chip is FSA4480\n", __func__);
 		fsa_priv->vendor = FSA4480;
@@ -975,7 +1022,7 @@ static int fsa4480_probe(struct i2c_client *i2c)
 
 	}
 
-	if ((fsa_priv->vendor == DIO4480) || (fsa_priv->vendor == WAS4780)) {
+	if (fsa_priv->vendor == DIO4480) {
 		regmap_write(fsa_priv->regmap, 0x1e, 0x01);//reset DIO4480
 		usleep_range(1*1000, 1*1005);
 	}
@@ -1046,6 +1093,11 @@ static int fsa4480_probe(struct i2c_client *i2c)
 	INIT_DELAYED_WORK(&fsa_priv->hp_work, hp_work_callback);
 	schedule_delayed_work(&fsa_priv->hp_work, msecs_to_jiffies(2000));
 #endif
+	INIT_DELAYED_WORK(&fsa_priv->hp_check_status_work, hp_check_status_work_callback);
+	if (fsa_priv->hp_det_state) {
+		schedule_delayed_work(&fsa_priv->hp_check_status_work, msecs_to_jiffies(2200));
+	}
+
 	dev_info(fsa_priv->dev,"fsa4480: probe ok\n");
 
 	return 0;
@@ -1073,6 +1125,7 @@ static int fsa4480_remove(struct i2c_client *i2c)
 		return -EINVAL;
 #endif
 
+	cancel_delayed_work_sync(&fsa_priv->hp_check_status_work);
 	fsa4480_usbc_update_settings(fsa_priv, 0x18, 0x98);
 	cancel_work_sync(&fsa_priv->usbc_analog_work);
 #if IS_ENABLED(CONFIG_SND_SOC_FSA_DP)
@@ -1111,9 +1164,11 @@ static void fsa4480_shutdown(struct i2c_client *i2c) {
 		return;
 	}
 
+	cancel_delayed_work_sync(&fsa_priv->hp_check_status_work);
+
 	pr_info("%s: recover all register while shutdown\n", __func__);
 
-	if ((fsa_priv->vendor == DIO4480) || (fsa_priv->vendor == WAS4780)) {
+	if ((fsa_priv->vendor == DIO4480) || (fsa_priv->vendor == WAS4780) || (fsa_priv->vendor == ET74801)) {
 		regmap_write(fsa_priv->regmap, 0x1e, 0x01);//reset DIO4480
 		return;
 	}

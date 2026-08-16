@@ -10203,6 +10203,7 @@ bool oplus_check_afi_update_condition(void)
 
 #define RETRY_COUNTS 60
 #define USB_AICL_ENHANCE_CURR 500
+#define FULL_SOC 100
 static void oplus_chg_get_battery_data(struct oplus_chg_chip *chip)
 {
 	static int ui_soc_cp_flag = 0;
@@ -10404,6 +10405,9 @@ static void oplus_chg_get_battery_data(struct oplus_chg_chip *chip)
 		chip->soc = -1;
 	}
 
+	if (ui_soc_cp_flag == 1 && (chip->soc < 0 || chip->soc > FULL_SOC)){
+		ui_soc_cp_flag  = 0;
+	}
 	if (ui_soc_cp_flag == 0) {
 		if ((chip->soc < 0 || chip->soc > 100) && retry_counts < RETRY_COUNTS) {
 			charger_xlog_printk(CHG_LOG_CRTI,
@@ -13023,17 +13027,10 @@ static void oplus_chg_check_status_full(struct oplus_chg_chip *chip)
 
 		last_recharging_vol = recharging_vol;
 
-		if (chip->rechg_soc_en) {
-			if (chip->batt_volt < recharging_vol)
-				chip->full_data.clear_full_check_count++;
-			else
-				chip->full_data.clear_full_check_count = 0;
-		} else {
-			if (chip->batt_volt < (recharging_vol - CLEAR_FULL_VOLT_THD))
-				chip->full_data.clear_full_check_count++;
-			else
-				chip->full_data.clear_full_check_count = 0;
-		}
+		if (chip->batt_volt < (recharging_vol - CLEAR_FULL_VOLT_THD))
+			chip->full_data.clear_full_check_count++;
+		else
+			chip->full_data.clear_full_check_count = 0;
 
 		if (chip->full_data.clear_full_check_count > CLEAR_FULL_CNT) {
 			chg_err("soc %d %d %d vbat %d < %d clear full\n",

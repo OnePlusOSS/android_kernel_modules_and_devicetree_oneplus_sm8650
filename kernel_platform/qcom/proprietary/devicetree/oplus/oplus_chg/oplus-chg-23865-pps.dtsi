@@ -61,6 +61,9 @@
 		oplus,pps_charge_strategy_temp = <0 50 120 200 350 440 530>;
 		oplus,pps_low_curr_full_strategy_temp = <0 200 350 440>;
 
+		oplus,plc_strategy-data = <&cp_2t1_simple_strategy>;
+		oplus,plc_strategy-names = "default";
+
 		pps_charge_low_curr_full {
 			strategy_temp_little_cool = 	<1600 4540 0
 							 1500 4535 0

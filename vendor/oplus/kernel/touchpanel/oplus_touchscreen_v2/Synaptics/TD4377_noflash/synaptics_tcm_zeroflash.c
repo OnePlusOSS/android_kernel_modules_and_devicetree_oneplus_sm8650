@@ -236,6 +236,7 @@ static int zeroflash_get_fw_image(void)
 	uint8_t copy_len = 0;
 
 	if (tcm_hcd->request_fw_image_id == 1) {
+		tcm_hcd->gesture_fw_finished_flag = 1;
 		fw_name_lpwg = kzalloc(MAX_FW_NAME_LENGTH, GFP_KERNEL);
 			if (fw_name_lpwg == NULL) {
 				TPD_INFO("fw_name_lpwg kzalloc error!\n");
@@ -265,6 +266,7 @@ static int zeroflash_get_fw_image(void)
 
 		kfree(fw_name_lpwg);
 	} else {
+		tcm_hcd->gesture_fw_finished_flag = 0;
 		if(!g_zeroflash_hcd->fw_entry) {
 			TPD_INFO("oplus tp update can't get fw, get fw from headfile\n");
 			request_fw_headfile = kzalloc(sizeof(struct firmware), GFP_KERNEL);
@@ -635,10 +637,25 @@ unlock_out:
 	return retval;
 }
 
+static int syna_hw_reset_zeroflash(struct syna_tcm_hcd *tcm_hcd, struct hw_resource *hw_res)
+{
+	if (gpio_is_valid(hw_res->reset_gpio)) {
+		TPD_INFO("hardware reset: %d\n", hw_res->reset_gpio);
+		gpio_set_value(hw_res->reset_gpio, false);
+		msleep(20);
+		gpio_set_value(hw_res->reset_gpio, true);
+		msleep(200);
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
 static void zeroflash_download_config_work(struct work_struct *work)
 {
 	int retval = 0;
 	struct syna_tcm_hcd *tcm_hcd = g_zeroflash_hcd->tcm_hcd;
+	static int hw_rt_retry = 0;
 
 	if(!g_zeroflash_hcd->fw_entry)
 		retval = zeroflash_get_fw_image();
@@ -657,9 +674,16 @@ static void zeroflash_download_config_work(struct work_struct *work)
 			if (tcm_hcd->health_monitor_support) {
 			/*	tcm_hcd->monitor_data->reserve2++;*/
 			}
+			if (tcm_hcd->status_report_code != REPORT_IDENTIFY && tcm_hcd->hw_rt_retry_support && hw_rt_retry < 3) {
+				syna_hw_reset_zeroflash(tcm_hcd, tcm_hcd->hw_res);
+				hw_rt_retry++;
+				TPD_INFO("hw_rt_retry time:%d\n", hw_rt_retry);
+			}
 			TPD_INFO(
 				"Failed to download application config\n");
 			return;
+		} else {
+			hw_rt_retry = 0;
 		}
 		goto exit;
 	}
@@ -822,6 +846,7 @@ static void zeroflash_do_romboot_firmware_download(void)
 	unsigned int image_size;
 	struct syna_tcm_hcd *tcm_hcd = g_zeroflash_hcd->tcm_hcd;
 	struct touchpanel_data *ts = spi_get_drvdata(tcm_hcd->s_client);
+	static int hw_rt_retry = 0;
 
 #ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
 	if (ts->boot_mode == RECOVERY_BOOT) {
@@ -900,14 +925,28 @@ static void zeroflash_do_romboot_firmware_download(void)
 
 	UNLOCK_BUFFER(g_zeroflash_hcd->out);
 	if (retval < 0) {
+		if (tcm_hcd->status_report_code != REPORT_IDENTIFY && tcm_hcd->hw_rt_retry_support && hw_rt_retry < 3) {
+			syna_hw_reset_zeroflash(tcm_hcd, tcm_hcd->hw_res);
+			hw_rt_retry++;
+			TPD_INFO("hw reset time:%d", hw_rt_retry);
+		}
 		TPD_INFO("Failed to write command ROMBOOT DOWNLOAD");
 		goto exit;
+	} else {
+		hw_rt_retry = 0;
 	}
 
 	retval = syna_tcm_run_bootloader_firmware(tcm_hcd);
 	if (retval < 0) {
+		if (tcm_hcd->status_report_code != REPORT_IDENTIFY && tcm_hcd->hw_rt_retry_support  && hw_rt_retry < 3) {
+			syna_hw_reset_zeroflash(tcm_hcd, tcm_hcd->hw_res);
+			hw_rt_retry++;
+			TPD_INFO("hw reset time:%d", hw_rt_retry);
+		}
 		TPD_INFO("Failed to switch to bootloader");
 		goto exit;
+	} else {
+		hw_rt_retry = 0;
 	}
 
 exit:
@@ -976,7 +1015,7 @@ exit:
 		if (tcm_hcd->health_monitor_support) {
 			/*tcm_hcd->monitor_data->fw_download_fail++;*/
 		}
-		disable_irq(tcm_hcd->s_client->irq);
+		// disable_irq(tcm_hcd->s_client->irq);
 
 		TPD_DETAIL("zeroflash_download_firmware_work disable_irq \n");
 
@@ -1004,6 +1043,10 @@ exit:
 void zeroflash_download_firmware_work(struct work_struct *work)
 {
 	struct syna_tcm_hcd *tcm_hcd = g_zeroflash_hcd->tcm_hcd;
+
+	cancel_work_sync(&g_zeroflash_hcd->config_work);
+	flush_workqueue(g_zeroflash_hcd->config_workqueue);
+
 	if (tcm_hcd->id_info.mode == MODE_ROMBOOTLOADER) {
 		zeroflash_do_romboot_firmware_download();
 	} else {

@@ -66,6 +66,7 @@ static int speaker_mute_control = 0;
 
 #define AW883XX_ACF_FILE	"aw883xx_acf.bin"
 #define AW_REQUEST_FW_RETRIES		5	/* 5 times */
+#define AW_CREATE_CONTROLS_RETRIES	3
 
 #ifdef AW_KERNEL_VER_OVER_4_19_1
 static struct aw_componet_codec_ops aw_componet_codec_ops = {
@@ -1680,59 +1681,47 @@ static int aw883xx_volume_set(struct snd_kcontrol *kcontrol,
 static int aw883xx_dynamic_create_controls(struct aw883xx *aw883xx)
 {
 	struct snd_kcontrol_new *aw883xx_dev_control = NULL;
-	char *kctl_name = NULL;
+	char (*kctl_name)[AW_NAME_BUF_MAX];
+	const char *suffix_names[] = {"prof", "switch", "monitor_switch", "rx_volume"};
 
 	aw883xx_dev_control = devm_kzalloc(aw883xx->codec->dev,
-			sizeof(struct snd_kcontrol_new) * AW_KCONTROL_NUM, GFP_KERNEL);
-	if (aw883xx_dev_control == NULL) {
+			AW_KCONTROL_NUM * sizeof(aw883xx_dev_control[0]), GFP_KERNEL);
+	if (!aw883xx_dev_control) {
 		aw_dev_err(aw883xx->codec->dev, "kcontrol malloc failed!");
 		return -ENOMEM;
 	}
 
-	kctl_name = devm_kzalloc(aw883xx->codec->dev, AW_NAME_BUF_MAX, GFP_KERNEL);
-	if (kctl_name == NULL)
+	kctl_name = devm_kcalloc(aw883xx->codec->dev,
+			AW_KCONTROL_NUM, AW_NAME_BUF_MAX, GFP_KERNEL);
+	if (!kctl_name) {
+		aw_dev_err(aw883xx->codec->dev, "kctl_name malloc failed!");
 		return -ENOMEM;
+	}
 
-	snprintf(kctl_name, AW_NAME_BUF_MAX, "aw_dev_%u_prof",
-		aw883xx->aw_pa->channel);
+	for (int i = 0; i < AW_KCONTROL_NUM; i++) {
+		snprintf(kctl_name[i], AW_NAME_BUF_MAX, "aw_dev_%u_%s",
+			aw883xx->aw_pa->channel, suffix_names[i]);
+	}
 
-	aw883xx_dev_control[0].name = kctl_name;
+	aw883xx_dev_control[0].name = kctl_name[0];
 	aw883xx_dev_control[0].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 	aw883xx_dev_control[0].info = aw883xx_profile_info;
 	aw883xx_dev_control[0].get = aw883xx_profile_get;
 	aw883xx_dev_control[0].put = aw883xx_profile_set;
 
-	kctl_name = devm_kzalloc(aw883xx->codec->dev, AW_NAME_BUF_MAX, GFP_KERNEL);
-	if (!kctl_name)
-		return -ENOMEM;
-
-	snprintf(kctl_name, AW_NAME_BUF_MAX, "aw_dev_%u_switch", aw883xx->aw_pa->channel);
-
-	aw883xx_dev_control[1].name = kctl_name;
+	aw883xx_dev_control[1].name = kctl_name[1];
 	aw883xx_dev_control[1].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 	aw883xx_dev_control[1].info = aw883xx_switch_info;
 	aw883xx_dev_control[1].get = aw883xx_switch_get;
 	aw883xx_dev_control[1].put = aw883xx_switch_set;
 
-	kctl_name = devm_kzalloc(aw883xx->codec->dev, AW_NAME_BUF_MAX, GFP_KERNEL);
-	if (!kctl_name)
-		return -ENOMEM;
-
-	snprintf(kctl_name, AW_NAME_BUF_MAX, "aw_dev_%u_monitor_switch", aw883xx->aw_pa->channel);
-
-	aw883xx_dev_control[2].name = kctl_name;
+	aw883xx_dev_control[2].name = kctl_name[2];
 	aw883xx_dev_control[2].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 	aw883xx_dev_control[2].info = aw883xx_monitor_switch_info;
 	aw883xx_dev_control[2].get = aw883xx_monitor_switch_get;
 	aw883xx_dev_control[2].put = aw883xx_monitor_switch_set;
 
-	kctl_name = devm_kzalloc(aw883xx->codec->dev, AW_NAME_BUF_MAX, GFP_KERNEL);
-	if (!kctl_name)
-		return -ENOMEM;
-
-	snprintf(kctl_name, AW_NAME_BUF_MAX, "aw_dev_%u_rx_volume", aw883xx->aw_pa->channel);
-
-	aw883xx_dev_control[3].name = kctl_name;
+	aw883xx_dev_control[3].name = kctl_name[3];
 	aw883xx_dev_control[3].iface = SNDRV_CTL_ELEM_IFACE_MIXER;
 	aw883xx_dev_control[3].info = aw883xx_volume_info;
 	aw883xx_dev_control[3].get = aw883xx_volume_get;
@@ -1811,9 +1800,24 @@ static int aw883xx_request_firmware_file(struct aw883xx *aw883xx)
 		return ret;
 	}
 
-	ret = aw883xx_dynamic_create_controls(aw883xx);
-	if (ret < 0)
-		aw_dev_err(aw883xx->dev, "create control failed");
+	for (i = 0; i < AW_CREATE_CONTROLS_RETRIES; i++) {
+		ret = aw883xx_dynamic_create_controls(aw883xx);
+		if (ret < 0) {
+			aw883xx->create_controls_retry_cnt++;
+			aw_dev_err(aw883xx->dev, "create control failed try [%d]", aw883xx->create_controls_retry_cnt);
+			if (aw883xx->create_controls_retry_cnt == AW_CREATE_CONTROLS_RETRIES) {
+				aw883xx->create_controls_retry_cnt = 0;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_FEEDBACK)
+/* 2025/11/05, Add for smartpa create control failed feedback. */
+				mm_fb_audio_kevent_named_delay(OPLUS_AUDIO_EVENTID_SMARTPA_ERR, MM_FB_KEY_RATELIMIT_5MIN, \
+					FEEDBACK_DELAY_60S, "payload@@aw883xx dynamic create controls failed, ret=%d", ret);
+#endif /* CONFIG_OPLUS_FEATURE_MM_FEEDBACK */
+			}
+			msleep(10);
+		} else {
+			break;
+		}
+	}
 
 	ret_st = aw883xx_device_status(aw883xx->aw_pa, AW_DEV_CHECK_SPIN_MODE_STATUS,
 		AW_SET_DEV_STATUS);
