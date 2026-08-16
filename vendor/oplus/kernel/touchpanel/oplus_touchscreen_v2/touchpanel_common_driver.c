@@ -5464,15 +5464,15 @@ static void wait_for_notify_suspend(struct touchpanel_data *ts)
 		return;
 	}
 
-	if ((ts->notify_state == NOTIFY_BLANK_EARLY_ENTER) || (ts->notify_state == NOTIFY_BLANK_ENTER)) {
-		if (ts->bus_ready_wait_dev_spend_time == 0) {
+	if ((ts->notify_state == NOTIFY_BLANK_EARLY_ENTER) || (ts->notify_state == NOTIFY_BLANK_ENTER) || (ts->tp_suspend_order == LCD_TP_SUSPEND && ts->notify_state == NOTIFY_BLANK_EARLY_EXIT)) {
+		if (ts->tp_suspend_order == LCD_TP_SUSPEND && ts->notify_state == NOTIFY_BLANK_EARLY_EXIT) {
 			wait_event_interruptible_timeout(ts->notify_wait,
-				(ts->notify_state == NOTIFY_BLANK_EARLY_EXIT) || (ts->notify_state == NOTIFY_BLANK_EXIT),
-				msecs_to_jiffies(NOTIFY_TIME_OUT));
+				ts->notify_state == NOTIFY_BLANK_EXIT,
+				0 == ts->bus_ready_wait_dev_spend_time ? msecs_to_jiffies(NOTIFY_TIME_OUT) : msecs_to_jiffies(ts->bus_ready_wait_dev_spend_time));
 		} else {
 			wait_event_interruptible_timeout(ts->notify_wait,
 				(ts->notify_state == NOTIFY_BLANK_EARLY_EXIT) || (ts->notify_state == NOTIFY_BLANK_EXIT),
-				msecs_to_jiffies(ts->bus_ready_wait_dev_spend_time));
+				0 == ts->bus_ready_wait_dev_spend_time ? msecs_to_jiffies(NOTIFY_TIME_OUT) : msecs_to_jiffies(ts->bus_ready_wait_dev_spend_time));
 		}
 		TP_INFO(ts->tp_index, "%s enter,notify_state %d!!\n", __func__, ts->notify_state);
 		if (ts->health_monitor_support) {

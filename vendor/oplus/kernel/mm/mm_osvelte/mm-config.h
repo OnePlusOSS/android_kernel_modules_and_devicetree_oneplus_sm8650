@@ -15,6 +15,8 @@ enum config_oplus_mm_feature_disable1 {
 static const char *module_name_uxmem_opt = "oplus_bsp_uxmem_opt";
 struct config_oplus_bsp_uxmem_opt {
 	bool enable;
+	unsigned int page_pool_order0_mb;
+	unsigned int page_pool_order1_mb;
 };
 
 static const char *module_name_boost_pool = "oplus_boost_pool";
