@@ -534,6 +534,7 @@ static int get_avbsha256_hash(char *avbcmdline, size_t cnt)
     if (cmdlinevalue != NULL) {
         cmdlinevalue++;
         memcpy(avbcmdline, cmdlinevalue, cnt);
+        avbcmdline[cnt - 1] = '\0';
     }
     return ret;
 }

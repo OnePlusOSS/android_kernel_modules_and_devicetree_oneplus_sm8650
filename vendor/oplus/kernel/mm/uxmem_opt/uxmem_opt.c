@@ -51,8 +51,8 @@
 #define MAX_UXMEM_POOL_ALLOC_RETRIES (5)
 
 static const unsigned int orders[] = {0, 1};
-/* 96M for order 0, 8M  for order1 by default */
-static const unsigned int page_pool_nr_pages[] = {((SZ_64M + SZ_32M) >> PAGE_SHIFT), (SZ_8M >> PAGE_SHIFT)};
+/* 96M for order 0, 8M  for order 1 by default */
+static unsigned int page_pool_nr_pages[] = {((SZ_64M + SZ_32M) >> PAGE_SHIFT), (SZ_8M >> PAGE_SHIFT)};
 #define NUM_ORDERS ARRAY_SIZE(orders)
 static struct page_pool *pools[NUM_ORDERS];
 static struct task_struct *ux_page_pool_tsk = NULL;
@@ -504,6 +504,11 @@ static int ux_page_pool_init(void)
 		.symbol_name = "prep_compound_page"
 	};
 
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+	struct config_oplus_bsp_uxmem_opt *config;
+	config = oplus_read_mm_config(module_name_uxmem_opt);
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
+
 	/* get some symbols address using kprobe */
 	ret = register_kprobe(&prep_new_page_kp);
 	if (ret) {
@@ -522,6 +527,15 @@ static int ux_page_pool_init(void)
 	prep_compound_page_dup = (prep_compound_page_t)prep_compound_page_kp.addr;
 	pr_info("suceesfully get prep_compound_page addr:0x%px\n", prep_compound_page_dup);
 	unregister_kprobe(&prep_compound_page_kp);
+
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_MM_OSVELTE)
+	if (config && config->page_pool_order0_mb) {
+		page_pool_nr_pages[0] = config->page_pool_order0_mb * SZ_1M / PAGE_SIZE;
+	}
+	if (config && config->page_pool_order1_mb) {
+		page_pool_nr_pages[1] = config->page_pool_order1_mb * SZ_1M / PAGE_SIZE;
+	}
+#endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
 
 	for (i = 0; i < NUM_ORDERS; i++) {
 		pools[i] = ux_page_pool_create((GFP_HIGHUSER | __GFP_ZERO | __GFP_NOWARN |
@@ -668,25 +682,39 @@ static void fill_pcplist_from_uxmempool(void *data, unsigned int order,
 	}
 }
 
+static unsigned long total_pool_pages(void)
+{
+	unsigned long total = 0;
+	int i, j;
+	struct page_pool *temp_pool;
+
+	for (i = 0; i < NUM_ORDERS; i++) {
+		temp_pool = pools[i];
+		for (j = 0; j < POOL_MIGRATETYPE_TYPES_SIZE; j++) {
+			total += temp_pool->count[j] << orders[i];
+		}
+	}
+
+	return total;
+}
+
 static void meminfo_adjust(void *data, unsigned long *totalram, unsigned long *freeram)
 {
-	unsigned long pool_pages = 0;
-	int i, j;
-	struct page_pool *pool;
-
 	if (unlikely(!ux_page_pool_enabled))
 		return;
 
 	/* make sure totalram is a kernel address */
 	if ((unsigned long)totalram > PAGE_SIZE) {
-		for (i = 0; i < NUM_ORDERS; i++) {
-			pool = pools[i];
-			for (j = 0; j < POOL_MIGRATETYPE_TYPES_SIZE; j++) {
-				pool_pages += pool->count[j] << orders[i];
-			}
-		}
-		*freeram += pool_pages;
+		*freeram += total_pool_pages();
 	}
+}
+
+static void mem_available_adjust(void *data, unsigned long *available)
+{
+	if (unlikely(!ux_page_pool_enabled))
+		return;
+
+	*available += total_pool_pages();
 }
 
 static int register_uxmem_opt_vendor_hooks(void)
@@ -738,12 +766,20 @@ static int register_uxmem_opt_vendor_hooks(void)
 		pr_err("register_trace_android_vh_si_meminfo_adjust failed! ret=%d\n", ret);
 		goto out;
 	}
+
+	ret = register_trace_android_vh_si_mem_available_adjust(mem_available_adjust, NULL);
+	if (ret != 0) {
+		pr_err("register_trace_android_vh_si_mem_available_adjust failed! ret=%d\n", ret);
+		goto out;
+	}
 out:
 	return ret;
 }
 
 static void unregister_uxmem_opt_vendor_hooks(void)
 {
+	unregister_trace_android_vh_si_mem_available_adjust(mem_available_adjust, NULL);
+
 	unregister_trace_android_vh_si_meminfo_adjust(meminfo_adjust, NULL);
 
 	unregister_trace_android_vh_rmqueue_bulk_bypass(fill_pcplist_from_uxmempool, NULL);
