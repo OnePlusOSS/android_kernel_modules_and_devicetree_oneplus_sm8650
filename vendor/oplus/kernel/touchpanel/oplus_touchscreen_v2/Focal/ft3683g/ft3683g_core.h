@@ -26,6 +26,7 @@
 #define FTS_VAL_BT_ID2                          0xB3
 
 #define FTS_120HZ_REPORT_RATE                   0x0C
+#define FTS_144HZ_REPORT_RATE                   0x0F
 #define FTS_180HZ_REPORT_RATE                   0x12
 #define FTS_REG_SMOOTH_LEVEL                    0x85
 #define FTS_REG_GAME_MODE_EN                    0xC3
@@ -92,6 +93,7 @@
 #define FTS_120HZ_REPORT_RATE                   0x0C
 #define FTS_180HZ_REPORT_RATE                   0x12
 #define FTS_240HZ_REPORT_RATE                   0x18
+#define FTS_288HZ_REPORT_RATE                   0x1C
 #define FTS_360HZ_REPORT_RATE                   0x24
 #define FTS_720HZ_REPORT_RATE                   0x24            /*not support*/
 

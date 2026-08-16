@@ -1652,4 +1652,13 @@ QDF_STATUS ucfg_dp_get_vdev_stats(ol_txrx_soc_handle soc, uint8_t vdev_id,
  * Return: None
  */
 void ucfg_dp_set_mon_conf_flags(struct wlan_objmgr_psoc *psoc, uint32_t flags);
+
+/**
+ * ucfg_dp_set_ipv4_addr() - Set IPv4 address
+ * @vdev: vdev
+ * @ip_addr: IPv4 address
+ *
+ * Return: void
+ */
+void ucfg_dp_set_ipv4_addr(struct wlan_objmgr_vdev *vdev, uint8_t *ip_addr);
 #endif /* _WLAN_DP_UCFG_API_H_ */

@@ -16,6 +16,7 @@
 #include "mm-config.h"
 
 #define MAX_CMDLINE_PARAM_LEN 128
+#define MAX_UXMEM_POOL_SIZE 500
 char feature_disable1[MAX_CMDLINE_PARAM_LEN];
 
 #define MEM_1GB (1 << (30 - PAGE_SHIFT))
@@ -128,7 +129,9 @@ static void config_uxmem_opt_show(struct seq_file *m, struct config_data *cd)
 	struct config_oplus_bsp_uxmem_opt *config = (struct config_oplus_bsp_uxmem_opt *)cd->private;
 
 	seq_printf(m, "[%s]\n", cd->module_name);
-	seq_printf(m, "  enable: %d\n", config->enable);
+	seq_printf(m, " enable: %d\n", config->enable);
+	seq_printf(m, " order 0 pool size(MB): %d\n", config->page_pool_order0_mb);
+	seq_printf(m, " order 1 pool size(MB): %d\n", config->page_pool_order1_mb);
 }
 
 static void parse_uxmem_opt_dt(const struct device_node *root)
@@ -137,6 +140,7 @@ static void parse_uxmem_opt_dt(const struct device_node *root)
 	struct config_data *data;
 	struct device_node *node;
 	const char *name = module_name_uxmem_opt;
+	int err;
 
 	node = of_get_child_by_name(root, name);
 	if (!node)
@@ -149,6 +153,22 @@ static void parse_uxmem_opt_dt(const struct device_node *root)
 	}
 
 	config->enable = !of_property_read_bool(node, "feature-disable");
+
+	err = of_property_read_u32(node, "page_pool_order0_mb", &config->page_pool_order0_mb);
+	if (err) {
+		osvelte_logi("read page_pool_order0_mb fail(%d)\n", err);
+	} else if (config->page_pool_order0_mb > MAX_UXMEM_POOL_SIZE) {
+		osvelte_loge("page_pool_order0_mb %d too large, set to %d\n", config->page_pool_order0_mb, MAX_UXMEM_POOL_SIZE);
+		config->page_pool_order0_mb = MAX_UXMEM_POOL_SIZE;
+	}
+
+	err = of_property_read_u32(node, "page_pool_order1_mb", &config->page_pool_order1_mb);
+	if (err) {
+		osvelte_logi("read page_pool_order1_mb fail(%d)\n", err);
+	} else if (config->page_pool_order1_mb > MAX_UXMEM_POOL_SIZE) {
+		osvelte_loge("page_pool_order1_mb %d too large, set to %d\n", config->page_pool_order1_mb, MAX_UXMEM_POOL_SIZE);
+		config->page_pool_order1_mb = MAX_UXMEM_POOL_SIZE;
+	}
 
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (!data) {

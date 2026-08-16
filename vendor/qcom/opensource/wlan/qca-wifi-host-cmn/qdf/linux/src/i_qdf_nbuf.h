@@ -874,10 +874,11 @@ bool __qdf_nbuf_is_mcast_replay(__qdf_nbuf_t nbuf);
 /**
  * __qdf_nbuf_is_arp_local() - check if local or non local arp
  * @skb: pointer to sk_buff
+ * @local_ip: local IP address
  *
  * Return: true if local arp or false otherwise.
  */
-bool __qdf_nbuf_is_arp_local(struct sk_buff *skb);
+bool __qdf_nbuf_is_arp_local(struct sk_buff *skb, uint8_t *local_ip);
 
 /**
  * __qdf_nbuf_data_is_arp_req() - check if skb data is a arp request

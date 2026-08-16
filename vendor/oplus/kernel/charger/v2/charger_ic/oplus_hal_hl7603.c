@@ -503,6 +503,17 @@ struct oplus_chg_ic_virq hl7603_virq_table[] = {
 #define TRACK_LOCAL_T_NS_TO_S_THD 1000000000
 #define TRACK_DEVICE_ABNORMAL_UPLOAD_PERIOD (24 * 3600)
 #define TRACK_INIT_DELAY_TIME 12 /* 1 minute delay time */
+static const char *hl7603_chip_track_name(const struct chip_hl7603 *chip)
+{
+	if (!chip)
+		return "unknown";
+	if (chip->chip_id == HL7603_CHIP_ID_REV)
+		return "HL7603";
+	if (chip->chip_id == HL7603A_CHIP_ID_REV)
+		return "HL7603A";
+	return "unknown";
+}
+
 static int hl7603_push_err(struct oplus_chg_ic_dev *ic_dev,
 				   bool i2c_error, int err_code, char *reg, bool tsd)
 {
@@ -525,15 +536,16 @@ static int hl7603_push_err(struct oplus_chg_ic_dev *ic_dev,
 
 	if (i2c_error)
 		oplus_chg_ic_creat_err_msg(ic_dev, OPLUS_IC_ERR_I2C, 0,
-			"$$err_scene@@i2c_err$$err_reason@@%d$$byb_id@@%d", err_code, ic_dev->index);
+			"$$err_scene@@i2c_err$$err_reason@@%d$$byb_id@@%d$$byb_chip@@%s",
+			err_code, ic_dev->index, hl7603_chip_track_name(chip));
 	else if (chip != NULL && chip->hl7603_init_track_count > TRACK_INIT_DELAY_TIME)
 		oplus_chg_ic_creat_err_msg(ic_dev, OPLUS_IC_ERR_BUCK_BOOST, 0,
-			"$$err_scene@@byb_init_info$$err_reason@@%s$$reg_info@@%s$$byb_id@@%d",
-			tsd ? "TSD" : "normal", reg, ic_dev->index);
+			"$$err_scene@@byb_init_info$$err_reason@@%s$$reg_info@@%s$$byb_id@@%d$$byb_chip@@%s",
+			tsd ? "TSD" : "normal", reg, ic_dev->index, hl7603_chip_track_name(chip));
 	else
 		oplus_chg_ic_creat_err_msg(ic_dev, OPLUS_IC_ERR_BUCK_BOOST, 0,
-			"$$err_scene@@byb_work_err$$err_reason@@%s$$reg_info@@%s$$byb_id@@%d",
-			tsd ? "TSD" : "normal", reg, ic_dev->index);
+			"$$err_scene@@byb_work_err$$err_reason@@%s$$reg_info@@%s$$byb_id@@%d$$byb_chip@@%s",
+			tsd ? "TSD" : "normal", reg, ic_dev->index, hl7603_chip_track_name(chip));
 
 	oplus_chg_ic_virq_trigger(ic_dev, OPLUS_IC_VIRQ_ERR);
 	upload_count++;
