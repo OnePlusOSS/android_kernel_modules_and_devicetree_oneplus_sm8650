@@ -47,6 +47,28 @@ static unsigned long long high_wm = 0;
 bool enable = true;
 module_param(enable, bool, S_IRUGO | S_IWUSR);
 
+#if IS_ENABLED(CONFIG_CGROUP_SCHED)
+#define SA_CGROUP_SYS_BACKGROUND	(1)
+#define SA_CGROUP_FOREGROUND		(2)
+#define SA_CGROUP_BACKGROUND		(3)
+#define SA_CGROUP_TOP_APP		(4)
+#define SA_CGROUP_UX			(9)
+#endif
+
+#if IS_ENABLED(CONFIG_CGROUP_SCHED)
+static inline int get_task_cgroup_id(struct task_struct *task)
+{
+	struct cgroup_subsys_state *css = task_css(task, cpu_cgrp_id);
+
+	return css ? css->id : -1;
+}
+#else
+static inline int get_task_cgroup_id(struct task_struct *task) { return 0; }
+#endif
+
+static unsigned int background_ra_pages = 0;
+module_param(background_ra_pages, uint, S_IRUGO | S_IWUSR);
+
 struct pglist_data *first_online_pgdat(void)
 {
 	return NODE_DATA(first_online_node);
@@ -87,11 +109,21 @@ inline int task_is_fg(struct task_struct *tsk)
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_CGROUP_SCHED)
+static inline int task_is_ta(struct task_struct *tsk)
+{
+	return (SA_CGROUP_TOP_APP == get_task_cgroup_id(tsk)) ? 1 : 0;
+}
+#else
+static inline int task_is_ta(struct task_struct *tsk) { return 0; }
+#endif
+
 static bool is_key_task(struct task_struct *tsk)
 {
 	return (
 		test_task_ux(tsk) ||
 		task_is_fg(tsk) ||
+		task_is_ta(tsk) ||
 		rt_task(tsk));
 }
 
@@ -106,8 +138,11 @@ static void adjust_readaround(void *data, unsigned int ra_pages, pgoff_t offset,
 	if (is_key_task(current))
 		return;
 
-	if (is_lowmem()) {
-		ra_pages /= 2;
+	if (background_ra_pages || is_lowmem()) {
+		if (background_ra_pages)
+			ra_pages = background_ra_pages;
+		if (is_lowmem())
+			ra_pages /= 2;
 		*start = max_t(long, 0, offset - ra_pages / 2);
 		*size = ra_pages;
 		*async_size = ra_pages / 4;
@@ -120,6 +155,9 @@ static void adjust_readahead(void *data, struct readahead_control *ractl, unsign
 
 	if (is_key_task(current))
 		return;
+
+	if (background_ra_pages)
+		*max_pages = min_t(long, *max_pages, background_ra_pages);
 
 	if (is_lowmem())
 		*max_pages = min_t(long, *max_pages, ra->ra_pages / 2);

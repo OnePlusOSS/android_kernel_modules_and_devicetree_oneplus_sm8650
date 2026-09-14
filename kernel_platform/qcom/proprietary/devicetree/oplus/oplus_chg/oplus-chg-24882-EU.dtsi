@@ -541,7 +541,7 @@
 		compatible = "oplus,monitor";
 		oplus,topic-update-interval = <60000>;
 
-		track,fast_chg_break_t_thd = <1000>;
+		track,fast_chg_break_t_thd = <2500>;
 		track,general_chg_break_t_thd = <200>;
 		track,voocphy_type = <3>;
 		track,wired_max_power = <80000>;
@@ -551,6 +551,7 @@
 		track,nominal_qmax1 = <6955>;
 		track,nominal_fcc1 = <6390>;
 		track,external_gauge_num = <1>;
+		track,track_ver = <TRACK_VER_4_0>;
 	};
 };
 
