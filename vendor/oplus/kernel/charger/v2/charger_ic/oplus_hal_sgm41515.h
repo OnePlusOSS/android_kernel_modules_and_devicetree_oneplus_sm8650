@@ -272,6 +272,8 @@
 /* Address:0Dh */
 #define REG0D_SGM41515_ADDRESS                         0x0d
 
+#define REG0D_SGM41515_IPRECHG_MASK                    BIT(0)
+#define REG0D_SGM41515_IPRECHG_X6_DISABLE              1
 #define REG0D_SGM41515_DP_VSEL_MASK                    (BIT(4) | BIT(3))
 #define REG0D_SGM41515_DP_VSEL_SHIFT                   3
 #define REG0D_SGM41515_DP_600MV                        0x2
@@ -282,6 +284,10 @@
 #define REG0D_SGM41515_DP_600MV_DM_HIZ                 0x8
 #define REG0D_SGM41515_DP_3300MV_DM_600MV              0xe
 
+#define REG0D_SGM41515_OTG_CTRL_MASK                   BIT(0)
+#define REG0D_SGM41515_OTG_CTRL_DISABLE                0
+#define REG0D_SGM41515_OTG_CTRL_ENABLE                 BIT(0)
+
 /* Address:0Eh */
 #define REG0E_SGM41515_ADDRESS                         0x0E
 #define REG0E_SGM41515_REG_INPUT_DET_MASK              BIT(7)
@@ -289,11 +295,11 @@
 /* Address:0Fh */
 #define REG0F_SGM41515_ADDRESS                         0x0F
 #define REG0F_SGM41515_VINDPM_THRESHOLD_OFFSET_MASK    GENMASK(1, 0)
-#define REG0F_SGM41515_VINDPM_THRESHOLD_OFFSET_SHIFT   (BIT(1) | BIT(0)))
+#define REG0F_SGM41515_VINDPM_THRESHOLD_OFFSET_SHIFT   (BIT(1) | BIT(0))
 #define REG0F_SGM41515_VINDPM_THRESHOLD_OFFSET_3900MV  0
 #define REG0F_SGM41515_VINDPM_THRESHOLD_OFFSET_5900MV  BIT(0)
 #define REG0F_SGM41515_VINDPM_THRESHOLD_OFFSET_7500MV  BIT(1)
-#define REG0F_SGM41515_VINDPM_THRESHOLD_OFFSET_10500MV (BIT(1) | BIT(0)))
+#define REG0F_SGM41515_VINDPM_THRESHOLD_OFFSET_10500MV (BIT(1) | BIT(0))
 #define REG0F_SGM41515_VREG_FT_MASK                 (BIT(7) | BIT(6))
 #define REG0F_SGM41515_VREG_FT_SHIFT                6
 #define REG0F_SGM41515_VREG_FT_DISABLE              0x00  /* 00 = Disable */
@@ -306,6 +312,16 @@
 
 /* Smart tuning thresholds */
 #define SMART_TUNING_MAX_ADJUSTMENT        12
+
+/* Address:10h */
+#define REG10_SGM41512_ADDRESS                         0x10
+#define REG10_SGM41512_BOOST_2000MA                    2000
+#define REG10_SGM41512_OTG_CURRENT_2000MA_EN           BIT(6)
+#define REG10_SGM41512_OTG_CURRENT_2000MA_DIS          0X00
+#define REG10_SGM41512_OTG_CURRENT_LIMIT_MASK          BIT(6)
+#define REG10_SGM41512_OTG_FREQ_MASK                   BIT(1)
+#define REG10_SGM41512_OTG_FREQ_500KHZ                 0x00
+#define REG10_SGM41512_OTG_FREQ_1_5MHZ                 BIT(1)
 
 /* Other */
 #define SGM41515_FIRST_REG                             0x00

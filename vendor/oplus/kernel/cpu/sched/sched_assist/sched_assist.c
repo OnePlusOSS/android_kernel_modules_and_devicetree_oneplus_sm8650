@@ -124,8 +124,6 @@ static int register_scheduler_vendor_hooks(void)
 	REGISTER_TRACE_RVH(android_rvh_find_lowest_rq, android_rvh_find_lowest_rq_handler);
 #endif
 
-	/* register vender hook in kernel/sched/core.c */
-	REGISTER_TRACE_RVH(android_rvh_sched_fork, android_rvh_sched_fork_handler);
 #ifndef CONFIG_MTK_SCHED_FAST_LOAD_TRACKING
 	REGISTER_TRACE_RVH(android_rvh_schedule, android_rvh_schedule_handler);
 #endif

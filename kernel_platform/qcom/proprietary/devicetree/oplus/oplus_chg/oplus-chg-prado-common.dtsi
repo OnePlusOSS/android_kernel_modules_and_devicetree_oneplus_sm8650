@@ -463,6 +463,8 @@
 		oplus,gauge_stuck_threshold = <15>;
 		oplus,gauge_stuck_time = <50>;
 
+		oplus,pm_power_off_with_hightemp;
+
 		oplus_spec,batt_full_time = <60>;
 		oplus_spec,batt_full_low_soc = <99>;
 		oplus_spec,batt_full_low_soc_time = <600>;

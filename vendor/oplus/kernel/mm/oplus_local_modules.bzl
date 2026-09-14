@@ -217,6 +217,17 @@ def define_oplus_local_modules():
     )
 
     define_oplus_ddk_module(
+        name = "oplus_bsp_file_read_record",
+        srcs = native.glob([
+            "**/*.h",
+            "file_read_record/file_read_record.c",
+        ]),
+        includes = ["."],
+        # local_defines = ["CONFIG_OPLUS_MM_FRR_DEBUG"],
+    )
+
+
+    define_oplus_ddk_module(
         name = "oplus_bsp_zstdn",
         srcs = native.glob([
             "**/*.h",
@@ -303,25 +314,28 @@ def define_oplus_local_modules():
         local_defines = ["CONFIG_OPLUS_FG_PROTECT"],
     )
 
+    oplus_bsp_mm_module_list = [
+        "oplus_bsp_memleak_detect_simple",
+        "oplus_bsp_sigkill_diagnosis",
+        "oplus_bsp_zram_opt",
+        "oplus_exit_mm_optimize",
+        "oplus_bsp_level_protect",
+        "oplus_bsp_fg_protect",
+        "oplus_bsp_proactive_compact",
+        "oplus_bsp_hybridswap_zram",
+        "oplus_bsp_zsmalloc",
+        "oplus_bsp_lz4k",
+        "oplus_bsp_kswapd_opt",
+        "oplus_bsp_kshrink_slabd",
+        "oplus_bsp_zstdn",
+        "oplus_bsp_zstdn_o",
+        # TODO: qcom convert to GKI implementation
+        "oplus_bsp_uxmem_opt",
+        "oplus_bsp_dynamic_readahead",
+        "oplus_bsp_file_read_record",
+    ]
+
     ddk_copy_to_dist_dir(
         name = "oplus_bsp_mm",
-        module_list = [
-            "oplus_bsp_memleak_detect_simple",
-            "oplus_bsp_sigkill_diagnosis",
-            "oplus_bsp_zram_opt",
-            "oplus_exit_mm_optimize",
-            "oplus_bsp_level_protect",
-            "oplus_bsp_fg_protect",
-            "oplus_bsp_proactive_compact",
-            "oplus_bsp_hybridswap_zram",
-            "oplus_bsp_zsmalloc",
-            "oplus_bsp_lz4k",
-            "oplus_bsp_kswapd_opt",
-            "oplus_bsp_kshrink_slabd",
-            "oplus_bsp_zstdn",
-            "oplus_bsp_zstdn_o",
-            # TODO: qcom convert to GKI implementation
-            "oplus_bsp_uxmem_opt",
-            "oplus_bsp_dynamic_readahead",
-        ],
+        module_list = oplus_bsp_mm_module_list,
     )

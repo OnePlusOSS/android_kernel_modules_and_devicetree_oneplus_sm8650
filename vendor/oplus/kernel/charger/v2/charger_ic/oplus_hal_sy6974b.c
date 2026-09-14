@@ -188,6 +188,7 @@ struct sy6974b_chip {
 	struct tcpc_device *tcpc;
 	struct notifier_block pd_nb;
 	struct delayed_work fcc_rerun_work;
+	atomic_t last_suspend_en;
 };
 
 enum {
@@ -546,12 +547,6 @@ static void sy6974b_event_work(struct work_struct *work)
 
 	sy6974b_pluggable_event_work(chip, curr_pg, prev_pg);
 
-#ifdef CONFIG_OPLUS_CHARGER_MTK
-	if (chip->oplus_charger_type == POWER_SUPPLY_TYPE_USB_CDP)
-		oplus_chg_pullup_dp_set(true);
-	else
-		oplus_chg_pullup_dp_set(false);
-#endif
 	sy6974b_get_bc12(chip);
 	oplus_chg_ic_virq_trigger(chip->ic_dev, OPLUS_IC_VIRQ_PLUGIN);
 	return;
@@ -1155,12 +1150,18 @@ static void sy6974b_fcc_rerun_work(struct work_struct *work)
 
 static void sy6974b_suspend_charger_extern(struct sy6974b_chip *chip, bool en)
 {
+	bool was_suspended;
+
+	was_suspended = atomic_xchg(&chip->last_suspend_en, en);
+
 	if (en) {
 		schedule_delayed_work(&chip->event_work, msecs_to_jiffies(500));
 	} else {
-		msleep(100);
+		if (was_suspended)
+			msleep(100);
 		sy6974b_input_current_limit_without_aicl(chip, chip->charger_current_pre);
 	}
+
 	schedule_delayed_work(&chip->ibus_control_work, 0);
 }
 
@@ -2711,6 +2712,7 @@ static void sy6974b_get_bc12(struct sy6974b_chip *chip)
 
 			#ifdef CONFIG_OPLUS_CHARGER_MTK
 			sy6974b_inform_charger_type(chip);
+			oplus_chg_pullup_dp_set(true);
 			#else
 			oplus_set_usb_props_type(chip->oplus_charger_type);
 			#endif
@@ -3105,6 +3107,7 @@ static int sy6974b_driver_probe(struct i2c_client *client,
 	chip->bc12_done = false;
 	chip->bc12_retried = 0;
 	chip->bc12_delay_cnt = 0;
+	atomic_set(&chip->last_suspend_en, 1);
 	sy6974b_reset_charger(chip);
 	sy6974b_hardware_init(chip);
 	oplus_chg_awake_init(chip);
@@ -3260,7 +3263,9 @@ static void sy6974b_shutdown(struct i2c_client *client)
 	 * signal is available.
 	 */
 	if (READ_ONCE(chip->vbus_present)) {
-		sy6974b_write_byte_mask(chip, HIZ_MODE_REG, HIZ_MODE_BIT, 0);
+		rc = sy6974b_write_byte_mask(chip, HIZ_MODE_REG, HIZ_MODE_BIT, 0);
+		if (rc < 0)
+			chg_err("sy6974b_write_byte_mask HIZ mode failed, rc = %d\n", rc);
 	} else {
 		/* once USBTEMP_HIGH and vbus is low*/
 		rc = sy6974b_read_byte_mask(chip, HIZ_MODE_REG, HIZ_MODE_BIT, &data);

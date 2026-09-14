@@ -58,6 +58,7 @@
 
 #define UFCS_PR_MIN_REQ_CURRENT		500
 
+#define UFCS_START_DEF_CURR_MA      2000
 
 static void ufcs_pr_parse_dt(struct oplus_ufcs *chip, struct device_node *node)
 {
@@ -211,7 +212,7 @@ static void ufcs_pr_init(struct oplus_ufcs *chip)
 
 	pr_data->bcc_target_update_jiffies = jiffies;
 
-	pr_data->target_current_ma = oplus_ufcs_get_start_curr_min(chip);
+	pr_data->target_current_ma = UFCS_START_DEF_CURR_MA;
 	pr_data->req_vbus_max_mv = chip->config.target_vbus_mv;
 	pr_data->request_voltage_mv = min(pr_data->req_vbus_max_mv, chip->vol_set_mv);
 	pr_data->request_current_ma = chip->curr_set_ma;

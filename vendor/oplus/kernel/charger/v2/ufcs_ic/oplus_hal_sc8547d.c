@@ -1207,6 +1207,10 @@ static int sc8547_voocphy_init_vooc(struct oplus_voocphy_manager *voocphy)
 		chg_err("read value %d\n", value);
 
 		/*dpdm */
+		if (oplus_chg_get_fcs_support_flags()) {
+			sc8547_write_byte(chip->client, SC8547_REG_21, 0x31);
+			msleep(30);
+		}
 		sc8547_write_byte(chip->client, SC8547_REG_21, 0x21);
 		sc8547_write_byte(chip->client, SC8547_REG_22, 0x00);
 		sc8547_write_byte(chip->client, SC8547_REG_33, 0xD1);
@@ -2470,6 +2474,80 @@ static int sc8547d_retrieve_flags(struct ufcs_dev *ufcs)
 	return rc;
 }
 
+#define SC8547D_DP_20K_PD_EN_MASK BIT(4)
+#define SC8547D_DM_20K_PD_EN_MASK BIT(5)
+static int sc8547d_cp_reset_dpdm(struct ufcs_dev *ufcs)
+{
+	struct sc8547d_device *chip = ufcs->drv_data;
+	int rc = 0;
+	int ufcs_disable_rc = 0;
+	static bool first = true;
+	u8 value = 0;
+	bool ufcs_enable_success = false;
+
+	if (!first && !oplus_chg_get_fcs_support_flags())
+		return 0;
+	first = false;
+
+	if (chip == NULL) {
+		chg_err("sc8547d chip is NULL\n");
+		return -ENODEV;
+	}
+
+	// SC8547D_ADDR_UFCS_CTRL1 = 0x40
+	rc = sc8547_read_byte(chip->client, SC8547D_ADDR_UFCS_CTRL1, &value);
+	if (rc < 0) {
+		chg_err("[%s] read SC8547D_ADDR_UFCS_CTRL1 error, rc=%d\n",
+			chip->dev->of_node->name, rc);
+		goto reset_dpdm_err;
+	}
+
+	if (!(value & SC8547D_CMD_EN_CHIP)) {
+		rc = sc8547d_ufcs_enable(chip->ufcs);
+		if (rc < 0) {
+			chg_err("sc8547d_ufcs_enable failed, rc=%d\n", rc);
+			goto reset_dpdm_err;
+		}
+		ufcs_enable_success = true;
+	}
+
+	rc = sc8547_read_byte(chip->client, SC8547_REG_21, &value);
+	if (rc < 0) {
+		chg_err("[%s] read SC8547_REG_21 error, rc=%d\n", chip->dev->of_node->name, rc);
+		goto reset_dpdm_err;
+	}
+
+	rc = sc8547_write_byte(chip->client, SC8547_REG_21,
+		value | (SC8547D_DP_20K_PD_EN_MASK | SC8547D_DM_20K_PD_EN_MASK));
+	if(rc < 0) {
+		chg_err("dpdm pull down failed, rc=%d\n", rc);
+		goto reset_dpdm_err;
+	}
+	chg_info("dpdm pull down\n");
+
+	msleep(30);
+
+	rc = sc8547_write_byte(chip->client, SC8547_REG_21,
+		value & ~(SC8547D_DP_20K_PD_EN_MASK | SC8547D_DM_20K_PD_EN_MASK));
+	if(rc < 0) {
+		chg_err("dpdm pull up failed, rc=%d\n", rc);
+		goto reset_dpdm_err;
+	}
+	chg_info("dpdm pull up\n");
+
+reset_dpdm_err:
+	if (ufcs_enable_success) {
+		ufcs_disable_rc = sc8547d_ufcs_disable(chip->ufcs);
+		if (ufcs_disable_rc < 0)
+			chg_err("sc8547d_ufcs_disable failed, ufcs_disable_rc=%d\n",
+				ufcs_disable_rc);
+		if (rc >= 0)
+			rc = ufcs_disable_rc;
+	}
+
+	return rc;
+}
+
 static struct ufcs_dev_ops ufcs_ops = {
 	.init = sc8547d_ufcs_init,
 	.write_msg = sc8547d_ufcs_write_msg,
@@ -2482,6 +2560,7 @@ static struct ufcs_dev_ops ufcs_ops = {
 	.disable = sc8547d_ufcs_disable,
 	.watchdog_config = sc8547d_ufcs_cp_watchdog_config,
 	.retrieve_flags = sc8547d_retrieve_flags,
+	.reset_dpdm = sc8547d_cp_reset_dpdm,
 };
 
 static int sc8547_charger_choose(struct sc8547d_device *chip)
@@ -3792,7 +3871,13 @@ static int sc8547d_driver_probe(struct i2c_client *client,
 {
 	struct sc8547d_device *chip;
 	struct oplus_voocphy_manager *voocphy;
+	struct device_node *node = oplus_get_node_by_child_gauge(client->dev.of_node);
 	int rc;
+
+	if (node && of_property_read_bool(node, "skip_cp_probe")) {
+		chg_info("non-use cp, skip cp driver probe\n");
+		return -ENODEV;
+	}
 
 	chip = devm_kzalloc(&client->dev, sizeof(struct sc8547d_device), GFP_KERNEL);
 	if (chip == NULL) {

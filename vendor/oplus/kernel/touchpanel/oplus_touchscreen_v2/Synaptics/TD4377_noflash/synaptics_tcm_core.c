@@ -3836,9 +3836,11 @@ static int syna_mode_switch(void *chip_data, work_mode mode, int flag)
 		break;
 
 	case MODE_WATERPROOF:
-		ret = synaptics_enable_waterproof_mode(tcm_hcd, flag);
-		if (ret < 0) {
-			TPD_INFO("%s: enable waterproof mode : %d failed\n", __func__, flag);
+		if (ts != NULL && ts->is_suspended == 0) {
+			ret = synaptics_enable_waterproof_mode(tcm_hcd, flag);
+			if (ret < 0) {
+				TPD_INFO("%s: enable waterproof mode : %d failed\n", __func__, flag);
+			}
 		}
 		break;
 

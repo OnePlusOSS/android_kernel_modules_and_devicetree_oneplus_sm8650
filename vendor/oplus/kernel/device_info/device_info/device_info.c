@@ -1303,6 +1303,7 @@ static int get_process_name(char *process_name) {
 static int __attribute__((__unused__)) init_ddr_vendor_size(struct device_info *dev_info)
 {
 	uint32_t ddr_type = DRAMC_TOP_TYPE_LPDDR5;
+	unsigned int rk_cnt;
 	unsigned int rk_size[DRAMC_MAX_RK] = {0};
 	char ddr_manufacture[DDR_INFO_LEN] = {0};
 	struct manufacture_info *info = NULL;
@@ -1347,10 +1348,22 @@ static int __attribute__((__unused__)) init_ddr_vendor_size(struct device_info *
 	}
 
 	ddr_vendor_id = get_mr_value(DDR_MR5);
+
+	ret = of_property_read_u32(mem_node, "rk_cnt", &rk_cnt);
+	if (ret < 0) {
+		pr_err("rk_cnt read error \n");
+		goto out;
+	}
+
 	ret = of_property_read_u32_array(mem_node, "rk_size", rk_size, 2);
 	if (ret < 0) {
 		pr_err("rk_size read error \n");
 		goto out;
+	}
+
+	for (i = 0; i < DRAMC_MAX_RK; i++) {
+		if(i + 1 > rk_cnt)
+			rk_size[i] = 0;
 	}
 
 	ret = of_property_read_u32(mem_node, "dram_type", &ddr_type);

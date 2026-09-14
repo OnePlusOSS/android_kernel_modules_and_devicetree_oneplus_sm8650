@@ -139,9 +139,13 @@ struct page *boost_pool_fetch(struct boost_pool *boost_pool, int order_index)
 	if (boost_pool->custom_pid && current->tgid != boost_pool->custom_pid)
 		return NULL;
 
+#ifdef CONFIG_HIGHMEM
 	page = boost_page_pool_remove(pool, POOL_HIGHPAGE);
 	if (!page)
 		page = boost_page_pool_remove(pool, POOL_LOWPAGE);
+#else
+	page = boost_page_pool_remove(pool, POOL_LOWPAGE);
+#endif
 
 	if (page && likely(!boost_pool->prefill))
 		boost_pool->alloc = max(boost_pool->low,
@@ -233,9 +237,13 @@ static int boost_page_pool_do_shrink(struct boost_page_pool *pool,
 		struct page *page;
 
 		/* Try to free low pages first */
+#ifdef CONFIG_HIGHMEM
 		page = boost_page_pool_remove(pool, POOL_LOWPAGE);
 		if (!page)
 			page = boost_page_pool_remove(pool, POOL_HIGHPAGE);
+#else
+		page = boost_page_pool_remove(pool, POOL_LOWPAGE);
+#endif
 
 		if (!page)
 			break;
