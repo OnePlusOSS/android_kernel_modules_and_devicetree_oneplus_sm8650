@@ -254,8 +254,7 @@ static void tcpc_sink_request_check_work(struct work_struct *work)
 {
 	struct pd_manager_chip *chip = container_of(work,
 		struct pd_manager_chip, sink_request_check_work.work);
-	if (!chip)
-		return;
+
 	chip->msg_type = REVERSE_CHG_MSG_TYPE_SINK_REQ_PDO;
 	if (chip->reverse_chg_ic_dev)
 		oplus_chg_ic_virq_trigger(chip->reverse_chg_ic_dev, OPLUS_IC_VIRQ_SINK_REQ_MSG);
@@ -1893,8 +1892,7 @@ static void tcpc_source_pdo_check_work(struct work_struct *work)
 {
 	struct pd_manager_chip *chip = container_of(work, struct pd_manager_chip, source_pdo_check_work.work);
 	int max_pdo_current = 0;
-	if(!chip)
-		return;
+
 	max_pdo_current = tcpc_get_max_current_from_fixed_pdo(chip, VBUS_9V);
 	if (max_pdo_current < 0)
 		max_pdo_current = tcpc_get_max_current_from_fixed_pdo(chip, VBUS_5V);

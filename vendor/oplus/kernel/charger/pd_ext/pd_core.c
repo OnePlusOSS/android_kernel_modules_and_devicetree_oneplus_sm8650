@@ -362,6 +362,67 @@ static inline void pd_parse_pdata_mfrs(
 	pd_port->id_header = pd_port->id_vdos[0];
 }
 
+static inline void pd_parse_pdata_pdos(
+	struct pd_port *pd_port, struct device_node *np)
+{
+	int ret, i;
+
+	ret = of_property_read_u32(np, "pd,source-pdo-size",
+			(u32 *)&pd_port->local_src_cap_default.nr);
+	if (ret < 0)
+		pr_err("%s get source pdo size fail\n", __func__);
+
+	ret = of_property_read_u32_array(np, "pd,source-pdo-data",
+		(u32 *)pd_port->local_src_cap_default.pdos,
+		pd_port->local_src_cap_default.nr);
+	if (ret < 0)
+		pr_err("%s get source pdo data fail\n", __func__);
+
+	pr_info("%s src pdo data =\n", __func__);
+	for (i = 0; i < pd_port->local_src_cap_default.nr; i++)
+		pr_info("%s %d: 0x%08x\n", __func__, i,
+			pd_port->local_src_cap_default.pdos[i]);
+
+	ret = of_property_read_u32(np, "pd,sink-pdo-size",
+				(u32 *)&pd_port->local_snk_cap.nr);
+	if (ret < 0)
+		pr_err("%s get sink pdo size fail\n", __func__);
+
+	ret = of_property_read_u32_array(np, "pd,sink-pdo-data",
+		(u32 *)pd_port->local_snk_cap.pdos,
+			pd_port->local_snk_cap.nr);
+	if (ret < 0)
+		pr_err("%s get sink pdo data fail\n", __func__);
+
+	pr_info("%s snk pdo data =\n", __func__);
+	for (i = 0; i < pd_port->local_snk_cap.nr; i++) {
+		pr_info("%s %d: 0x%08x\n", __func__, i,
+			pd_port->local_snk_cap.pdos[i]);
+
+#ifdef CONFIG_USB_PD_REV30_PPS_SINK
+		if (PDO_TYPE(pd_port->local_snk_cap.pdos[i]) !=
+			PDO_TYPE_APDO)
+			pd_port->local_snk_cap_nr_pd20++;
+#endif	/* CONFIG_USB_PD_REV30_PPS_SINK */
+	}
+
+#ifdef CONFIG_USB_PD_REV30_PPS_SINK
+	pd_port->local_snk_cap_nr_pd30 = pd_port->local_snk_cap.nr;
+#endif	/* CONFIG_USB_PD_REV30_PPS_SINK */
+}
+
+static inline void pd_parse_pdata_version(
+	struct pd_port *pd_port, struct device_node *np)
+{
+	u32 val;
+
+	pd_port->pd_version = SOUTHCHIP_PD_VER;
+	if (of_property_read_u32(np, "pd,pd_version", &val) == 0)
+		pd_port->pd_version = val;
+
+	pr_info("%s use pd version 0x%04x\n", __func__, pd_port->pd_version);
+}
+
 static int pd_parse_pdata(struct pd_port *pd_port)
 {
 	u32 val;
@@ -372,49 +433,7 @@ static int pd_parse_pdata(struct pd_port *pd_port)
 	np = of_find_node_by_name(pd_port->tcpc->dev.of_node, "pd-data");
 
 	if (np) {
-		ret = of_property_read_u32(np, "pd,source-pdo-size",
-				(u32 *)&pd_port->local_src_cap_default.nr);
-		if (ret < 0)
-			pr_err("%s get source pdo size fail\n", __func__);
-
-		ret = of_property_read_u32_array(np, "pd,source-pdo-data",
-			(u32 *)pd_port->local_src_cap_default.pdos,
-			pd_port->local_src_cap_default.nr);
-		if (ret < 0)
-			pr_err("%s get source pdo data fail\n", __func__);
-
-		pr_info("%s src pdo data =\n", __func__);
-		for (i = 0; i < pd_port->local_src_cap_default.nr; i++) {
-			pr_info("%s %d: 0x%08x\n", __func__, i,
-				pd_port->local_src_cap_default.pdos[i]);
-		}
-
-		ret = of_property_read_u32(np, "pd,sink-pdo-size",
-					(u32 *)&pd_port->local_snk_cap.nr);
-		if (ret < 0)
-			pr_err("%s get sink pdo size fail\n", __func__);
-
-		ret = of_property_read_u32_array(np, "pd,sink-pdo-data",
-			(u32 *)pd_port->local_snk_cap.pdos,
-				pd_port->local_snk_cap.nr);
-		if (ret < 0)
-			pr_err("%s get sink pdo data fail\n", __func__);
-
-		pr_info("%s snk pdo data =\n", __func__);
-		for (i = 0; i < pd_port->local_snk_cap.nr; i++) {
-			pr_info("%s %d: 0x%08x\n", __func__, i,
-				pd_port->local_snk_cap.pdos[i]);
-
-#ifdef CONFIG_USB_PD_REV30_PPS_SINK
-			if (PDO_TYPE(pd_port->local_snk_cap.pdos[i]) !=
-				PDO_TYPE_APDO)
-				pd_port->local_snk_cap_nr_pd20++;
-#endif	/* CONFIG_USB_PD_REV30_PPS_SINK */
-		}
-
-#ifdef CONFIG_USB_PD_REV30_PPS_SINK
-		pd_port->local_snk_cap_nr_pd30 = pd_port->local_snk_cap.nr;
-#endif	/* CONFIG_USB_PD_REV30_PPS_SINK */
+		pd_parse_pdata_pdos(pd_port, np);
 
 		ret = of_property_read_u32(np, "pd,id-vdo-size",
 					(u32 *)&pd_port->id_vdo_nr);
@@ -439,6 +458,8 @@ static int pd_parse_pdata(struct pd_port *pd_port)
 		pd_port->dpm_charging_policy = val;
 		pd_port->dpm_charging_policy_default = val;
 		pr_info("%s charging_policy = %d\n", __func__, val);
+
+		pd_parse_pdata_version(pd_port, np);
 
 #ifdef CONFIG_USB_PD_REV30_BAT_INFO
 		ret = pd_parse_pdata_bats(pd_port, np);

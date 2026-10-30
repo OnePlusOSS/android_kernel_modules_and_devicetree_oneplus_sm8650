@@ -31,7 +31,7 @@
 #include "huf.h"
 #include "../include/xxhash.h"                /* XXH_reset, update, digest */
 #define ZSTD_TRACE 0
-
+#include <linux/minmax.h>
 
 /* ---- static assert (debug) --- */
 #define ZSTD_STATIC_ASSERT(c) DEBUG_STATIC_ASSERT(c)
@@ -43,10 +43,13 @@
 /*-*************************************
 *  shared macros
 ***************************************/
-#undef MIN
-#undef MAX
+#ifndef MIN
 #define MIN(a,b) ((a)<(b) ? (a) : (b))
+#endif
+
+#ifndef MAX
 #define MAX(a,b) ((a)>(b) ? (a) : (b))
+#endif
 
 /*
  * Ignore: this is an internal helper.

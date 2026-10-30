@@ -1309,6 +1309,10 @@ static ssize_t sih_lra_resistance_show(void *chip_data, char *buf)
 	sih_haptic_t *sih_haptic = chip_data;
 	ssize_t len = 0;
 
+	if (!sih_haptic || !sih_haptic->hp_func ||
+		!sih_haptic->hp_func->get_lra_resistance)
+		return -EINVAL;
+
 	mutex_lock(&sih_haptic->lock);
 	sih_haptic->hp_func->get_lra_resistance(sih_haptic);
 	mutex_unlock(&sih_haptic->lock);
@@ -1412,6 +1416,10 @@ static ssize_t sih_drv_vboost_store(void *chip_data, const char *buf)
 	uint32_t val = 0;
 	int rc = 0;
 
+	if (!sih_haptic || !sih_haptic->hp_func ||
+		!sih_haptic->hp_func->set_drv_bst_vol)
+		return -EINVAL;
+
 	rc = kstrtouint(buf, 0, &val);
 	if (rc < 0)
 		return rc;
@@ -1439,6 +1447,9 @@ static ssize_t sih_drv_vboost_show(void *chip_data, char *buf)
 {
 	sih_haptic_t *sih_haptic = chip_data;
 	ssize_t len = 0;
+
+	if (!sih_haptic)
+		return -EINVAL;
 
 	len += snprintf(buf, PAGE_SIZE, "drv_vboost = %d\n",
 		sih_haptic->chip_ipara.drv_vboost);

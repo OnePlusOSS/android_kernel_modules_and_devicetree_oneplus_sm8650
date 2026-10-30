@@ -510,8 +510,14 @@ static ssize_t f0_save_show(struct device *dev,
 			      struct device_attribute *attr, char *buf)
 {
 	cdev_t *cdev = dev_get_drvdata(dev);
-	struct haptic_common_data *oh =  container_of(cdev, struct haptic_common_data, cdev);
-	return oh->haptic_common_ops->f0_save_show(oh->chip_data,buf);
+	struct haptic_common_data *oh;
+	if (!cdev)
+		return -EINVAL;
+	oh =  container_of(cdev, struct haptic_common_data, cdev);
+	if (!oh->haptic_common_ops || !oh->haptic_common_ops->f0_save_show)
+		return -EINVAL;
+	else
+		return oh->haptic_common_ops->f0_save_show(oh->chip_data,buf);
 }
 
 static ssize_t f0_save_store(struct device *dev,
@@ -561,8 +567,14 @@ static ssize_t drv_vboost_show(struct device *dev,
 			      struct device_attribute *attr, char *buf)
 {
 	cdev_t *cdev = dev_get_drvdata(dev);
-	struct haptic_common_data *oh =  container_of(cdev, struct haptic_common_data, cdev);
-	return oh->haptic_common_ops->drv_vboost_show(oh->chip_data,buf);
+	struct haptic_common_data *oh;
+	if (!cdev)
+		return -EINVAL;
+	oh =  container_of(cdev, struct haptic_common_data, cdev);
+	if (!oh->haptic_common_ops || !oh->haptic_common_ops->drv_vboost_show)
+		return -EINVAL;
+	else
+		return oh->haptic_common_ops->drv_vboost_show(oh->chip_data,buf);
 }
 
 static ssize_t drv_vboost_store(struct device *dev,
@@ -579,16 +591,28 @@ static ssize_t detect_vbat_show(struct device *dev,
 			      struct device_attribute *attr, char *buf)
 {
 	cdev_t *cdev = dev_get_drvdata(dev);
-	struct haptic_common_data *oh =  container_of(cdev, struct haptic_common_data, cdev);
-	return oh->haptic_common_ops->detect_vbat_show(oh->chip_data,buf);
+	struct haptic_common_data *oh;
+	if (!cdev)
+		return -EINVAL;
+	oh =  container_of(cdev, struct haptic_common_data, cdev);
+	if (!oh->haptic_common_ops || !oh->haptic_common_ops->detect_vbat_show)
+		return -EINVAL;
+	else
+		return oh->haptic_common_ops->detect_vbat_show(oh->chip_data,buf);
 }
 
 static ssize_t audio_delay_show(struct device *dev,
 			      struct device_attribute *attr, char *buf)
 {
 	cdev_t *cdev = dev_get_drvdata(dev);
-	struct haptic_common_data *oh =  container_of(cdev, struct haptic_common_data, cdev);
-	return oh->haptic_common_ops->audio_delay_show(oh->chip_data,buf);
+	struct haptic_common_data *oh;
+	if (!cdev)
+		return -EINVAL;
+	oh =  container_of(cdev, struct haptic_common_data, cdev);
+	if (!oh->haptic_common_ops || !oh->haptic_common_ops->audio_delay_show)
+		return -EINVAL;
+	else
+		return oh->haptic_common_ops->audio_delay_show(oh->chip_data,buf);
 }
 
 static ssize_t audio_delay_store(struct device *dev,

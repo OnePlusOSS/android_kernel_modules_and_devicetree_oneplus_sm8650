@@ -2461,6 +2461,17 @@ static void oplus_vooc_check_charger_out_work(struct work_struct *work)
 	oplus_vooc_set_online_keep(chip, false);
 }
 
+static bool oplus_vooc_need_retry_switch(struct oplus_chg_vooc *chip)
+{
+	if (!chip || !chip->vooc_disable_votable ||
+	    !chip->vooc_not_allow_votable)
+		return false;
+
+	return chip->wired_online &&
+	       !get_effective_result(chip->vooc_disable_votable) &&
+	       !get_effective_result(chip->vooc_not_allow_votable);
+}
+
 static void oplus_vooc_fastchg_exit(struct oplus_chg_vooc *chip,
 				    bool restore_nor_chg)
 {
@@ -2500,8 +2511,7 @@ static void oplus_vooc_fastchg_exit(struct oplus_chg_vooc *chip,
 	}
 
 	/* If fast charge is not disabled, try to reload fast charge */
-	if (chip->wired_online &&
-	    !get_effective_result(chip->vooc_disable_votable))
+	if (oplus_vooc_need_retry_switch(chip))
 		oplus_vooc_switch_request(chip);
 }
 
@@ -4467,6 +4477,18 @@ static void oplus_vooc_plugin_clear_dummy_charge_status(struct oplus_chg_vooc *c
 	chip->check_curr_delay = false;
 }
 
+static void oplus_vooc_clear_temp_soc_not_allow(struct oplus_chg_vooc *chip)
+{
+	if (!chip || !chip->vooc_not_allow_votable)
+		return;
+
+	vote(chip->vooc_not_allow_votable, CHG_FULL_COOL_VOTER, false, 0, false);
+	vote(chip->vooc_not_allow_votable, BATT_TEMP_VOTER, false, 0, false);
+	vote(chip->vooc_not_allow_votable, BATT_SOC_VOTER, false, 0, false);
+	vote(chip->vooc_not_allow_votable, WARM_SOC_VOTER, false, 0, false);
+	vote(chip->vooc_not_allow_votable, WARM_VOL_VOTER, false, 0, false);
+	vote(chip->vooc_not_allow_votable, WARM_FULL_VOTER, false, 0, false);
+}
 static void oplus_vooc_plugin_work(struct work_struct *work)
 {
 	struct oplus_chg_vooc *chip =
@@ -4512,8 +4534,8 @@ static void oplus_vooc_plugin_work(struct work_struct *work)
 		vote(chip->vooc_disable_votable, FASTCHG_DUMMY_VOTER, false, 0, false);
 		vote(chip->vooc_disable_votable, CHG_FULL_VOTER, false, 0, false);
 		vote(chip->vooc_disable_votable, WARM_FULL_VOTER, false, 0, false);
-		vote(chip->vooc_not_allow_votable, CHG_FULL_COOL_VOTER, false, 0, false);
 		vote(chip->vooc_not_allow_votable, BTB_TEMP_OVER_VOTER, false, 0, false);
+		oplus_vooc_clear_temp_soc_not_allow(chip);
 		vote(chip->vooc_disable_votable, BAD_CONNECTED_VOTER, false, 0, false);
 		vote(chip->vooc_disable_votable, SWITCH_RANGE_VOTER, false, 0, false);
 		vote(chip->vooc_disable_votable, BATT_TEMP_VOTER, false, 0, false);
@@ -4861,7 +4883,10 @@ static void oplus_vooc_gauge_subs_callback(struct mms_subscribe *subs,
 				chip->batt_auth = !!data.intval;
 			}
 			vote(chip->vooc_disable_votable, NON_STANDARD_VOTER,
-			     (!chip->batt_hmac || !chip->batt_auth), 0, false);
+			     oplus_comm_is_non_standard_hmac_status(
+					     chip->comm_topic, chip->batt_auth,
+					     chip->batt_hmac),
+			     0, false);
 			break;
 		case GAUGE_ITEM_HMAC:
 			rc = oplus_mms_get_item_data(chip->gauge_topic, id,
@@ -4874,7 +4899,10 @@ static void oplus_vooc_gauge_subs_callback(struct mms_subscribe *subs,
 				chip->batt_hmac = !!data.intval;
 			}
 			vote(chip->vooc_disable_votable, NON_STANDARD_VOTER,
-			     (!chip->batt_hmac || !chip->batt_auth), 0, false);
+			     oplus_comm_is_non_standard_hmac_status(
+					     chip->comm_topic, chip->batt_auth,
+					     chip->batt_hmac),
+			     0, false);
 			break;
 		case GAUGE_ITEM_SUBBOARD_TEMP_ERR:
 			rc = oplus_mms_get_item_data(chip->gauge_topic, id,
@@ -4942,7 +4970,10 @@ static void oplus_vooc_subscribe_gauge_topic(struct oplus_mms *topic,
 	}
 
 	chg_info("hmac=%d, authenticate=%d\n", chip->batt_hmac, chip->batt_auth);
-	vote(chip->vooc_disable_votable, NON_STANDARD_VOTER, !chip->batt_hmac || !chip->batt_auth, 0, false);
+	vote(chip->vooc_disable_votable, NON_STANDARD_VOTER,
+	     oplus_comm_is_non_standard_hmac_status(chip->comm_topic,
+			    chip->batt_auth, chip->batt_hmac),
+	     0, false);
 
 	oplus_mms_get_item_data(chip->gauge_topic, GAUGE_ITEM_VOL_MAX, &data,
 				true);
@@ -5309,6 +5340,21 @@ static bool oplus_vooc_get_flash_mode(struct oplus_chg_vooc *chip)
 	return (!!data.intval);
 }
 
+static void oplus_vooc_clear_comm_charge_enable_votes(struct oplus_chg_vooc *chip)
+{
+	if (!chip || !chip->vooc_disable_votable ||
+	    !chip->vooc_not_allow_votable)
+		return;
+
+	vote(chip->vooc_disable_votable, TIMEOUT_VOTER, false, 0, false);
+	vote(chip->vooc_disable_votable, CHG_FULL_VOTER, false, 0, false);
+	vote(chip->vooc_disable_votable, WARM_FULL_VOTER, false, 0, false);
+	vote(chip->vooc_not_allow_votable, CHG_FULL_COOL_VOTER, false, 0, false);
+	vote(chip->vooc_disable_votable, BATT_TEMP_VOTER, false, 0, false);
+	vote(chip->vooc_disable_votable, CURR_LIMIT_VOTER, false, 0, false);
+	vote(chip->vooc_not_allow_votable, USER_VOTER, false, 0, false);
+}
+
 static void oplus_comm_charge_disable_work(struct work_struct *work)
 {
 	struct oplus_chg_vooc *chip = container_of(work, struct oplus_chg_vooc,
@@ -5352,28 +5398,22 @@ static void oplus_comm_charge_disable_work(struct work_struct *work)
 
 	oplus_comm_charge_disable_clear_suspend_vote(chip, disable);
 
-	vote(chip->vooc_not_allow_votable, USER_VOTER, disable, disable, false);
+	if (disable) {
+		vote(chip->vooc_not_allow_votable, USER_VOTER, true, true, false);
 
-	if (!chip->fastchg_started && disable &&
-	    !is_client_vote_enabled(chip->vooc_disable_votable,
-				    FASTCHG_DUMMY_VOTER)) {
-		if (oplus_chg_vooc_get_switch_mode(chip->vooc_ic) !=
-		    VOOC_SWITCH_MODE_NORMAL) {
-			oplus_vooc_switch_normal_chg(chip);
-			oplus_vooc_set_reset_sleep(chip->vooc_ic);
+		if (!chip->fastchg_started &&
+		    !is_client_vote_enabled(chip->vooc_disable_votable,
+					    FASTCHG_DUMMY_VOTER)) {
+			if (oplus_chg_vooc_get_switch_mode(chip->vooc_ic) !=
+			    VOOC_SWITCH_MODE_NORMAL) {
+				oplus_vooc_switch_normal_chg(chip);
+				oplus_vooc_set_reset_sleep(chip->vooc_ic);
+			}
 		}
+		return;
 	}
 
-	if (disable)
-		return;
-
-	vote(chip->vooc_disable_votable, TIMEOUT_VOTER, false, 0, false);
-	vote(chip->vooc_disable_votable, CHG_FULL_VOTER, false, 0, false);
-	vote(chip->vooc_disable_votable, WARM_FULL_VOTER, false, 0, false);
-	vote(chip->vooc_not_allow_votable, CHG_FULL_COOL_VOTER, false, 0, false);
-	vote(chip->vooc_disable_votable, BATT_TEMP_VOTER, false, 0, false);
-	vote(chip->vooc_disable_votable, CURR_LIMIT_VOTER, false, 0, false);
-
+	oplus_vooc_clear_comm_charge_enable_votes(chip);
 	return;
 }
 

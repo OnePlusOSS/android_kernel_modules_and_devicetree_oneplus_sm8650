@@ -70,30 +70,25 @@ int send_to_frk(int event_type, size_t len, const int *data)
 
 static int recv_from_frk(struct sk_buff *skb, struct genl_info *info)
 {
-	struct sk_buff *tmp_skb = NULL;
-	struct nlmsghdr *nlh = NULL;
-
-	if (IS_ERR_OR_NULL(skb)) {
-		printk("frk_netlink: skb is NULL!\n");
+	if (!skb || !info)
 		return -EINVAL;
-	}
+	if (!netlink_capable(skb, CAP_NET_ADMIN))
+		return -EPERM;
+	if (!info->snd_portid)
+		return -EINVAL;
 
-	tmp_skb = skb_get(skb);
-	if (tmp_skb->len >= NLMSG_SPACE(0)) {
-		nlh = nlmsg_hdr(tmp_skb);
-		client_pid = nlh->nlmsg_pid;
-		printk("frk_netlink: recv_from_frk: %d\n", client_pid);
-	}
-
+	client_pid = info->snd_portid;
+	pr_info("frk_netlink: recv_from_frk: %u\n", info->snd_portid);
 	return 0;
 }
 
 static const struct genl_ops oplus_frk_genl_ops[] = {
 	{
 		.cmd = OPLUS_FRK_CMD_RECV,
-		.flags = 0,
+		.flags = GENL_ADMIN_PERM,
 		.doit = recv_from_frk,
 		.dumpit = NULL,
+		.maxattr = 0,
 	},
 };
 
@@ -121,5 +116,3 @@ void destroy_frk_netlink(void)
 {
 	genl_unregister_family(&oplus_frk_genl_family);
 }
-
-

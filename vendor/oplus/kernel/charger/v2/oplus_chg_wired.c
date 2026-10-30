@@ -698,7 +698,8 @@ static int oplus_wired_current_set(struct oplus_chg_wired *chip,
 		chg_info("dont set icl=500ma, keep icl setting in lk/uefi");
 	else
 		vote(chip->icl_votable, SPEC_VOTER, true, icl_ma, true);
-	if (!chip->authenticate || !chip->hmac) {
+	if (oplus_comm_is_non_standard_hmac_status(chip->comm_topic,
+			chip->authenticate, chip->hmac)) {
 		vote(chip->fcc_votable, NON_STANDARD_VOTER, true,
 		     spec->non_standard_ibatmax_ma, false);
 		chg_err("!authenticate or !hmac, set nonstandard current\n");
@@ -1984,6 +1985,14 @@ static void oplus_wired_qc_check_work(struct work_struct *work)
 		chg_info("cpa protocol not qc, return\n");
 		return;
 	}
+
+	if (oplus_comm_is_non_standard_hmac_status(chip->comm_topic,
+			chip->authenticate, chip->hmac)) {
+		chg_err("authenticate or hmac is not ready, return\n");
+		oplus_cpa_switch_end(chip->cpa_topic, CHG_PROTOCOL_QC);
+		return;
+	}
+
 	chip->chg_type = oplus_wired_get_chg_type();
 	if (chip->chg_type == OPLUS_CHG_USB_TYPE_QC2 ||
 	    chip->chg_type == OPLUS_CHG_USB_TYPE_QC3) {
@@ -2030,6 +2039,14 @@ static void oplus_wired_pd_check_work(struct work_struct *work)
 		chg_info("cpa protocol not pd, return\n");
 		return;
 	}
+
+	if (oplus_comm_is_non_standard_hmac_status(chip->comm_topic,
+			chip->authenticate, chip->hmac)) {
+		chg_err("authenticate or hmac is not ready, return\n");
+		oplus_pd_cpa_switch_end(chip);
+		return;
+	}
+
 	chip->chg_type = oplus_wired_get_chg_type();
 	if (chip->chg_type < 0)
 		chip->chg_type = OPLUS_CHG_USB_TYPE_UNKNOWN;

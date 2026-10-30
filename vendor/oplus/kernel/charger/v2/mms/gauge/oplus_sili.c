@@ -1390,6 +1390,33 @@ void oplus_gauge_update_ddrc_data(struct oplus_mms *mms, int *index_cc, int *sub
 	*sub_index_cc = index_cc_sub;
 }
 
+static int oplus_gauge_get_deep_term_volt_resolved(struct oplus_mms_gauge *chip)
+{
+	int current_volt;
+	int ddrc_max_vterm = 0, ddrc_max_vshut = 0;
+
+	current_volt = oplus_gauge_get_deep_term_volt(chip);
+
+	if (!(chip->workaround_mask & WORKAROUND_MASK_VTERM_INVALID_USE_MAX))
+		return current_volt;
+	if (current_volt > 0)
+		return current_volt;
+
+	oplus_chg_strategy_get_custom_data(chip->ddrc_strategy[0],
+					   OPLUS_DDRC_STRATEGY_CUSTOM_MAX_VTERM,
+					   &ddrc_max_vterm);
+	oplus_chg_strategy_get_custom_data(chip->ddrc_strategy[0],
+					   OPLUS_DDRC_STRATEGY_CUSTOM_MAX_VSHUT,
+					   &ddrc_max_vshut);
+
+	vote(chip->target_term_voltage_votable, DEEP_COUNT_VOTER, true, ddrc_max_vterm, false);
+	vote(chip->target_shutdown_voltage_votable, DEEP_COUNT_VOTER, true, ddrc_max_vshut, false);
+	chip->deep_spec.config.step_status = true;
+	chg_info("workaround vterm_invalid: vterm %d mV, table_max_vterm %d mV, table_max_vshut %d mV\n",
+		current_volt, ddrc_max_vterm, ddrc_max_vshut);
+	return current_volt;
+}
+
 #define DEEP_DISCHG_UPDATE_CC_DELTA 5
 void oplus_gauge_get_ddrc_status(struct oplus_mms *mms)
 {
@@ -1425,9 +1452,9 @@ void oplus_gauge_get_ddrc_status(struct oplus_mms *mms)
 	ddrc_curve = &chip->ddrc_curve;
 
 	oplus_gauge_update_ddrc_data(mms, &index_cc, &sub_index_cc);
+	current_volt = oplus_gauge_get_deep_term_volt_resolved(chip);
 	vterm = get_effective_result(chip->target_term_voltage_votable);
 	vshut = get_effective_result(chip->target_shutdown_voltage_votable);
-	current_volt = oplus_gauge_get_deep_term_volt(chip);
 	current_shut = get_client_vote(chip->gauge_shutdown_voltage_votable, DEEP_COUNT_VOTER);
 	if (current_shut <= 0)
 		current_shut = vshut + current_volt - vterm;
@@ -1453,18 +1480,18 @@ void oplus_gauge_get_ddrc_status(struct oplus_mms *mms)
 				oplus_gauge_set_last_cc(chip->gauge_topic_parallel[chip->main_gauge], *cc);
 				oplus_gauge_set_last_cc(chip->gauge_topic_parallel[__ffs(chip->sub_gauge)], chip->deep_spec.sub_cc);
 				vote(chip->gauge_term_voltage_votable, SUB_DEEP_COUNT_VOTER, true,
-					chip->ddrc_curve_sub.data[sub_index_cc].vbat1, false);
+					vterm, false);
 				vote(chip->gauge_shutdown_voltage_votable, SUB_DEEP_COUNT_VOTER,
-					true, chip->ddrc_curve_sub.data[sub_index_cc].vbat0, false);
+					true, vshut, false);
 			} else {
 				oplus_gauge_set_last_cc(mms, *cc);
 			}
 			vote(chip->gauge_term_voltage_votable, voter, true,
-				ddrc_curve->data[index_cc].vbat1, false);
+				vterm, false);
 			vote(chip->gauge_shutdown_voltage_votable, SUPER_ENDURANCE_MODE_VOTER,
 				!chip->super_endurance_mode_status, chip->deep_spec.config.term_voltage, false);
 			vote(chip->gauge_shutdown_voltage_votable, voter,
-				true, ddrc_curve->data[index_cc].vbat0, false);
+				true, vshut, false);
 		} else if ((*cc >= last_cc + DEEP_DISCHG_UPDATE_CC_DELTA)) {
 			if (vterm > current_volt)
 				update_vterm = (vterm - current_volt) > chip->deep_spec.config.volt_step ?

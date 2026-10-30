@@ -101,6 +101,7 @@ oplus_chg_v2-y += mms/oplus_mms.o
 oplus_chg_v2-y += mms/oplus_msg_filter.o
 oplus_chg_v2-y += mms/oplus_mms_gauge.o
 oplus_chg_v2-y += mms/oplus_mms_wired.o
+oplus_chg_v2-$(CONFIG_OPLUS_TVS_DAMAGE_SUPPORT) += recovery/oplus_tvs_damage_check.o
 oplus_chg_v2-y += mms/gauge/oplus_sili.o
 oplus_chg_v2-y += mms/sec/oplus_sec.o
 

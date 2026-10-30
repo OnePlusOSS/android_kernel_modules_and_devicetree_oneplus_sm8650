@@ -1428,6 +1428,7 @@ struct touchpanel_data {
 #endif
 	struct task_struct *suspend_task;
 	int supspend_task_error_cnt;
+	u64 set_gesture_off_time;
 };
 
 #ifdef CONFIG_OPLUS_TP_APK

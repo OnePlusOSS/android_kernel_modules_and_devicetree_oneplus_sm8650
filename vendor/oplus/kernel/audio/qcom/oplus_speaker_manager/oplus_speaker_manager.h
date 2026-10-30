@@ -31,6 +31,8 @@ int speaker_r_amp_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *
 int speaker_r_amp_set(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
 int rcv_amp_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
 int rcv_amp_set(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
+int rcv_l_amp_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
+int rcv_l_amp_set(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
 int ext_amp_mode_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
 int ext_amp_mode_set(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);
 int ext_amp_vdd_get(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol);

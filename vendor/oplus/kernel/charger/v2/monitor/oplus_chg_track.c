@@ -1305,6 +1305,7 @@ static struct flag_reason_table track_flag_reason_table[] = {
 	{ TRACK_NOTIFY_FLAG_PLAT_PMIC_ABNORMAL, "PlatPmicAbnormal" },
 	{ TRACK_NOTIFY_FLAG_EXTERN_PMIC_ABNORMAL, "ExternPmicAbnormal" },
 	{ TRACK_NOTIFY_FLAG_GAGUE_ABNORMAL, "GagueAbnormal" },
+	{ TRACK_NOTIFY_FLAG_CC_TVS_ABNORMAL, "CcTvsAbnormal" },
 	{ TRACK_NOTIFY_FLAG_DCHG_ABNORMAL, "DchgAbnormal" },
 	{ TRACK_NOTIFY_FLAG_PARALLEL_UNBALANCE_ABNORMAL, "ParallelUnbalance" },
 	{ TRACK_NOTIFY_FLAG_MOS_ERROR_ABNORMAL, "MosError" },
@@ -9603,6 +9604,10 @@ static int oplus_chg_track_upload_ic_err_info(struct oplus_chg_track *track)
 	case OPLUS_IC_ERR_GAUGE:
 		track->ic_err_msg_load_trigger.flag_reason =
 			TRACK_NOTIFY_FLAG_GAGUE_ABNORMAL;
+		break;
+	case OPLUS_IC_ERR_CC_TVS:
+		track->ic_err_msg_load_trigger.flag_reason =
+			TRACK_NOTIFY_FLAG_CC_TVS_ABNORMAL;
 		break;
 	case OPLUS_IC_ERR_WLS_RX:
 		track->ic_err_msg_load_trigger.flag_reason =

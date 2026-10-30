@@ -938,6 +938,7 @@ struct pd_port {
 
 	uint8_t dpm_charging_policy;
 	uint8_t dpm_charging_policy_default;
+	uint32_t pd_version;
 
 /* ALT Mode */
 #ifdef CONFIG_USB_PD_ALT_MODE

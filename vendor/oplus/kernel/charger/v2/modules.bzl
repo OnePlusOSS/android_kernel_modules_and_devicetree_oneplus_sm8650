@@ -274,6 +274,11 @@ def define_oplus_chg_v2_module():
     ]
 
     ddk_conditional_srcs = {
+        "CONFIG_OPLUS_TVS_DAMAGE_SUPPORT": {
+            True: [
+                "v2/recovery/oplus_tvs_damage_check.c",
+            ],
+        },
         "CONFIG_OPLUS_CHG_PARALLEL": {
             True: [
                 "v2/oplus_parallel.c",

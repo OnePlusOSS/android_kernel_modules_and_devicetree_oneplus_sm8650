@@ -4164,6 +4164,39 @@ error:
 	return status;
 }
 
+static void oplus_voocphy_set_perf_enable(struct oplus_voocphy_manager *chip)
+{
+	/*
+	 * AI-REVIEW-JUSTIFIED:
+	 * This is an intentional one-way hardware enable for VOOC20/VOOC30 path.
+	 * It does not gate or replace vbus_adjust sampling/status transitions.
+	 */
+	if (chip &&
+	    (chip->adapter_type == ADAPTER_VOOC20 || chip->adapter_type == ADAPTER_VOOC30) &&
+	    chip->ops && chip->ops->set_perf_enable && !chip->perf_en) {
+		chip->ops->set_perf_enable(chip, true);
+		chip->perf_en = true;
+		voocphy_info("set_perf_enable success!\n");
+	}
+}
+
+static void oplus_voocphy_allow_fastchg_action(struct oplus_voocphy_manager *chip)
+{
+	if (!chip) {
+		voocphy_info("oplus_voocphy_manager is null\n");
+		return;
+	}
+
+	if (oplus_chg_get_fcs_support_flags()) {
+		oplus_voocphy_set_perf_enable(chip);
+		oplus_chglib_disable_charger(true);
+		oplus_voocphy_set_fcs_icl(chip, SVOOC_FCS_ICL1_MA);
+	} else {
+		oplus_chglib_suspend_charger(true);
+	}
+	voocphy_info("allow fastchg adapter type %d\n", chip->adapter_type);
+}
+
 static int oplus_voocphy_svooc_commu_with_voocphy(struct oplus_voocphy_manager *chip)
 {
 	oplus_voocphy_adapter_commu_with_voocphy(chip);
@@ -4173,13 +4206,7 @@ static int oplus_voocphy_svooc_commu_with_voocphy(struct oplus_voocphy_manager *
 			chip->eis_status = EIS_STATUS_HIGH_CURRENT;
 			voocphy_info("<EIS>in EIS status\n");
 		} else {
-			if (oplus_chg_get_fcs_support_flags()) {
-				oplus_chglib_disable_charger(true);
-				oplus_voocphy_set_fcs_icl(chip, SVOOC_FCS_ICL1_MA);
-			} else {
-				oplus_chglib_suspend_charger(true);
-			}
-			voocphy_info("allow fastchg adapter type %d\n", chip->adapter_type);
+			oplus_voocphy_allow_fastchg_action(chip);
 		}
 		/* handle timeout of adapter ask cmd 0x4 */
 		oplus_voocphy_set_is_vbus_ok_predata(chip);

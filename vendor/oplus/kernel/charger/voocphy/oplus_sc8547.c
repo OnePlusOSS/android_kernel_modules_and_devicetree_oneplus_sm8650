@@ -1249,7 +1249,8 @@ static int sc8547_svooc_hw_setting(struct oplus_voocphy_manager *chip)
 	u8 reg_data;
 	//sc8547_write_byte(sc, SC8547_REG_00, 0x2E);
 	sc8547_write_byte(chip->client, SC8547_REG_02, 0x01);	//VAC_OVP:12v
-	sc8547_write_byte(chip->client, SC8547_REG_04, 0x50);	//VBUS_OVP:10v
+	reg_data = chip->svooc_vbus_ovp_reg;
+	sc8547_write_byte(chip->client, SC8547_REG_04, reg_data);	//VBUS_OVP:10v
 	reg_data = 0x20 | (chip->ocp_reg & 0xf);
 	sc8547_write_byte(chip->client, SC8547_REG_05, reg_data);	//IBUS_OCP_UCP:3.6A
 	sc8547_write_byte(chip->client, SC8547_REG_09, 0x13);	/*WD:1000ms*/
@@ -1452,76 +1453,94 @@ static int sc8547_gpio_init(struct oplus_voocphy_manager *chip)
 	return 0;
 }
 
-static int sc8547_parse_dt(struct oplus_voocphy_manager *chip)
+static void sc8547_parse_dt_switch_gpio(struct oplus_voocphy_manager *chip,
+					struct device_node *node)
 {
 	int rc;
-	struct device_node * node = NULL;
+
+	chip->switch1_gpio = of_get_named_gpio(node,
+					       "qcom,charging_switch1-gpio", 0);
+	if (chip->switch1_gpio < 0) {
+		pr_debug("chip->switch1_gpio not specified\n");
+		return;
+	}
+
+	if (gpio_is_valid(chip->switch1_gpio)) {
+		rc = gpio_request(chip->switch1_gpio, "charging-switch1-gpio");
+		if (rc) {
+			pr_debug("unable to request gpio [%d]\n",
+				 chip->switch1_gpio);
+		} else {
+			rc = sc8547_gpio_init(chip);
+			if (rc)
+				chg_err("unable to init charging_sw_ctrl2-gpio:%d\n",
+					chip->switch1_gpio);
+		}
+	}
+	pr_debug("chip->switch1_gpio =%d\n", chip->switch1_gpio);
+}
+
+static void sc8547_parse_dt_regs(struct oplus_voocphy_manager *chip,
+				 struct device_node *node)
+{
+	int rc;
+
+	rc = of_property_read_u32(node, "ovp_reg", &chip->ovp_reg);
+	if (rc)
+		chip->ovp_reg = 0xE;
+	else
+		chg_err("ovp_reg is %d\n", chip->ovp_reg);
+
+	rc = of_property_read_u32(node, "ocp_reg", &chip->ocp_reg);
+	if (rc)
+		chip->ocp_reg = 0x8;
+	else
+		chg_err("ocp_reg is %d\n", chip->ocp_reg);
+
+	rc = of_property_read_u8(node, "svooc_vbus_ovp_reg",
+				 &chip->svooc_vbus_ovp_reg);
+	if (rc)
+		chip->svooc_vbus_ovp_reg = 0x50; /* VBUS_OVP 10V */
+	chg_err("svooc_vbus_ovp_reg=0x%02x\n", chip->svooc_vbus_ovp_reg);
+}
+
+static void sc8547_parse_dt_vbus_limit(struct oplus_voocphy_manager *chip,
+				      struct device_node *node)
+{
+	int rc;
+
+	rc = of_property_read_u32(node, "oplus,pps_ocp_max", &chip->pps_ocp_max);
+	if (rc)
+		chip->pps_ocp_max = 3600;
+	else
+		chg_err("pps_ocp_max is %d\n", chip->pps_ocp_max);
+
+	rc = of_property_read_u32(node, "qcom,voocphy_vbus_low",
+				  &chip->voocphy_vbus_low);
+	if (rc)
+		chip->voocphy_vbus_low = DEFUALT_VBUS_LOW;
+	chg_err("voocphy_vbus_high is %d\n", chip->voocphy_vbus_low);
+
+	rc = of_property_read_u32(node, "qcom,voocphy_vbus_high",
+				  &chip->voocphy_vbus_high);
+	if (rc)
+		chip->voocphy_vbus_high = DEFUALT_VBUS_HIGH;
+	chg_err("voocphy_vbus_high is %d\n", chip->voocphy_vbus_high);
+}
+
+static int sc8547_parse_dt(struct oplus_voocphy_manager *chip)
+{
+	struct device_node *node;
 
 	if (!chip) {
 		pr_debug("chip null\n");
 		return -1;
 	}
 
-	/* Parsing gpio switch gpio47*/
 	node = chip->dev->of_node;
-	chip->switch1_gpio = of_get_named_gpio(node,
-	                                       "qcom,charging_switch1-gpio", 0);
-	if (chip->switch1_gpio < 0) {
-		pr_debug("chip->switch1_gpio not specified\n");
-	} else {
-		if (gpio_is_valid(chip->switch1_gpio)) {
-			rc = gpio_request(chip->switch1_gpio,
-			                  "charging-switch1-gpio");
-			if (rc) {
-				pr_debug("unable to request gpio [%d]\n",
-				         chip->switch1_gpio);
-			} else {
-				rc = sc8547_gpio_init(chip);
-				if (rc)
-					chg_err("unable to init charging_sw_ctrl2-gpio:%d\n",
-					        chip->switch1_gpio);
-			}
-		}
-		pr_debug("chip->switch1_gpio =%d\n", chip->switch1_gpio);
-	}
-
-	rc = of_property_read_u32(node, "ovp_reg",
-	                          &chip->ovp_reg);
-	if (rc) {
-		chip->ovp_reg = 0xE;
-	} else {
-		chg_err("ovp_reg is %d\n", chip->ovp_reg);
-	}
-
-	rc = of_property_read_u32(node, "ocp_reg",
-	                          &chip->ocp_reg);
-	if (rc) {
-		chip->ocp_reg = 0x8;
-	} else {
-		chg_err("ocp_reg is %d\n", chip->ocp_reg);
-	}
-
-	rc = of_property_read_u32(node, "oplus,pps_ocp_max",
-	                          &chip->pps_ocp_max);
-	if (rc) {
-		chip->pps_ocp_max = 3600;
-	} else {
-		chg_err("pps_ocp_max is %d\n", chip->pps_ocp_max);
-	}
-
-	rc = of_property_read_u32(node, "qcom,voocphy_vbus_low",
-	                          &chip->voocphy_vbus_low);
-	if (rc) {
-		chip->voocphy_vbus_low = DEFUALT_VBUS_LOW;
-	}
-	chg_err("voocphy_vbus_high is %d\n", chip->voocphy_vbus_low);
-
-	rc = of_property_read_u32(node, "qcom,voocphy_vbus_high",
-	                          &chip->voocphy_vbus_high);
-	if (rc) {
-		chip->voocphy_vbus_high = DEFUALT_VBUS_HIGH;
-	}
-	chg_err("voocphy_vbus_high is %d\n", chip->voocphy_vbus_high);
+	sc8547_parse_dt_switch_gpio(chip, node);
+	sc8547_parse_dt_regs(chip, node);
+	sc8547_parse_dt_vbus_limit(chip, node);
 
 	return 0;
 }

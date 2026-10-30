@@ -28,6 +28,7 @@
 extern struct msm_vidc_core *g_core;
 
 #define is_odd(val) ((val) % 2 == 1)
+#undef in_range
 #define in_range(val, min, max) (((min) <= (val)) && ((val) <= (max)))
 #define COUNT_BITS(a, out) {       \
 	while ((a) >= 1) {          \

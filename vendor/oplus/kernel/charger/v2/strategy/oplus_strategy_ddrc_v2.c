@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/slab.h>
+#include <linux/string.h>
 #include <linux/of.h>
 #include <oplus_chg.h>
 #include <oplus_mms.h>
@@ -39,6 +40,8 @@ struct ddrc_strategy {
 	uint32_t temp_range_num;
 	uint32_t temp_type;
 	int curr_level;
+	int table_max_vterm;
+	int table_max_vshut;
 	char topic_name[NAME_LENGTH];
 	struct oplus_mms *topic;
 };
@@ -425,6 +428,34 @@ static void ddrc_strategy_free_temp_curves(struct ddrc_strategy *ddrc)
 	}
 }
 
+static void ddrc_strategy_fill_table_max_vterm(struct ddrc_strategy *ddrc)
+{
+	int i, j, k;
+	struct ddrc_temp_curves *tc;
+	int max_vterm = -ENOENT;
+	int max_vshut = -ENOENT;
+
+	for (i = 0; i <= DDRC_RATIO_RANGE_MAX; i++) {
+		if (!ddrc->ratio_curves[i].temp_curves)
+			continue;
+		for (j = 0; j <= ddrc->temp_range_num; j++) {
+			tc = &ddrc->ratio_curves[i].temp_curves[j];
+
+			if (!tc->data || tc->num <= 0)
+				continue;
+			for (k = 0; k < tc->num; k++) {
+				max_vterm = max(max_vterm, tc->data[k].vbat1);
+				max_vshut = max(max_vshut, tc->data[k].vbat0);
+			}
+		}
+	}
+
+	ddrc->table_max_vterm = max_vterm;
+	ddrc->table_max_vshut = max_vshut;
+	chg_info("ddrc table max vterm %d mV, max vshut %d mV\n",
+		 ddrc->table_max_vterm, ddrc->table_max_vshut);
+}
+
 static struct oplus_chg_strategy *
 ddrc_strategy_alloc_by_node(struct device_node *node)
 {
@@ -458,6 +489,7 @@ ddrc_strategy_alloc_by_node(struct device_node *node)
 		goto base_info_err;
 	else if (rc < 0)
 		goto data_err;
+	ddrc_strategy_fill_table_max_vterm(ddrc);
 	return (struct oplus_chg_strategy *)ddrc;
 
 data_err:
@@ -559,6 +591,30 @@ static int ddrc_strategy_get_metadata(struct oplus_chg_strategy *strategy, void 
 	return 0;
 }
 
+static int ddrc_strategy_get_custom_data(struct oplus_chg_strategy *strategy,
+					  const char *type, void *ret)
+{
+	struct ddrc_strategy *ddrc;
+
+	if (strategy == NULL || type == NULL || ret == NULL) {
+		chg_err("invalid parameters\n");
+		return -EINVAL;
+	}
+
+	ddrc = (struct ddrc_strategy *)strategy;
+
+	if (sysfs_streq(type, OPLUS_DDRC_STRATEGY_CUSTOM_MAX_VTERM)) {
+		*(int *)ret = ddrc->table_max_vterm;
+		return 0;
+	}
+	if (sysfs_streq(type, OPLUS_DDRC_STRATEGY_CUSTOM_MAX_VSHUT)) {
+		*(int *)ret = ddrc->table_max_vshut;
+		return 0;
+	}
+
+	return -ENOTSUPP;
+}
+
 static struct oplus_chg_strategy_desc ddrc_strategy_desc = {
 	.name = "ddrc_curve_v2",
 	.strategy_init = ddrc_strategy_init,
@@ -567,6 +623,7 @@ static struct oplus_chg_strategy_desc ddrc_strategy_desc = {
 	.strategy_alloc_by_node = ddrc_strategy_alloc_by_node,
 	.strategy_get_data = ddrc_strategy_get_data,
 	.strategy_get_metadata = ddrc_strategy_get_metadata,
+	.strategy_get_custom_data = ddrc_strategy_get_custom_data,
 };
 
 int ddrc_v2_strategy_register(void)

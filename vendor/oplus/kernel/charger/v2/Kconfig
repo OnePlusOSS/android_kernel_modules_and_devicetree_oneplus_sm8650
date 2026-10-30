@@ -104,6 +104,13 @@ config OPLUS_MT6379_CHARGER
 	help
 	  Say Y here to declare PMIC MT6379 support
 
+config OPLUS_TVS_DAMAGE_SUPPORT
+	bool "OPLUS TVS damage check support"
+	default n
+	depends on OPLUS_MT6379_CHARGER
+	help
+	  Say Y here to enable USB Type-C TVS damage detection and repair.
+
 config OPLUS_MT6789_CHARGER
 	bool "MTK6789 support"
 	help

@@ -1761,8 +1761,51 @@
                 },
                 "overwrite": false
             }
+        },
+        {
+           "lable": "OPLUS_IC_FUNC_BUCK_GET_TVS_CC_STATE",
+           "desc": {
+               "zh": "TVS异常获取CC1和CC2的状态"
+           },
+           "auto_debug_code": true,
+           "parameter_list": ["u8 *", "u8 *"],
+           "parameter_desc": [
+               {
+                   "range": "0-*",
+                   "type": "out",
+                   "desc": {
+                       "zh": "用于存放CC1状态值"
+                   }
+               },
+               {
+                   "range": "0-*",
+                   "type": "out",
+                   "desc": {
+                       "zh": "用于存放CC2的状态值"
+                   }
+               }
+            ],
+            "vict": {
+               "read": false,
+               "write": false,
+               "overwrite": false
+            }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_BUCK_SET_TVS_CC_OPEN",
+            "desc": {
+                "zh": "TVS异常设置CC为open状态"
+            },
+            "auto_debug_code": true,
+            "parameter_list": [],
+            "parameter_desc": [],
+            "vict": {
+                "read": false,
+                "write": false,
+                "overwrite": false
+            }
         }
     ],
 
-    "version": "V8.0:64:c961fd8b65f56b4b1d4ddccc2bb6ba951b69517bb7c9becec2f0a061d448f4fd"
+    "version": "V8.1:66:ccbedf4a11045b18e34fb5b6f532ab7fcefb61336ba2f1c52be1267a7be1cf0d"
 }

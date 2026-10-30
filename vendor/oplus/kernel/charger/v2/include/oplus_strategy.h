@@ -109,4 +109,7 @@ struct ddrc_temp_curves {
 	int index_t;
 	int num;
 };
+
+#define OPLUS_DDRC_STRATEGY_CUSTOM_MAX_VTERM	"max_vterm"
+#define OPLUS_DDRC_STRATEGY_CUSTOM_MAX_VSHUT	"max_vshut"
 #endif /* __OPLUS_STRATEGY_H__ */

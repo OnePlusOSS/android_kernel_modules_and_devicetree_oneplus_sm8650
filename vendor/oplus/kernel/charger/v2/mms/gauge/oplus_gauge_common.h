@@ -5,6 +5,8 @@
 #include "oplus_sili.h"
 #include <oplus_sec.h>
 
+#define WORKAROUND_MASK_VTERM_INVALID_USE_MAX	(1U << 0)
+
 #define GAUGE_IC_NUM_MAX 2
 #define CALIB_TIME_STR_LEN 32
 
@@ -137,6 +139,7 @@ struct oplus_mms_gauge {
 	struct oplus_chg_strategy **ddrc_strategy;
 	struct ddrc_temp_curves ddrc_curve;
 	struct ddrc_temp_curves ddrc_curve_sub;
+	u32 workaround_mask;
 	int ddrc_num;
 
 	struct oplus_sec *sec_chip;
@@ -148,6 +151,9 @@ struct oplus_mms_gauge {
 	int check_batt_vol_count;
 	bool pd_svooc;
 	bool bat_volt_different;
+
+	bool check_imp_model_done;
+	struct votable *wired_charging_disable_votable;
 
 	bool factory_test_mode;
 	bool wired_online;

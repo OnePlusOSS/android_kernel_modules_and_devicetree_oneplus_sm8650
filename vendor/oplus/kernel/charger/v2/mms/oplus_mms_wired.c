@@ -39,6 +39,7 @@
 #include <oplus_dischg_boost.h>
 
 #include "../charger_ic/op_charge.h"
+#include <oplus_tvs_damage_check.h>
 
 #define ONLINE_STATUS_ERR_CHECK_DELAY_MS	1000
 #define ONLINE_STATUS_ERR_CHECK_MAX		5
@@ -308,6 +309,7 @@ struct oplus_mms_wired {
 	bool high_reverse_charging;
 	int power_role;
 	bool gauge_not_ready;
+	struct oplus_wired_tvs *tvs;
 };
 
 static struct oplus_mms_wired *g_mms_wired;
@@ -1669,6 +1671,54 @@ int oplus_wired_set_lpd_config(struct oplus_mms *topic, int *config)
 	return 0;
 }
 
+int oplus_wired_get_cc_tvs_config(struct oplus_mms *topic)
+{
+	struct oplus_mms_wired *chip;
+
+	if (topic == NULL) {
+		chg_err("topic is NULL\n");
+		return -EINVAL;
+	}
+
+	chip = oplus_mms_get_drvdata(topic);
+	if (chip == NULL)
+		return -ENODEV;
+
+	return oplus_wired_tvs_get_config(chip->tvs);
+}
+
+int oplus_wired_get_cc_tvs_repair_status(struct oplus_mms *topic)
+{
+	struct oplus_mms_wired *chip;
+
+	if (topic == NULL) {
+		chg_err("topic is NULL\n");
+		return -EINVAL;
+	}
+
+	chip = oplus_mms_get_drvdata(topic);
+	if (chip == NULL)
+		return -ENODEV;
+
+	return oplus_wired_tvs_get_repair_status(chip->tvs);
+}
+
+int oplus_wired_set_cc_tvs_config(struct oplus_mms *topic, u32 config)
+{
+	struct oplus_mms_wired *chip;
+
+	if (topic == NULL) {
+		chg_err("topic is NULL\n");
+		return -EINVAL;
+	}
+
+	chip = oplus_mms_get_drvdata(topic);
+	if (chip == NULL)
+		return -ENODEV;
+
+	return oplus_wired_tvs_set_config(chip->tvs, config);
+}
+
 int lpd_set_value(u32 value, int *target_value, int *min_value, int *max_value)
 {
 	struct oplus_mms_wired *chip = g_mms_wired;
@@ -2217,6 +2267,9 @@ int oplus_wired_set_otg_switch_status(bool en)
 			en ? "enable" : "disable", rc);
 	chg_info("%s otg switch\n", en ? "enable" : "disable");
 
+	if (en == false)
+		oplus_wired_tvs_handle_otg_disable(chip->tvs);
+
 	return rc;
 }
 
@@ -2389,6 +2442,55 @@ static int oplus_wired_ccdetect_enable(struct oplus_mms_wired *chip, bool en)
 
 	return rc;
 }
+
+static struct oplus_chg_ic_dev *oplus_wired_tvs_get_buck_ic(void *data)
+{
+	struct oplus_mms_wired *chip = data;
+
+	return chip ? chip->buck_ic : NULL;
+}
+
+static void oplus_wired_tvs_ccdetect_enable(void *data, bool en)
+{
+	struct oplus_mms_wired *chip = data;
+
+	if (chip)
+		oplus_wired_ccdetect_enable(chip, en);
+}
+
+static bool oplus_wired_tvs_get_otg_switch_status(void *data)
+{
+	return oplus_wired_get_otg_switch_status();
+}
+
+static bool oplus_wired_tvs_boot_completed(void *data)
+{
+	struct oplus_mms_wired *chip = data;
+	union mms_msg_data msg_data = { 0 };
+
+	if (chip == NULL || chip->comm_topic == NULL)
+		return false;
+
+	oplus_mms_get_item_data(chip->comm_topic, COMM_ITEM_BOOT_COMPLETED,
+				&msg_data, true);
+
+	return !!msg_data.intval;
+}
+
+static bool oplus_wired_tvs_err_topic_available(void *data)
+{
+	struct oplus_mms_wired *chip = data;
+
+	return chip ? is_err_topic_available(chip) : false;
+}
+
+static const struct oplus_wired_tvs_ops oplus_wired_tvs_ops = {
+	.get_buck_ic = oplus_wired_tvs_get_buck_ic,
+	.ccdetect_enable = oplus_wired_tvs_ccdetect_enable,
+	.get_otg_switch_status = oplus_wired_tvs_get_otg_switch_status,
+	.boot_completed = oplus_wired_tvs_boot_completed,
+	.err_topic_available = oplus_wired_tvs_err_topic_available,
+};
 
 int oplus_wired_get_otg_online_status(struct oplus_mms *topic)
 {
@@ -4560,6 +4662,9 @@ static void oplus_wired_comm_subs_callback(struct mms_subscribe *subs,
 						false);
 			chip->shell_temp = data.intval;
 			break;
+		case COMM_ITEM_BOOT_COMPLETED:
+			oplus_wired_tvs_schedule_status_sync(chip->tvs);
+			break;
 		default:
 			break;
 		}
@@ -4595,6 +4700,10 @@ static void oplus_wired_subscribe_comm_topic(struct oplus_mms *topic,
 	oplus_mms_get_item_data(chip->comm_topic, COMM_ITEM_SHELL_TEMP, &data,
 				true);
 	chip->shell_temp = data.intval;
+	oplus_mms_get_item_data(chip->comm_topic, COMM_ITEM_BOOT_COMPLETED, &data,
+				true);
+	if (data.intval)
+		oplus_wired_tvs_schedule_status_sync(chip->tvs);
 }
 
 static void oplus_wired_cpa_subs_callback(struct mms_subscribe *subs,
@@ -5242,7 +5351,8 @@ static void oplus_mms_wired_ccdetect_work(struct work_struct *work)
 
 	chg_info("hw_detect=%d\n", hw_detect);
 	if (hw_detect == 1) {
-		oplus_wired_ccdetect_enable(chip, true);
+		if (!oplus_wired_tvs_handle_ccdetect_attach(chip->tvs))
+			oplus_wired_ccdetect_enable(chip, true);
 		if ((chip->usb_status & USB_TEMP_HIGH) == USB_TEMP_HIGH) {
 			cancel_delayed_work(&chip->usbtemp_recover_work);
 			schedule_delayed_work(&chip->usbtemp_recover_work, 0);
@@ -5261,6 +5371,7 @@ static void oplus_mms_wired_ccdetect_work(struct work_struct *work)
 		if (!oplus_wired_get_otg_switch_status()) {
 			oplus_wired_ccdetect_enable(chip, false);
 		}
+		oplus_wired_tvs_handle_ccdetect_detach(chip->tvs);
 	}
 	(void)oplus_chg_ic_func(chip->buck_ic, OPLUS_IC_FUNC_CC_DETECT_HAPPENED);
 
@@ -7230,6 +7341,7 @@ static void oplus_mms_wired_parse_dt(struct oplus_mms_wired *chip)
 	chip->support_adjust_reverse_chg_cur = of_property_read_bool(node, "oplus,support_adjust_reverse_chg_cur");
 	chg_info("support_adjust_reverse_chg_cur=%d\n", chip->support_adjust_reverse_chg_cur);
 	oplus_mms_wired_parse_shaft_btb_dt(chip);
+	oplus_wired_tvs_parse_dt(chip->tvs, node);
 }
 
 static int oplus_wired_otg_disable_vote_callback(struct votable *votable,
@@ -7382,6 +7494,10 @@ static int oplus_mms_wired_probe(struct platform_device *pdev)
 	spec = &chip->usbtemp_spec;
 
 	of_platform_populate(chip->dev->of_node, NULL, NULL, chip->dev);
+	rc = oplus_wired_tvs_init(chip->dev, &chip->tvs, chip,
+				  &oplus_wired_tvs_ops);
+	if (rc < 0)
+		goto tvs_init_err;
 	oplus_mms_wired_parse_dt(chip);
 	rc = oplus_mms_wired_votable_init(chip);
 	if (rc < 0)
@@ -7410,6 +7526,8 @@ static int oplus_mms_wired_probe(struct platform_device *pdev)
 	return 0;
 
 votable_init_err:
+	oplus_wired_tvs_deinit(chip->tvs);
+tvs_init_err:
 	platform_set_drvdata(pdev, NULL);
 	devm_kfree(&pdev->dev, chip);
 	return rc;
@@ -7425,6 +7543,7 @@ static int oplus_mms_wired_remove(struct platform_device *pdev)
 
 	if (!IS_ERR_OR_NULL(chip->gauge_subs))
 		oplus_mms_unsubscribe(chip->gauge_subs);
+	oplus_wired_tvs_deinit(chip->tvs);
 	if (chip->flash_mode_votable != NULL)
 		destroy_votable(chip->flash_mode_votable);
 	if (chip->otg_disable_votable != NULL)

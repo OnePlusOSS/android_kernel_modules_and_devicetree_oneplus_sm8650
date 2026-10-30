@@ -333,7 +333,8 @@ void pe_give_country_codes_entry(struct pd_port *pd_port)
 
 void pe_give_revision_entry(struct pd_port *pd_port)
 {
-	uint32_t ver = (SOUTHCHIP_PD_VER << 16);
+	uint32_t pd_ver = pd_port->pd_version;
+	uint32_t ver = (pd_ver << 16);
 	PE_STATE_WAIT_TX_SUCCESS_OR_FAILED(pd_port);
 
 	pd_send_sop_data_msg(pd_port,

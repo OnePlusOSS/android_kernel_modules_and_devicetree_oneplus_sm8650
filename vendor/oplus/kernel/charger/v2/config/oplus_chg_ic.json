@@ -591,6 +591,13 @@
                     "str": "GanMosError"
                 },
                 {
+                    "lable": "OPLUS_IC_ERR_CC_TVS",
+                    "desc": {
+                        "zh": "CC TVS异常"
+                    },
+                    "str": "CCTVS"
+                },
+                {
                     "lable": "OPLUS_IC_ERR_BATT_ID",
                     "desc": {
                         "zh": "BATT ID信息"

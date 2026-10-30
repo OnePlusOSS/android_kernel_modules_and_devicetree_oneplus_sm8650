@@ -386,7 +386,7 @@ void operate_mode_switch(struct touchpanel_data *ts)
 			ts->ts_ops->pen_sensitive_lv_set(ts->chip_data, ts->scene_info.pen_sensitive_level);
 		}
 
-		if (ts->lcd_trigger_load_tp_fw_support && ts->tp_data_record_support && ts->debug_info_ops->tp_data_record_write) {
+		if (ts->lcd_trigger_load_tp_fw_support && ts->tp_data_record_support && ts->debug_info_ops->tp_data_record_write && ts->tp_data_record_enable) {
 			ts->debug_info_ops->tp_data_record_write(ts->chip_data, ts->tp_data_record_enable);
 		}
 
@@ -4411,6 +4411,8 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 	ts->fd_enable = 0;
 	ts->fp_enable = 0;
 	ts->aiunit_game_enable = 0;
+	ts->tp_data_record_enable = 0;
+	ts->set_gesture_off_time = 0;
 	ts->fp_info.touch_state = 0;
 	ts->palm_enable = 1;
 	ts->touch_count = 0;
@@ -4895,6 +4897,7 @@ static void tp_resume(struct device *dev)
 	ts->is_suspended = 0;
 	ts->suspend_state = TP_RESUME_COMPLETE;
 	ts->disable_gesture_ctrl = false;
+	ts->set_gesture_off_time = 0;
 
 	if (ts->loading_fw) {
 		goto NO_NEED_RESUME;
@@ -5845,6 +5848,7 @@ static int tp_control_irq_state(bool enable, unsigned int tp_index)
 static int tp_gesture_enable_flag(unsigned int tp_index)
 {
 	struct touchpanel_data *ts = NULL;
+	u64 lcd_read_gesture_time = 0;
 
 	if (tp_index >= TP_SUPPORT_MAX) {
 		return LCD_POWER_OFF;
@@ -5856,7 +5860,16 @@ static int tp_gesture_enable_flag(unsigned int tp_index)
 		return LCD_POWER_OFF;
 	}
 
-	TP_INFO(ts->tp_index, "gesture_enable is %d\n", ts->gesture_enable);
+	if (ts->is_incell_panel) {
+		lcd_read_gesture_time = ktime_to_ms(ktime_get());
+		if (ts->set_gesture_off_time > 0 && lcd_read_gesture_time > 0
+			&& lcd_read_gesture_time > ts->set_gesture_off_time
+			&& (lcd_read_gesture_time - ts->set_gesture_off_time) <= 300) {
+			TP_INFO(ts->tp_index, "lcd_read_gesture_time=%llu,ts->set_gesture_off_time=%llu, gesture must keep on\n",
+				lcd_read_gesture_time, ts->set_gesture_off_time);
+			return LCD_POWER_ON;
+		}
+	}
 
 	return (ts->gesture_enable > 0) ? LCD_POWER_ON : LCD_POWER_OFF;
 }

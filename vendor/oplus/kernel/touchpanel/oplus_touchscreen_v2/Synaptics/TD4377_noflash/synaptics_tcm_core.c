@@ -3346,8 +3346,14 @@ static int syna_tcm_set_gesture_mode(struct syna_tcm_hcd *tcm_hcd, bool enable)
 		TPD_INFO("Failed to get dynamic config\n");
 		return retval;
 	}
+	TPD_INFO("%s ts->suspend_state =%d\n", __func__, ts->suspend_state);
+	if (ts->suspend_state == TP_RESUME_EARLY_EVENT || ts->suspend_state == TP_RESUME_COMPLETE ||
+		ts->suspend_state == TP_SPEEDUP_RESUME_COMPLETE) {
+		TPD_INFO("%s: no need to set gesture config", __func__);
+		return 0;
+	}
 
-	TPD_DEBUG("config id is %d, enable: %d\n", config, enable);
+	TPD_INFO("config id is %d, enable: %d\n", config, enable);
 
 	if (enable) {
 		if (!config) {
@@ -3777,12 +3783,11 @@ static int syna_mode_switch(void *chip_data, work_mode mode, int flag)
 	TPD_INFO("syna_mode_switch begin, mode = %d\n", mode);
 	switch (mode) {
 	case MODE_NORMAL:
-		TPD_INFO("syna_mode_switch go to set MODE_NORMAL\n");
-		ret = syna_tcm_normal_mode(tcm_hcd);
+		TPD_DETAIL("syna_mode_switch MODE_NORMAL\n");
+		/*ret = syna_tcm_normal_mode(tcm_hcd);
 		if (ret < 0) {
 			TPD_INFO("normal mode switch failed\n");
-		}
-		TPD_INFO("syna_mode_switch set MODE_NORMAL finish\n");
+		}*/
 		break;
 	case MODE_GESTURE:
 		ret = syna_tcm_set_gesture_mode(tcm_hcd, flag);

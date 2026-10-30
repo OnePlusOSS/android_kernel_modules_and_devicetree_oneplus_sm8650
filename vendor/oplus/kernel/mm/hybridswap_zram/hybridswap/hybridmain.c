@@ -503,38 +503,17 @@ unsigned long memcg_anon_pages(struct mem_cgroup *memcg)
 static unsigned long memcg_lru_pages(struct mem_cgroup *memcg,
 				     enum lru_list lru, bool chp)
 {
-	int zid;
-	unsigned long nr = 0;
-	struct mem_cgroup_per_node *mz;
+	int idx = LRU_BASE + lru;
 
-	if (!memcg)
+	if (unlikely(!memcg) || chp)
 		return 0;
 
-	if (!chp) {
-		mz = memcg->nodeinfo[0];
-		for (zid = 0; zid < MAX_NR_ZONES; zid++)
-			nr += READ_ONCE(mz->lru_zone_size[zid][lru]);
-	}
-#ifdef CONFIG_CONT_PTE_HUGEPAGE_64K_ZRAM
-	if (chp) {
-		struct chp_lruvec *lruvec;
-
-		if (!chp_supported)
-			return 0;
-
-		lruvec = (struct chp_lruvec *)memcg->deferred_split_queue.split_queue_len;
-		for (zid = 0; zid < MAX_NR_ZONES; zid++)
-			nr += READ_ONCE(lruvec->lru_zone_size[zid][lru]);
-	}
-#endif
-
-	return nr;
+	return memcg_page_state_local(memcg, idx);
 }
 
 static bool inactive_file_is_low(struct mem_cgroup *memcg)
 {
-	unsigned long nr_inactive_file = memcg_page_state_local(memcg, NR_INACTIVE_FILE);
-	return nr_inactive_file < (SZ_512M + SZ_256M) / PAGE_SIZE;
+	return global_node_page_state(NR_INACTIVE_FILE) < totalram_pages() / 16;
 }
 
 /* Shrink by free a batch of pages */

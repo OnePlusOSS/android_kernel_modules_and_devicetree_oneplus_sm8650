@@ -4907,7 +4907,10 @@ static void oplus_pps_gauge_subs_callback(struct mms_subscribe *subs,
 				chip->batt_auth = !!data.intval;
 			}
 			vote(chip->pps_disable_votable, NON_STANDARD_VOTER,
-			     (!chip->batt_hmac || !chip->batt_auth), 0, false);
+			     oplus_comm_is_non_standard_hmac_status(
+					     chip->comm_topic, chip->batt_auth,
+					     chip->batt_hmac),
+			     0, false);
 			break;
 		case GAUGE_ITEM_HMAC:
 			rc = oplus_mms_get_item_data(chip->gauge_topic, id,
@@ -4920,7 +4923,10 @@ static void oplus_pps_gauge_subs_callback(struct mms_subscribe *subs,
 				chip->batt_hmac = !!data.intval;
 			}
 			vote(chip->pps_disable_votable, NON_STANDARD_VOTER,
-			     (!chip->batt_hmac || !chip->batt_auth), 0, false);
+			     oplus_comm_is_non_standard_hmac_status(
+					     chip->comm_topic, chip->batt_auth,
+					     chip->batt_hmac),
+			     0, false);
 			break;
 		case GAUGE_ITEM_SUB_BTB_STATE:
 			oplus_pps_sub_btb_connnect_check(chip);
@@ -4970,7 +4976,10 @@ static void oplus_pps_subscribe_gauge_topic(struct oplus_mms *topic,
 	}
 
 	chg_info("hmac=%d, authenticate=%d\n", chip->batt_hmac, chip->batt_auth);
-	vote(chip->pps_disable_votable, NON_STANDARD_VOTER, !chip->batt_hmac || !chip->batt_auth, 0, false);
+	vote(chip->pps_disable_votable, NON_STANDARD_VOTER,
+	     oplus_comm_is_non_standard_hmac_status(chip->comm_topic,
+			    chip->batt_auth, chip->batt_hmac),
+	     0, false);
 
 	oplus_gauge_get_fcl_support(chip->gauge_topic, &chip->fcl_support);
 

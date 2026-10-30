@@ -3532,6 +3532,63 @@ static ssize_t dec_delta_store(struct device *dev, struct device_attribute *attr
 }
 static DEVICE_ATTR_RW(dec_delta);
 
+#if IS_ENABLED(CONFIG_OPLUS_TVS_DAMAGE_SUPPORT)
+static ssize_t cc_tvs_damage_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct oplus_configfs_device *chip = dev->driver_data;
+	int val;
+
+	if (!chip) {
+		chg_err("chip is NULL\n");
+		return -EINVAL;
+	}
+	if (!chip->wired_topic) {
+		chg_err("wired_topic is NULL\n");
+		return -ENODEV;
+	}
+
+	val = oplus_wired_get_cc_tvs_config(chip->wired_topic);
+	if (val < 0)
+		return val;
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", val);
+}
+
+static ssize_t cc_tvs_damage_store(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct oplus_configfs_device *chip = dev->driver_data;
+	int val = 0;
+	int rc;
+
+	if (!chip) {
+		chg_err("chip is NULL\n");
+		return -EINVAL;
+	}
+	if (!chip->wired_topic) {
+		chg_err("wired_topic is NULL\n");
+		return -ENODEV;
+	}
+	if (kstrtos32(buf, 0, &val)) {
+		chg_err("buf error\n");
+		return -EINVAL;
+	}
+	if (val < 0 || val > 3) {
+		chg_err("cc_tvs_damage only supports bit0/bit1, val=%d\n", val);
+		return -EINVAL;
+	}
+
+	rc = oplus_wired_set_cc_tvs_config(chip->wired_topic, val);
+	if (rc < 0)
+		return rc;
+
+	return count;
+}
+static DEVICE_ATTR_RW(cc_tvs_damage);
+#endif /* CONFIG_OPLUS_TVS_DAMAGE_SUPPORT */
+
 #define PLC_ENABLE_DELAY_MS 2000
 static void oplus_configfs_plc_enable_work(struct work_struct *work)
 {
@@ -4758,6 +4815,9 @@ static struct device_attribute *oplus_common_attributes[] = {
 	&dev_attr_chg_up_limit,
 	&dev_attr_plc,
 	&dev_attr_dec_delta,
+#if IS_ENABLED(CONFIG_OPLUS_TVS_DAMAGE_SUPPORT)
+	&dev_attr_cc_tvs_damage,
+#endif
 	&dev_attr_lpd_config,
 	&dev_attr_byb_status,
 	&dev_attr_byb_vout,

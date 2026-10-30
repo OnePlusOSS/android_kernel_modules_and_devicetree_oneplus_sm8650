@@ -52,7 +52,7 @@
 #define BC12_RE_CHECK_MS		msecs_to_jiffies(50)
 #define BC12_HW_DET_CNT_MAX		10
 #define PLUGOUT_VBUS_TH_MV		3000
-#define BC12_COMPLETE_COMP_CHECK_MS	1000
+#define BC12_COMPLETE_COMP_CHECK_MS	2500
 
 #define POWER_SUPPLY_TYPE_USB_HVDCP	13
 #define REG_MAX 0x0b
@@ -120,6 +120,7 @@ struct sgm41515_chip {
 	bool bc12_complete;
 	bool event_irq_enabled;
 	bool power_good;
+	bool cp_supported;
 	int charge_type;
 	int bc12_delay_cnt;
 	int hw_aicl_point;
@@ -135,6 +136,10 @@ struct sgm41515_chip {
 	struct tcpc_device *tcpc;
 	struct completion resume_done;
 	struct completion bc12_complete_comp;
+#if (!IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP_DCP))
+	struct delayed_work cc_sta_check_work;
+	int cc_detached_timeout_counter;
+#endif
 };
 
 enum {
@@ -1028,6 +1033,37 @@ static bool is_tcpc_available(struct sgm41515_chip *chip)
 	return !!chip->tcpc;
 }
 
+#if (!IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP_DCP))
+#define CC_DETECTED_TIMEOUT_MS				290
+#define CC_DETECTED_CHECK_INTERVAL_MS			10
+#define CC_DETECTED_TIMEOUT_CNT				2
+#define CC_DETECTED_TIMEOUT_ICL_MA			2000
+
+static void sgm41515_cc_sta_check_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct sgm41515_chip *chip = container_of(dwork, struct sgm41515_chip, cc_sta_check_work);
+	unsigned int check_cnt = CC_DETECTED_TIMEOUT_MS / CC_DETECTED_CHECK_INTERVAL_MS;
+	unsigned int i;
+	uint8_t cc1 = 0, cc2 = 0;
+
+	for (i = 0; i < check_cnt; i++) {
+		usleep_range(CC_DETECTED_CHECK_INTERVAL_MS * 1000,
+				(CC_DETECTED_CHECK_INTERVAL_MS + 1) * 1000);
+
+		if (is_tcpc_available(chip))
+			tcpm_inquire_remote_cc(chip->tcpc, &cc1, &cc2, true);
+
+		if (cc1 == 0 && cc2 == 0) {
+			chip->cc_detached_timeout_counter = 0;
+			return;
+		}
+	}
+
+	chip->cc_detached_timeout_counter++;
+}
+#endif
+
 static void sgm41515_plug_in_event_handle(struct sgm41515_chip *chip)
 {
 	oplus_chg_ic_virq_trigger(chip->ic_dev, OPLUS_IC_VIRQ_PLUGIN);
@@ -1039,6 +1075,9 @@ static void sgm41515_plug_in_event_handle(struct sgm41515_chip *chip)
 	sgm41515_set_wdt_timer(chip, REG05_SGM41515_WATCHDOG_TIMER_40S);
 	if (chip->charge_type == POWER_SUPPLY_TYPE_UNKNOWN)
 		schedule_delayed_work(&chip->bc12_plugin_work, 0);
+#if (!IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP_DCP))
+	cancel_delayed_work(&chip->cc_sta_check_work);
+#endif
 }
 
 static void sgm41515_plug_out_event_handle(struct sgm41515_chip *chip)
@@ -1060,6 +1099,9 @@ static void sgm41515_plug_out_event_handle(struct sgm41515_chip *chip)
 	chip->bc12_hw_detect_count = 0;
 	sgm41515_bc12_clear_detection_status(chip);
 	cancel_delayed_work(&chip->bc12_plugin_work);
+#if (!IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP_DCP))
+	schedule_delayed_work(&chip->cc_sta_check_work, 0);
+#endif
 	oplus_chg_wakelock(chip, false);
 }
 
@@ -1950,6 +1992,22 @@ static int sgm41515_set_chging_term_disable(struct sgm41515_chip *chip)
 	return rc;
 }
 
+static bool sgm41515_is_cp_supported(struct sgm41515_chip *chip)
+{
+	if (!chip)
+		return false;
+
+	/* Check if the project supports Charge Pump (CP) fast charging */
+	if (!chip->cp_supported) {
+		chip->cp_supported =
+			oplus_chg_ic_find_by_name("oplus,virtual_cp") != NULL;
+		chg_info("cp_supported %s\n",
+			chip->cp_supported ? "found, cp project" : "not found, non-cp project");
+	}
+
+	return chip->cp_supported;
+}
+
 static int sgm41515_suspend_charger(struct sgm41515_chip *chip)
 {
 	int rc = 0;
@@ -1963,7 +2021,10 @@ static int sgm41515_suspend_charger(struct sgm41515_chip *chip)
 	atomic_set(&chip->is_suspended, 1);
 
 	rc |= sgm41515_disable_charging(chip);
-	rc |= sgm41515_enable_hiz_mode(chip, true);
+	if (sgm41515_is_cp_supported(chip))
+		rc |= sgm41515_enable_hiz_mode(chip, true);
+	else
+		rc |= sgm41515_input_current_limit_without_aicl(chip, 100);
 
 	return rc;
 }
@@ -1980,7 +2041,8 @@ static int sgm41515_unsuspend_charger(struct sgm41515_chip *chip)
 
 	atomic_set(&chip->is_suspended, 0);
 	rc |= sgm41515_enable_charging(chip);
-	rc |= sgm41515_enable_hiz_mode(chip, false);
+	if (sgm41515_is_cp_supported(chip))
+		rc |= sgm41515_enable_hiz_mode(chip, false);
 
 	return rc;
 }
@@ -2003,7 +2065,8 @@ static int sgm41515_input_suspend(struct oplus_chg_ic_dev *ic_dev, bool suspend)
 		return 0;
 
 	if (suspend) {
-		if (!wait_for_completion_timeout(&chip->bc12_complete_comp, msecs_to_jiffies(BC12_COMPLETE_COMP_CHECK_MS)))
+		if (sgm41515_is_cp_supported(chip) &&
+		    !wait_for_completion_timeout(&chip->bc12_complete_comp, msecs_to_jiffies(BC12_COMPLETE_COMP_CHECK_MS)))
 			chg_err("bc12 completion timeout, proceed suspend anyway\n");
 		rc = sgm41515_suspend_charger(chip);
 	} else {
@@ -2084,6 +2147,17 @@ static int sgm41515_set_icl(struct oplus_chg_ic_dev *ic_dev, bool vooc_mode, boo
 		return -ENODEV;
 	}
 	chip = oplus_chg_ic_get_drvdata(ic_dev);
+
+#if (!IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP_DCP))
+	if (chip->cc_detached_timeout_counter >= CC_DETECTED_TIMEOUT_CNT) {
+		if (icl_ma > CC_DETECTED_TIMEOUT_ICL_MA) {
+			chg_info("cc_detached_timeout_counter = %d, icl_ma = %d, new icl_ma = %d\n",
+					chip->cc_detached_timeout_counter,
+					icl_ma, CC_DETECTED_TIMEOUT_ICL_MA);
+			icl_ma = CC_DETECTED_TIMEOUT_ICL_MA;
+		}
+	}
+#endif
 
 	if (!chip->bc12_complete && step) {
 		chg_info("bc12_complete = %d, skip aicl\n", chip->bc12_complete);
@@ -3982,6 +4056,10 @@ static void sgm41515_work_init(struct sgm41515_chip *chip)
 	INIT_DELAYED_WORK(&chip->bc12_plugin_work, sgm41515_bc12_plugin_work);
 	INIT_WORK(&chip->rerun_votable_work, sgm41515_rerun_votable_work);
 	INIT_DELAYED_WORK(&chip->vbus_check_work, sgm41515_vbus_check_work);
+#if (!IS_ENABLED(CONFIG_OPLUS_CHG_STATE_KEEP_DCP))
+	INIT_DELAYED_WORK(&chip->cc_sta_check_work, sgm41515_cc_sta_check_work);
+	chip->cc_detached_timeout_counter = 0;
+#endif
 }
 
 static void sgm41515_completion_init(struct sgm41515_chip *chip)

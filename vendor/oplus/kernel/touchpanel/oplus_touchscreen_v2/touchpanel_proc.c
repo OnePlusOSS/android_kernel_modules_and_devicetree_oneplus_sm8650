@@ -837,7 +837,9 @@ static ssize_t proc_gesture_control_write(struct file *file,
 	if (ts->gesture_test_support && ts->gesture_test.flag) {
 		return count;
 	}
-
+	if (!ts->is_suspended && ts->is_incell_panel && (value == 0)) {
+		ts->set_gesture_off_time = ktime_to_ms(ktime_get());
+	}
 	mutex_lock(&ts->mutex);
 
 	switch(value) {
@@ -4735,6 +4737,10 @@ static ssize_t tp_data_record_write_func(struct file *file,
 	}
 
 	TPD_DETAIL("%s tp_limit_data write :%d\n", __func__, value);
+
+	if (ts->tp_data_record_enable == !!value) {
+		return count;
+	}
 
 	ts->tp_data_record_enable = !!value;
 

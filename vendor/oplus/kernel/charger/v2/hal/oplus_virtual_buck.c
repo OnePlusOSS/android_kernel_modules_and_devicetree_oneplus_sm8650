@@ -4871,6 +4871,72 @@ static int oplus_chg_vb_get_lpd_info(struct oplus_chg_ic_dev *ic_dev, u32 *buffe
 	return rc;
 }
 
+#if IS_ENABLED(CONFIG_OPLUS_TVS_DAMAGE_SUPPORT)
+static int oplus_chg_vb_get_tvs_cc_state(struct oplus_chg_ic_dev *ic_dev, u8 *cc1, u8 *cc2)
+{
+	struct oplus_virtual_buck_ic *vb;
+	int i;
+	int rc = -ENOTSUPP;
+
+	if (ic_dev == NULL || cc1 == NULL || cc2 == NULL) {
+		chg_err("oplus_chg_ic_dev or cc pointer is NULL\n");
+		return -ENODEV;
+	}
+
+	vb = oplus_chg_ic_get_drvdata(ic_dev);
+	if (!vb || !vb->child_list) {
+		chg_err("chip or chip->child_list is NULL\n");
+		return -ENODEV;
+	}
+
+	for (i = 0; i < vb->child_num; i++) {
+		if (!func_is_support(&vb->child_list[i], OPLUS_IC_FUNC_BUCK_GET_TVS_CC_STATE))
+			continue;
+
+		rc = oplus_chg_ic_func(vb->child_list[i].ic_dev,
+				       OPLUS_IC_FUNC_BUCK_GET_TVS_CC_STATE, cc1, cc2);
+		if (rc < 0)
+			chg_err("child ic[%d] get cc state error, rc=%d\n", i, rc);
+		else
+			return 0;
+	}
+
+	return rc;
+}
+
+static int oplus_chg_vb_set_tvs_cc_open(struct oplus_chg_ic_dev *ic_dev)
+{
+	struct oplus_virtual_buck_ic *vb;
+	int i;
+	int rc = -ENOTSUPP;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL\n");
+		return -ENODEV;
+	}
+
+	vb = oplus_chg_ic_get_drvdata(ic_dev);
+	if (!vb || !vb->child_list) {
+		chg_err("chip or chip->child_list is NULL\n");
+		return -ENODEV;
+	}
+
+	for (i = 0; i < vb->child_num; i++) {
+		if (!func_is_support(&vb->child_list[i], OPLUS_IC_FUNC_BUCK_SET_TVS_CC_OPEN))
+			continue;
+
+		rc = oplus_chg_ic_func(vb->child_list[i].ic_dev,
+				       OPLUS_IC_FUNC_BUCK_SET_TVS_CC_OPEN);
+		if (rc < 0)
+			chg_err("child ic[%d] set cc open error, rc=%d\n", i, rc);
+		else
+			return 0;
+	}
+
+	return rc;
+}
+#endif /* CONFIG_OPLUS_TVS_DAMAGE_SUPPORT */
+
 int oplus_chg_vb_set_flash_mode(struct oplus_chg_ic_dev *ic_dev, bool flash_mode)
 {
 	struct oplus_virtual_buck_ic *vb;
@@ -5337,6 +5403,14 @@ static void *oplus_chg_vb_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_c
 	case OPLUS_IC_FUNC_BUCK_GET_TYPEC_STATE:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_BUCK_GET_TYPEC_STATE, oplus_chg_vb_get_typec_state);
 		break;
+#if IS_ENABLED(CONFIG_OPLUS_TVS_DAMAGE_SUPPORT)
+	case OPLUS_IC_FUNC_BUCK_GET_TVS_CC_STATE:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_BUCK_GET_TVS_CC_STATE, oplus_chg_vb_get_tvs_cc_state);
+		break;
+	case OPLUS_IC_FUNC_BUCK_SET_TVS_CC_OPEN:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_BUCK_SET_TVS_CC_OPEN, oplus_chg_vb_set_tvs_cc_open);
+		break;
+#endif
 	case OPLUS_IC_FUNC_GET_DATA_ROLE:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_GET_DATA_ROLE,
 					       oplus_chg_vb_get_data_role);

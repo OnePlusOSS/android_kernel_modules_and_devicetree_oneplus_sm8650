@@ -136,10 +136,19 @@ extern struct device *syna_request_managed_device(void);
  * @brief: GET_BIT
  *         Return the value of target bit
  */
+
+#ifdef MAX
+#undef MAX
+#endif
+
 #define MAX(a, b) \
 	({__typeof__(a) _a = (a); \
 	__typeof__(b) _b = (b); \
 	_a > _b ? _a : _b; })
+
+#ifdef MIN
+#undef MIN
+#endif
 
 #define MIN(a, b) \
 	({__typeof__(a) _a = (a); \

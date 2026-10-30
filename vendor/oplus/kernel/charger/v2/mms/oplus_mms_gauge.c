@@ -2884,6 +2884,26 @@ static int oplus_gauge_fcl_curves_init(struct oplus_mms_gauge *chip)
 
 static int oplus_mms_gauge_virq_register(struct oplus_mms_gauge *chip);
 static int oplus_mms_gauge_topic_init(struct oplus_mms_gauge *chip);
+
+static void oplus_mms_gauge_parse_dt(struct oplus_mms_gauge *chip, struct device_node *node)
+{
+	int rc;
+
+	rc = of_property_read_u32(node, "oplus,sub_btb_curr_limit", &chip->sub_btb_curr_limit);
+	if (rc < 0)
+		chip->sub_btb_curr_limit = BATT_SUB_BTB_ABNORMAL_MAX_CURR;
+
+	chip->support_subboard_ntc = of_property_read_bool(node, "oplus,support_subboard_ntc");
+	chg_info("hmac=%d, support_subboard_ntc=%d, sub_btb_curr_limit=%d, sn_match=%d\n",
+		 chip->hmac, chip->support_subboard_ntc, chip->sub_btb_curr_limit, chip->sn_match);
+
+	chip->check_subboard_ntc_err = false;
+
+	rc = of_property_read_u32(node, "oplus,gauge-workaround-mask", &chip->workaround_mask);
+	if (rc < 0)
+		chip->workaround_mask = 0;
+}
+
 static void oplus_mms_gauge_init_work(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
@@ -3006,15 +3026,7 @@ static void oplus_mms_gauge_init_work(struct work_struct *work)
 	chip->sn_match = oplus_mms_gauge_get_sn_match(chip);
 	chip->parallel_hamc = true;
 
-	rc = of_property_read_u32(node, "oplus,sub_btb_curr_limit", &chip->sub_btb_curr_limit);
-	if (rc < 0)
-		chip->sub_btb_curr_limit = BATT_SUB_BTB_ABNORMAL_MAX_CURR;
-
-	chip->support_subboard_ntc = of_property_read_bool(node, "oplus,support_subboard_ntc");
-	chg_info("hmac=%d, support_subboard_ntc=%d, sub_btb_curr_limit=%d, sn_match=%d\n",
-		  chip->hmac, chip->support_subboard_ntc, chip->sub_btb_curr_limit, chip->sn_match);
-
-	chip->check_subboard_ntc_err = false;
+	oplus_mms_gauge_parse_dt(chip, node);
 
 	oplus_gauge_parse_deep_spec(chip);
 

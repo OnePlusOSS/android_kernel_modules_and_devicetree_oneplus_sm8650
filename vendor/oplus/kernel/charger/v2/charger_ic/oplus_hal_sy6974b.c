@@ -1272,13 +1272,20 @@ static int sy6974b_input_suspend(struct oplus_chg_ic_dev *ic_dev, bool suspend)
 {
 	int rc;
 	struct sy6974b_chip *chip = oplus_chg_ic_get_drvdata(ic_dev);
+	struct votable *charging_disable_votable;
 
 	if (suspend) {
 		rc = sy6974b_disable_charger(chip);
 		rc = sy6974b_suspend_charger_input(chip);
 	} else {
 		rc = sy6974b_unsuspend_charger_input(chip);
-		rc = sy6974b_enable_charger(chip);
+		charging_disable_votable = find_votable("WIRED_CHARGING_DISABLE");
+		if (!IS_ERR_OR_NULL(charging_disable_votable) &&
+		    get_effective_result(charging_disable_votable) > 0) {
+			chg_info("charging_disable votable is effective, skip enable_charger\n");
+		} else {
+			rc = sy6974b_enable_charger(chip);
+		}
 	}
 
 	chg_info("charger input %s, rc = %d\n", suspend ? "suspend" : "unsuspend", rc);

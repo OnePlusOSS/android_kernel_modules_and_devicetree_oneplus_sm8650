@@ -19,6 +19,8 @@ enum oplus_chg_mutual_cmd_type {
 	CMD_DEC_CV_DOWN_UPDATE,
 	CMD_PRECHG_R_OBTAIN,
 	CMD_DISCHG_BOOST_ERR_OBTAIN,
+	CMD_CC_TVS_STATUS_OBTAIN,
+	CMD_CC_TVS_STATUS_UPDATE,
 };
 
 enum oplus_chg_mutual_cmd_error {
